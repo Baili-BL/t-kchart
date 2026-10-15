@@ -11,14 +11,17 @@
 | `pine.html` | **Pine 编辑器** —— 左边写脚本，右边看图上输出 + 变量快照 |
 | `chart.html` | **单图 + 绘图工具** —— 左侧绘图工具栏、可拖动/磁吸/撤销的图形 |
 | `equity.html` | **权益曲线** —— Strategy Tester 那张图：折线 + 每根盈亏柱状 + 回撤统计 |
+| `analytics.html` | **统计组件** —— 收益分布直方图 / 交易环形图 / 季节性叠加线 |
 
 | 多图工作区 | Pine 编辑器 | 权益曲线 |
 | --- | --- | --- |
 | ![grid](shot-grid.png) | ![pine](shot-pine.png) | ![equity](shot-equity.png) |
 
-![draw](shot-chart.png)
+| 绘图工具 | 统计组件 |
+| --- | --- |
+| ![draw](shot-chart.png) | ![analytics](shot-analytics.png) |
 
-（四张图都是 headless Chrome 实际跑出来的，不是设计稿。）
+（五张图都是 headless Chrome 实际跑出来的，不是设计稿。）
 
 ---
 
@@ -51,7 +54,7 @@ node server.mjs
 
 > ⚠️ 早期版本用的是 `<script type="module">` + `import './chart.js'`，**双击打开必然白屏**
 > —— 模块被 CORS 拦掉、页面却什么也不说。现在已改成经典脚本，并且**加载失败会大声报错**
-> （见 §15 排查）。
+> （见 §16 排查）。
 
 直接操作图：
 
@@ -73,14 +76,16 @@ node server.mjs
 | `pine.ts` | **唯一真相**。Pine v5 子集解释器，约 1100 行 |
 | `draw.ts` | **唯一真相**。绘图工具层，约 700 行 |
 | `equity.ts` | **唯一真相**。权益曲线 + 回测口径，约 900 行 |
-| `chart.js` / `grid.js` / `pine.js` / `draw.js` / `equity.js` | `tsc` 生成的产物。**别手改**（见 §5） |
+| `analytics.ts` | **唯一真相**。三个统计组件，约 1200 行 |
+| `chart.js` / `grid.js` / `pine.js` / `draw.js` / `equity.js` / `analytics.js` | `tsc` 生成的产物。**别手改**（见 §5） |
 | `index.html` | 多图工作区页面 |
 | `pine.html` | Pine 编辑器页面 |
 | `chart.html` | 单图 + 左侧绘图工具栏 |
 | `equity.html` | 权益曲线页面 |
-| `run-tests.js` | 在 Node 里跑绘图 / Pine / 权益图自检（不需要浏览器） |
+| `analytics.html` | 统计组件页面 |
+| `run-tests.js` | 在 Node 里跑绘图 / Pine / 权益图 / 统计组件自检（不需要浏览器） |
 | `server.mjs` | 最小静态服务，默认 `127.0.0.1:5180`（**可选**，双击 HTML 即可） |
-| `tsconfig.json` | `strict: true`，`target/module: ES2020`，include 五个 .ts |
+| `tsconfig.json` | `strict: true`，`target/module: ES2020`，include 六个 .ts |
 
 > **为什么是全局脚本而不是 ESM 模块？** 因为「单页 HTML + 无构建」这个目标下，
 > 双击打开是最自然的用法，而 ESM 的 `import` 在 `file://` 下会被 CORS 直接拦死。
@@ -251,15 +256,17 @@ Select-String -Path tv-chart\dom.html -Pattern 'FAIL|SELFTEST|READY'
 ```
 node run-tests.js                                   → 绘图层 39 PASS / 0 FAIL
                                                       Pine   49 PASS / 0 FAIL
-                                                      权益图 23 PASS / 0 FAIL（纯计算；另 11 条需要 canvas）
+                                                      权益图 24 PASS / 0 FAIL（纯计算；另 11 条需要 canvas）
+                                                      统计  30 PASS / 0 FAIL（纯计算；另 16 条需要 canvas）
 chrome --dump-dom .../index.html                    → SELFTEST   54 PASS / 0 FAIL
 chrome --dump-dom .../pine.html                     → PINETEST   49 PASS / 0 FAIL
 chrome --dump-dom .../chart.html                    → CHARTTEST  87 PASS / 0 FAIL
-chrome --dump-dom .../equity.html                   → EQTEST     34 PASS / 0 FAIL
+chrome --dump-dom .../equity.html                   → EQTEST     35 PASS / 0 FAIL
+chrome --dump-dom .../analytics.html                → ANATEST    46 PASS / 0 FAIL
 ```
 
 （`SELFTEST 54` = 图表 48 + 网格 6；`CHARTTEST 87` = 绘图 39 + 图表 48；
-`EQTEST 34` = 纯计算 23 + canvas 11。）
+`EQTEST 35` = 纯计算 24 + canvas 11；`ANATEST 46` = 纯计算 30 + canvas 16。）
 
 ### 自检覆盖了什么
 
@@ -583,6 +590,7 @@ TradingView 文档实现的，但**没有对着真实 TV 逐值核过**。你的
 | **Pine 引擎** | ✅ Phase 1 完成 | 词法+语法+序列运行时+45 内置+plot 输出，49 条自检 |
 | Pine 撮合（`strategy.*`） | 🟡 输出端已就绪 | `equity.ts` 的渲染和统计已完成；缺的是 `strategy.*` 撮合本身 |
 | **权益曲线图** | ✅ 完成 | 折线 + 每根盈亏柱状 + 回撤填充 + 末端标签 + 统计；见 §14 |
+| **统计组件** | ✅ 完成 | 收益分布 / 交易环形图 / 季节性叠加线；见 §15 |
 | **绘图工具框架** | ✅ 框架完成 | `draw.ts`：9 种工具 + 命中/拖动/手柄/磁吸/撤销/持久化，39 条自检；**79 种全量不承诺** |
 | 左侧工具栏 UI | 🟡 暂行版 | 照 TradingView 做的；**未按设计稿**（链接打不开），等稿子改皮 |
 | 顶栏 / 右侧面板 | ⬜ | 等设计稿 |
@@ -654,7 +662,45 @@ TVChart 是「蜡烛 + 多通道」的骨架，这张图有三处根本不同：
 
 ---
 
-## 15. 排查：页面卡在 `booting…`
+## 15. 统计组件（`analytics.ts`）
+
+页面是 `analytics.html`。三个组件共用一个文件，因为主题、圆角气泡、图例小圆点、DPR 样板是同一套。
+
+### 三个关键点（都是「不这样写就错」的地方）
+
+**① 直方图的 x 轴标签是「整百分比刻度」，不是箱边界。**
+10 个箱不等于 10 个标签 —— 参考图里就是 10 个箱子只标了 7 个（-15…15，步长 5%）。
+箱边界由数据决定，标签由 `niceStep` 决定，两者独立。
+
+**② 环形图的弧段从 12 点方向顺时针。**
+不是 3 点、不是逆时针。角度→命中判定的换算必须和 `donutArcs()` 的起点一致，
+否则整体偏 90°：点右边的弧却高亮上面的。自检里有两条专门钉方向：
+「12 点顺时针一点点属于第一段」「12 点逆时针一点点属于最后一段」。
+
+**③ Seasonals 的 x 轴是「日历日序」，不是时间戳 —— 这里我踩了一个真 bug。**
+第一版用了 `dayOfYear`（实际日序），结果 2024-06-15 是第 166 天、2026-06-15 是第 165 天，
+**两条线整体错开一格**。而 seasonals 图的全部意义就是「同一天对齐比较」。
+改用 `calendarDoy()`（按非闰年日历算，忽略闰年）后同一天才对齐。
+代价：闰年的 2/29 和 3/1 会落到同一个 x —— 只有 365 个槽，这是固有取舍。
+
+### 一个显示上的取舍
+
+直方图默认 **关于 0 对称**分箱（`symmetric: true`）：收益分布里 0 是「赢/亏分界」，
+不居中的话一侧被压扁、另一侧拉长，两个方向没法直观比。
+
+**代价是数据偏斜时分辨率会掉**：本项目演示数据里最大盈利是 +17%，
+于是箱宽被撑到 3.4%，而亏损交易全部集中在 -2.6%~0 —— 10 笔挤在同一个箱里。
+数据本身如此，不是渲染问题。要更细就把 `binCount` 调大。
+
+### 数据来源
+
+三个组件都吃 `simulateMaCross()` 的输出：
+逐笔收益率 → 直方图；盈亏分组 → 环形图；日线按年拆 → 季节性。
+`seasonalSeries(bars)` 把日线按年拆成「年内累计收益」曲线（每年从该年首根收盘算起，所以每条线第 0 天都是 0）。
+
+---
+
+## 16. 排查：页面卡在 `booting…`
 
 `booting…` 是 `#status` 的初始文本，只有 `report()` 会改写它。它一直不变 = **业务脚本压根没执行**。
 最常见的原因按概率排序：
@@ -677,7 +723,7 @@ TVChart 是「蜡烛 + 多通道」的骨架，这张图有三处根本不同：
 
 ---
 
-## 16. 许可
+## 17. 许可
 
 本目录代码为自己手写，无第三方依赖，随你处置。
 
