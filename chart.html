@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tv-chart · 图表 + 绘图工具</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0e1116; }
+  body { font: 12px -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; color: #e6edf3; }
+  #app { position: absolute; inset: 0; display: flex; flex-direction: column; }
+
+  /* ------------------------------------------------------------ 顶栏 */
+  /* ⚠️ 暂行版：设计稿还没拿到，这里只放最小可用的内容。 */
+  #topbar {
+    flex: 0 0 auto; display: flex; align-items: center; gap: 6px;
+    padding: 5px 8px; background: #12161c; border-bottom: 1px solid #222b35;
+  }
+  #topbar button, #topbar select {
+    font: inherit; color: #c9d1d9; background: #161b22;
+    border: 1px solid #26303d; border-radius: 6px; padding: 4px 9px; cursor: pointer;
+  }
+  #topbar button:hover, #topbar select:hover { background: #1d2530; border-color: #3a4654; }
+  #topbar button.on { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  #topbar .sep { width: 1px; height: 18px; background: #26303d; margin: 0 2px; }
+  #topbar .spacer { flex: 1; }
+  .hint { color: #6e7681; font: 11px/1.5 ui-monospace, Consolas, monospace; }
+
+  /* ------------------------------------------------------ 主体：三栏 */
+  #body { flex: 1; min-height: 0; display: flex; }
+
+  /* 左侧绘图工具栏 —— 本轮的重点 */
+  #leftbar {
+    flex: 0 0 44px; width: 44px;
+    background: #12161c; border-right: 1px solid #222b35;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 6px 0; gap: 2px; overflow-y: auto;
+  }
+  #leftbar .tb {
+    width: 32px; height: 32px; flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: center;
+    background: transparent; border: 1px solid transparent; border-radius: 6px;
+    color: #9aa4b2; cursor: pointer; padding: 0; position: relative;
+  }
+  #leftbar .tb:hover { background: #1d2530; color: #e6edf3; }
+  #leftbar .tb.on { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  #leftbar .tb.on-toggle { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  #leftbar .tb:disabled { opacity: .3; cursor: default; }
+  #leftbar .tb:disabled:hover { background: transparent; color: #9aa4b2; }
+  #leftbar .tb svg { width: 18px; height: 18px; display: block; }
+  #leftbar .hr { width: 22px; height: 1px; background: #26303d; margin: 5px 0; flex: 0 0 auto; }
+
+  /* 悬停提示：原生 title 太慢，自己做一个 */
+  #tip {
+    position: fixed; z-index: 50; pointer-events: none;
+    background: #1b222b; color: #e6edf3; border: 1px solid #3a4654;
+    border-radius: 5px; padding: 3px 7px; font-size: 11px; white-space: nowrap;
+    opacity: 0; transition: opacity .1s;
+  }
+  #tip.show { opacity: 1; }
+  #tip .k { color: #6e7681; margin-left: 6px; }
+
+  #chartwrap { flex: 1; min-width: 0; position: relative; }
+  #chart { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+  #rangebar {
+    display: flex; align-items: center; gap: 1px;
+    padding: 2px 8px; background: #12161c; border-top: 1px solid #222b35;
+  }
+  #rangebar button {
+    font: 11px/1 ui-monospace, Consolas, monospace; color: #9aa4b2;
+    background: transparent; border: 1px solid transparent; border-radius: 4px;
+    padding: 4px 8px; cursor: pointer;
+  }
+  #rangebar button:hover { background: #1d2530; color: #fff; }
+  #rangebar button.on { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  #rangebar button.off { opacity: .28; cursor: default; }
+  #rangebar button.off:hover { background: transparent; color: #9aa4b2; }
+  #rangebar .sep { width: 1px; height: 13px; background: #26303d; margin: 0 5px; }
+  #rangeInfo { margin-left: auto; }
+
+  #status {
+    flex: 0 0 auto; font: 11px/1.5 ui-monospace, Consolas, monospace;
+    color: #6e7681; background: #0b0e13; padding: 3px 8px;
+    border-top: 1px solid #222b35; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+  }
+  #status.bad { color: #ff7b72; background: #2a1113; white-space: pre-wrap; }
+
+  #logwrap { position: absolute; left: 56px; bottom: 54px; width: min(660px, calc(100% - 80px)); }
+  #logbar {
+    font: 11px/1.6 ui-monospace, Consolas, monospace; color: #8b949e;
+    background: rgba(22,27,34,.92); border: 1px solid #26303d;
+    border-radius: 6px; padding: 2px 8px; cursor: pointer; user-select: none;
+  }
+  #log {
+    font: 11px/1.55 ui-monospace, Consolas, monospace; color: #7d8590;
+    background: rgba(13,17,23,.95); border: 1px solid #26303d; border-top: none;
+    border-radius: 0 0 6px 6px; padding: 6px 8px; overflow: auto;
+    max-height: 180px; white-space: pre-wrap; word-break: break-all;
+  }
+  #logwrap.collapsed #log { display: none; }
+</style>
+
+<script>
+(function () {
+  window.__diag = function (msg, isErr) {
+    var text = String(msg);
+    try { (isErr ? console.error : console.log)(text); } catch (e) {}
+    var l = document.getElementById('log');
+    if (l) {
+      var d = document.createElement('div');
+      d.textContent = text;
+      if (isErr) d.style.color = '#ff7b72';
+      l.appendChild(d);
+      l.scrollTop = l.scrollHeight;
+    }
+    if (isErr) {
+      var s = document.getElementById('status');
+      if (s) { s.textContent = text; s.className = 'bad'; }
+    }
+  };
+  window.addEventListener('error', function (e) {
+    if (e && e.target && e.target !== window && e.target.tagName) {
+      window.__diag('✗ 资源加载失败：<' + e.target.tagName.toLowerCase() + '> ' +
+        (e.target.src || e.target.href || ''), true);
+    } else {
+      window.__diag('✗ JS 错误：' + (e && e.message ? e.message : e) +
+        (e && e.lineno ? '  @' + e.lineno + ':' + e.colno : ''), true);
+    }
+  }, true);
+  window.addEventListener('unhandledrejection', function (e) {
+    var r = e && e.reason;
+    window.__diag('✗ 未处理的 Promise 拒绝：' + (r && r.stack ? r.stack : r), true);
+  });
+  window.addEventListener('DOMContentLoaded', function () {
+    setTimeout(function () {
+      var s = document.getElementById('status');
+      if (s && /^booting/.test(s.textContent)) {
+        window.__diag('✗ 2 秒内没启动起来。protocol=' + location.protocol +
+          '  typeof DrawLayer=' + (typeof DrawLayer), true);
+      }
+    }, 2000);
+  });
+})();
+</script>
+</head>
+<body>
+<div id="app">
+
+  <div id="topbar">
+    <select id="sym"></select>
+    <button data-tf="1D" class="on">1D</button>
+    <button data-tf="1W">1W</button>
+    <button data-tf="1M">1M</button>
+    <span class="sep"></span>
+    <button id="theme">浅色</button>
+    <button id="test">自检</button>
+    <span class="spacer"></span>
+    <span class="hint" id="hint">顶栏 / 右侧面板是暂行版，等设计稿</span>
+  </div>
+
+  <div id="body">
+    <!-- ==================== 左侧绘图工具栏 ==================== -->
+    <div id="leftbar"></div>
+
+    <div id="chartwrap">
+      <canvas id="chart"></canvas>
+    </div>
+  </div>
+
+  <div id="rangebar"></div>
+  <div id="status">booting…</div>
+</div>
+
+<div id="tip"></div>
+<div id="logwrap" class="collapsed">
+  <div id="logbar">运行日志（点开）· 始终写入 DOM，供 --dump-dom 抓取</div>
+  <div id="log"></div>
+</div>
+
+<!-- 顺序不能反 -->
+<script src="chart.js"></script>
+<script src="grid.js"></script>
+<script src="draw.js"></script>
+
+<script>
+(function () {
+  'use strict';
+
+  var statusEl = document.getElementById('status');
+  if (typeof TVChart !== 'function' || typeof DrawLayer !== 'function') {
+    window.__diag('✗ 脚本没加载成功（TVChart=' + (typeof TVChart) +
+      '  DrawLayer=' + (typeof DrawLayer) + '）', true);
+    return;
+  }
+  window.__diag('✓ 已加载  protocol=' + location.protocol, false);
+
+  document.getElementById('logbar').addEventListener('click', function () {
+    document.getElementById('logwrap').classList.toggle('collapsed');
+  });
+
+  /* ------------------------------------------------------------ 数据 */
+  var symSel = document.getElementById('sym');
+  SYMBOLS.forEach(function (s) {
+    var o = document.createElement('option');
+    o.value = s.ticker;
+    o.textContent = s.ticker + '  ' + s.name;
+    symSel.appendChild(o);
+  });
+
+  var ticker = SYMBOLS[0].ticker;
+  var tf = '1D';
+  var themeName = 'dark';
+  var chart = null;
+  var layer = null;
+
+  try {
+    chart = new TVChart('#chart', resample(dailyFor(ticker), tf), {
+      symbol: ticker, timeframe: tf, legendInset: 12
+    });
+    chart.setTheme(themeName);
+  } catch (e) {
+    window.__diag('✗ 初始化图表失败：' + (e && e.stack ? e.stack : e), true);
+    return;
+  }
+  window.__chart = chart;
+
+  /* -------------------------------------------------------- 绘图层接入 */
+  layer = new DrawLayer(chart);
+  chart.setHooks({
+    onDown: function (px, py, e) { return layer.onDown(px, py); },
+    onMove: function (px, py, e) { layer.onMove(px, py); },
+    onUp: function (px, py, e) { layer.onUp(); },
+    onDraw: function (ctx) { layer.render(ctx); }
+  });
+  layer.attachKeys(window);
+  window.__layer = layer;
+
+  /* ============================ 左侧工具栏 ============================ */
+  var STORAGE_KEY = 'tvchart.drawings.v1';
+  var SVG_HEAD = '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" ' +
+    'stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">';
+  var leftbar = document.getElementById('leftbar');
+  var toolBtns = {};
+  var btnMagnet, btnHide, btnUndo, btnRedo, btnDel, btnClear;
+
+  function iconBtn(pathD, title, keyHint, onClick) {
+    var b = document.createElement('button');
+    b.className = 'tb';
+    b.innerHTML = SVG_HEAD + '<path d="' + pathD + '"/></svg>';
+    b.dataset.tip = title;
+    b.dataset.key = keyHint || '';
+    b.addEventListener('click', onClick);
+    leftbar.appendChild(b);
+    return b;
+  }
+  function hr() {
+    var d = document.createElement('div');
+    d.className = 'hr';
+    leftbar.appendChild(d);
+  }
+
+  // 各绘图工具
+  DRAW_TOOLS.forEach(function (t) {
+    var b = iconBtn(t.icon, t.label, t.key2 && t.key2.length === 1 ? t.key2.toUpperCase() : t.key2,
+      function () { layer.setTool(t.key); syncBar(); });
+    toolBtns[t.key] = b;
+  });
+
+  hr();
+
+  // 磁吸 / 隐藏
+  btnMagnet = iconBtn('M7 2 L7 7 A3 3 0 0 0 4 10 L4 11 L14 11 L14 10 A3 3 0 0 0 11 7 L11 2 Z M4 14 L14 14',
+    '磁吸（吸附到 OHLC）', '', function () { layer.setMagnet(!layer.magnet); syncBar(); });
+  btnHide = iconBtn('M2 9 C5 4 13 4 16 9 C13 14 5 14 2 9 Z M9 6.5 A2.5 2.5 0 1 0 9 11.5 A2.5 2.5 0 1 0 9 6.5',
+    '显示 / 隐藏全部图形', '', function () { layer.setHidden(!layer.getHidden()); syncBar(); });
+
+  hr();
+
+  // 撤销 / 重做 / 删除 / 清空
+  btnUndo = iconBtn('M6 5 L2 9 L6 13 M2 9 L12 9 A4 4 0 0 1 12 17', '撤销', 'Ctrl+Z',
+    function () { layer.undo(); save(); syncBar(); });
+  btnRedo = iconBtn('M12 5 L16 9 L12 13 M16 9 L6 9 A4 4 0 0 0 6 17', '重做', 'Ctrl+Shift+Z',
+    function () { layer.redo(); save(); syncBar(); });
+  btnDel = iconBtn('M4 5 L14 5 M7 5 L7 3 L11 3 L11 5 M5.5 5 L6.5 16 L11.5 16 L12.5 5', '删除选中', 'Del',
+    function () { layer.removeActive(); save(); syncBar(); });
+  btnClear = iconBtn('M3 3 L15 15 M15 3 L3 15', '清空全部', '', function () {
+    layer.clear(); save(); syncBar();
+  });
+
+  /* --------------------------------------------------------- 工具栏同步 */
+  function syncBar() {
+    for (var k in toolBtns) {
+      if (Object.prototype.hasOwnProperty.call(toolBtns, k)) {
+        toolBtns[k].classList.toggle('on', k === layer.tool);
+      }
+    }
+    btnMagnet.classList.toggle('on-toggle', layer.magnet);
+    btnHide.classList.toggle('on-toggle', layer.getHidden());
+    btnUndo.disabled = !layer.canUndo();
+    btnRedo.disabled = !layer.canRedo();
+    btnDel.disabled = layer.activeId == null;
+    report();
+  }
+
+  /* ------------------------------------------------------------ 提示条 */
+  var tip = document.getElementById('tip');
+  leftbar.addEventListener('mouseover', function (e) {
+    var b = e.target && e.target.closest ? e.target.closest('.tb') : null;
+    if (!b) return;
+    tip.innerHTML = b.dataset.tip + (b.dataset.key ? '<span class="k">' + b.dataset.key + '</span>' : '');
+    var r = b.getBoundingClientRect();
+    tip.style.left = (r.right + 8) + 'px';
+    tip.style.top = (r.top + 7) + 'px';
+    tip.classList.add('show');
+  });
+  leftbar.addEventListener('mouseout', function () { tip.classList.remove('show'); });
+
+  /* ---------------------------------------------------------- 持久化 */
+  function save() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(layer.toJSON())); } catch (e) { /* 隐身模式等 */ }
+  }
+  function load() {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) layer.fromJSON(JSON.parse(raw));
+    } catch (e) { /* 坏数据就当没有 */ }
+  }
+
+  /* ---------------------------------------------------- 监听图形变化 */
+  // DrawLayer 内部改状态不会回调，这里用「指针抬起 + 键盘」两个出口兜底保存。
+  var canvas = document.getElementById('chart');
+  canvas.addEventListener('pointerup', function () { save(); syncBar(); });
+  window.addEventListener('keydown', function () { setTimeout(function () { save(); syncBar(); }, 0); });
+
+  /* ------------------------------------------------------------ 范围条 */
+  var rangebar = document.getElementById('rangebar');
+  var rangeEls = {};
+  RANGES.forEach(function (r) {
+    if (r.key === 'ALL') {
+      var sp = document.createElement('span');
+      sp.className = 'sep';
+      rangebar.appendChild(sp);
+    }
+    var b = document.createElement('button');
+    b.textContent = r.label;
+    b.dataset.range = r.key;
+    rangebar.appendChild(b);
+    rangeEls[r.key] = b;
+  });
+  var rangeInfo = document.createElement('span');
+  rangeInfo.id = 'rangeInfo';
+  rangeInfo.className = 'hint';
+  rangebar.appendChild(rangeInfo);
+
+  rangebar.addEventListener('click', function (e) {
+    var b = e.target && e.target.closest ? e.target.closest('button[data-range]') : null;
+    if (!b) return;
+    chart.setRange(b.dataset.range);
+    refreshRange();
+  });
+
+  function computeActiveRange(c) {
+    var vt = c.viewTimes();
+    if (!vt) return null;
+    var all = c.bars[c.bars.length - 1].time - c.bars[0].time;
+    var span = vt[1] - vt[0];
+    if (all > 0 && span >= all * 0.97) return 'ALL';
+    var ytd = new Date(new Date(c.bars[c.bars.length - 1].time).getFullYear(), 0, 1).getTime();
+    if (Math.abs(vt[0] - ytd) < 86400000 * 7) return 'YTD';
+    var best = null;
+    var bestErr = 1e9;
+    for (var i = 0; i < RANGES.length; i++) {
+      var r = RANGES[i];
+      if (r.ms == null) continue;
+      var err = Math.abs(Math.log((span || 1) / r.ms));
+      if (err < bestErr) { bestErr = err; best = r.key; }
+    }
+    return bestErr < Math.log(1.6) ? best : null;
+  }
+
+  function refreshRange() {
+    for (var i = 0; i < RANGES.length; i++) {
+      var k = RANGES[i].key;
+      rangeEls[k].classList.toggle('off', !chart.rangeAvailable(k));
+    }
+    var act = computeActiveRange(chart);
+    Object.keys(rangeEls).forEach(function (k) {
+      rangeEls[k].classList.toggle('on', k === act);
+    });
+    rangeInfo.textContent = (chart.viewSpan() / 86400000).toFixed(0) + 'd span';
+  }
+
+  /* ------------------------------------------------------------ 顶栏 */
+  document.getElementById('topbar').addEventListener('click', function (e) {
+    var btn = e.target && e.target.closest ? e.target.closest('button') : null;
+    if (!btn) return;
+    var t = btn.dataset.tf;
+    if (t) {
+      tf = t;
+      var tfs = document.querySelectorAll('[data-tf]');
+      for (var i = 0; i < tfs.length; i++) tfs[i].classList.toggle('on', tfs[i] === btn);
+      chart.setBars(resample(dailyFor(ticker), tf), { symbol: ticker, timeframe: tf });
+      refreshRange();
+      report();
+    } else if (btn.id === 'theme') {
+      themeName = themeName === 'dark' ? 'light' : 'dark';
+      chart.setTheme(themeName);
+      btn.textContent = themeName === 'dark' ? '浅色' : '深色';
+      btn.classList.toggle('on', themeName === 'light');
+    } else if (btn.id === 'test') {
+      runTest();
+    }
+  });
+  symSel.addEventListener('change', function () {
+    ticker = symSel.value;
+    chart.setBars(resample(dailyFor(ticker), tf), { symbol: ticker, timeframe: tf });
+    refreshRange();
+    report();
+  });
+
+  /* ------------------------------------------------------------ 状态 */
+  function report() {
+    var s = layer.score();
+    statusEl.className = '';
+    statusEl.textContent =
+      'tool=' + layer.tool +
+      '  magnet=' + (layer.magnet ? 'on' : 'off') +
+      '  hidden=' + (layer.getHidden() ? 'on' : 'off') +
+      '  active=' + (layer.activeId == null ? '-' : '#' + layer.activeId) +
+      '  undo=' + (layer.canUndo() ? 'y' : 'n') + '/redo=' + (layer.canRedo() ? 'y' : 'n') +
+      '  drawings=' + s.total + ' [' + JSON.stringify(s.byType) + ']' +
+      '  | ' + chart.debugInfo();
+  }
+
+  /* ------------------------------------------------------------ 自检 */
+  function runTest() {
+    log('--- 绘图层自检 ---');
+    var a;
+    try {
+      a = drawSelfTest();
+    } catch (e) {
+      window.__diag('✗ 绘图层自检抛异常：' + (e && e.stack ? e.stack : e), true);
+      return;
+    }
+    log('--- 图表自检 ---');
+    var b;
+    try {
+      b = selfTest(chart);
+    } catch (e) {
+      window.__diag('✗ 图表自检抛异常：' + (e && e.stack ? e.stack : e), true);
+      return;
+    }
+    var tail = 'CHARTTEST pass=' + (a.pass + b.pass) + ' fail=' + (a.fail + b.fail);
+    document.title = tail;
+    log(tail);
+    syncBar();
+    return { pass: a.pass + b.pass, fail: a.fail + b.fail };
+  }
+  window.__selftest = runTest;
+
+  /* ------------------------------------------------------------ 启动 */
+  try {
+    load();
+    chart.drawNow();
+    chart.showLast(180);
+  } catch (e) {
+    window.__diag('✗ 启动失败：' + (e && e.stack ? e.stack : e), true);
+    return;
+  }
+  refreshRange();
+  syncBar();
+
+  // ⚠️ 不能只靠 requestAnimationFrame —— 后台标签页 / headless 里可能不触发
+  var started = false;
+  function autostart() {
+    if (started) return;
+    started = true;
+    runTest();
+    log('READY 绘图页就绪');
+  }
+  requestAnimationFrame(function () { requestAnimationFrame(autostart); });
+  setTimeout(autostart, 400);
+})();
+</script>
+</body>
+</html>

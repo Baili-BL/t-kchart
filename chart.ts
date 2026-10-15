@@ -131,6 +131,19 @@ interface Channel {
   visible: boolean;
 }
 
+/**
+ * 外部图层的接入点（绘图层走这里）。
+ * `onDown` 返回 true = 这次点击被图层接管，**TVChart 不再平移**。
+ * 这条约定很重要：没有它，选个绘图工具就没法拖动画布了。
+ */
+interface ChartHooks {
+  onDown?(px: number, py: number, e: PointerEvent): boolean;
+  onMove?(px: number, py: number, e: PointerEvent): void;
+  onUp?(px: number, py: number, e: PointerEvent): void;
+  /** 在绘图区裁剪内、十字光标之前调用 */
+  onDraw?(ctx: CanvasRenderingContext2D): void;
+}
+
 /** 主题：只换背景/网格/文字/十字光标，不碰涨跌色（涨跌是 A 股习惯，不该跟着主题走）。 */
 const THEMES: { [k: string]: { bg: string; grid: string; axisText: string; cross: string; title: string; fill: string } } = {
   dark: {
@@ -447,6 +460,13 @@ class TVChart {
   private rafId = 0;
   private ac: AbortController;
   private ro: ResizeObserver | null = null;
+  /** 外部图层（绘图层）的钩子 */
+  private hooks: ChartHooks | null = null;
+
+  /** 挂载外部图层。传 null 卸载。 */
+  setHooks(h: ChartHooks | null): void {
+    this.hooks = h;
+  }
 
   constructor(target: HTMLCanvasElement | string, bars: Bar[], options: ChartOptions = {}) {
     const el = typeof target === 'string' ? document.querySelector(target) : target;
@@ -847,14 +867,23 @@ class TVChart {
     }, Object.assign({ passive: false }, sig));
 
     c.addEventListener('pointerdown', (e: PointerEvent) => {
-      this.dragging = true;
-      this.dragX = e.clientX;
+      const px = e.offsetX;
+      const py = e.offsetY;
       try { c.setPointerCapture(e.pointerId); } catch (_e) { /* 忽略 */ }
-      this.pointer = { x: e.offsetX, y: e.offsetY };
+      this.pointer = { x: px, y: py };
+      // 外部图层先挑：它接管了这次点击，本图就不平移
+      const taken = !!(this.hooks && this.hooks.onDown && this.hooks.onDown(px, py, e));
+      if (!taken) {
+        this.dragging = true;
+        this.dragX = e.clientX;
+      }
       this.invalidate();
     }, sig);
 
     c.addEventListener('pointermove', (e: PointerEvent) => {
+      const px = e.offsetX;
+      const py = e.offsetY;
+      if (this.hooks && this.hooks.onMove) this.hooks.onMove(px, py, e);
       if (this.dragging) {
         const dx = e.clientX - this.dragX;
         this.dragX = e.clientX;
@@ -862,12 +891,13 @@ class TVChart {
         this.clampView();
         this.notifyView();
       }
-      this.pointer = { x: e.offsetX, y: e.offsetY };
+      this.pointer = { x: px, y: py };
       this.notifyCrosshair();
       this.invalidate();
     }, sig);
 
     const endDrag = (e: PointerEvent) => {
+      if (this.hooks && this.hooks.onUp) this.hooks.onUp(e.offsetX, e.offsetY, e);
       if (!this.dragging) return;
       this.dragging = false;
       try { c.releasePointerCapture(e.pointerId); } catch (_e) { /* 忽略 */ }
@@ -1026,6 +1056,7 @@ class TVChart {
     this.drawLines(i0, i1);          // MA
     this.drawChannelLines(i0, i1);   // 通道线在 K 线上面
     this.drawMarks();                // Pine plotshape 打点
+    if (this.hooks && this.hooks.onDraw) this.hooks.onDraw(ctx);   // 外部图层（绘图工具）
     this.drawCrosshairV();
     ctx.restore();
 
