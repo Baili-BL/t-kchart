@@ -3,7 +3,10 @@
 用纯 TypeScript 手写的图表核心与 Pine 解释器，**不依赖任何第三方库**
 （不用 lightweight-charts，不用 Vela，不用 D3，不用 PineTS）。
 
-两个页面：
+> **路线图见 [`TODO.md`](TODO.md)** —— TS 侧待办（带完成判据）+ Rust 移植计划 + 待确认的问题。
+> 本 README 讲的是「现在是什么」，TODO 讲的是「接下来做什么、怎么算做完」。
+
+五个页面：
 
 | 页面 | 内容 |
 | --- | --- |
@@ -84,6 +87,7 @@ node server.mjs
 | `equity.html` | 权益曲线页面 |
 | `analytics.html` | 统计组件页面 |
 | `run-tests.js` | 在 Node 里跑绘图 / Pine / 权益图 / 统计组件自检（不需要浏览器） |
+| **`TODO.md`** | **路线图**：TS 侧待办（带完成判据）+ Rust 移植计划 + 需要你回答的问题 |
 | `server.mjs` | 最小静态服务，默认 `127.0.0.1:5180`（**可选**，双击 HTML 即可） |
 | `tsconfig.json` | `strict: true`，`target/module: ES2020`，include 六个 .ts |
 
@@ -126,7 +130,6 @@ node server.mjs
 - 联动**按时间对齐**（`viewTimes()` / `setViewTimes()` / `indexAtTime()` 二分），不按像素 —— 见 §10
 
 **Pine 引擎（`pine.ts`）—— T3 Phase 1，见 §12**
-
 - 词法（**缩进敏感**）/ 语法 / **序列语义运行时** / 45 个内置 / plot·plotshape 输出
 - 手算期望值的自检 **49 条**，Node 和浏览器里都能跑
 
