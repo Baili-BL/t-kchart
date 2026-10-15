@@ -158,6 +158,8 @@ function buildEquityFromPnl(times: number[], pnl: number[], start: number): Equi
 interface BacktestResult extends EquitySeries {
   /** 平仓次数 */
   tradeCount: number;
+  /** 逐笔收益率（比例，不是百分比）—— 直接喂给收益分布直方图 */
+  tradeReturns: number[];
   winRate: number;
   /** 最大回撤（正数） */
   maxDrawdown: number;
@@ -189,6 +191,7 @@ function simulateMaCross(bars: Bar[], fastLen: number, slowLen: number, start: n
   const points: EquityPoint[] = [];
   const positions: { from: number; to: number; long: boolean }[] = [];
   const tradePnls: number[] = [];
+  const tradeReturns: number[] = [];
   let openIdx = -1;
   let entryEquity = 0;
   let prevEquity = start;
@@ -219,6 +222,8 @@ function simulateMaCross(bars: Bar[], fastLen: number, slowLen: number, start: n
         if (openIdx >= 0) {
           positions.push({ from: bars[openIdx].time, to: bars[i].time, long: true });
           tradePnls.push(cash - entryEquity);
+          // 收益率以**建仓时权益**为分母，不是初始资金 —— 复利下两者会越差越远
+          tradeReturns.push(entryEquity > 0 ? (cash - entryEquity) / entryEquity : 0);
         }
         openIdx = -1;
       }
@@ -240,6 +245,7 @@ function simulateMaCross(bars: Bar[], fastLen: number, slowLen: number, start: n
   return {
     points,
     trades: tradePnls,
+    tradeReturns,
     tradeCount: tradePnls.length,
     winRate: tradePnls.length ? wins / tradePnls.length : 0,
     maxDrawdown: maxDD,
@@ -1169,6 +1175,20 @@ function equitySelfTest(bars?: Bar[]): EquityTestResult {
   t('回测：有平仓交易（不然说明信号逻辑没跑起来）', bt.tradeCount > 0, String(bt.tradeCount));
   t('回测：笔数 == 持仓区间数', bt.tradeCount === bt.positions.length,
     bt.tradeCount + ' vs ' + bt.positions.length);
+  // 这条是真断言：逐笔收益率**连乘**必须等于「末权益 / 初始资金」。
+  // 它同时验证了收益率的分母（建仓权益而不是初始资金）和复利一致性。
+  t('回测：Π(1+逐笔收益率) == 末权益 / 初始资金', (() => {
+    if (!bt.tradeCount) return false;
+    let prod = 1;
+    for (const r of bt.tradeReturns) prod *= 1 + r;
+    const expect = bt.points[bt.points.length - 1].equity / 100000;
+    return Math.abs(prod - expect) <= Math.abs(expect) * 1e-6 + 1e-9;
+  })(), (() => {
+    let prod = 1;
+    for (const r of bt.tradeReturns) prod *= 1 + r;
+    return 'prod=' + prod.toFixed(6) + ' expect=' +
+      (bt.points[bt.points.length - 1].equity / 100000).toFixed(6);
+  })());
   // 这条专门盯 entryEquity 记成 start 的那个 bug：
   // 记错了的话每笔盈亏是「相对初始资金」，累加起来会比净利大一个数量级。
   t('回测：逐笔盈亏之和与净利同量级（±30% + 100）', (() => {

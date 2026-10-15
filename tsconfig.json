@@ -1,4 +1,4 @@
-{
+﻿{
   "compilerOptions": {
     "target": "ES2020",
     "module": "ES2020",
@@ -10,5 +10,6 @@
     "declaration": false,
     "sourceMap": false
   },
-  "include": ["chart.ts", "grid.ts", "pine.ts", "draw.ts", "equity.ts"]
+  "include": ["chart.ts", "grid.ts", "pine.ts", "draw.ts", "equity.ts", "analytics.ts"]
 }
+
