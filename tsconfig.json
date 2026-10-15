@@ -10,5 +10,5 @@
     "declaration": false,
     "sourceMap": false
   },
-  "include": ["chart.ts", "grid.ts", "pine.ts"]
+  "include": ["chart.ts", "grid.ts", "pine.ts", "draw.ts"]
 }

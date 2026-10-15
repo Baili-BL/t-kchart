@@ -300,6 +300,10 @@ function decimalsFor(step) {
  * 3. 图表核心
  * ========================================================================= */
 class TVChart {
+    /** 挂载外部图层。传 null 卸载。 */
+    setHooks(h) {
+        this.hooks = h;
+    }
     constructor(target, bars, options = {}) {
         this.view = { from: 0, barW: 8 };
         this.scale = { min: 0, max: 1 };
@@ -325,6 +329,8 @@ class TVChart {
         this.channels = [];
         this.rafId = 0;
         this.ro = null;
+        /** 外部图层（绘图层）的钩子 */
+        this.hooks = null;
         const el = typeof target === 'string' ? document.querySelector(target) : target;
         if (!(el instanceof HTMLCanvasElement)) {
             throw new Error('TVChart: 第一个参数必须是 <canvas> 或其选择器');
@@ -713,16 +719,26 @@ class TVChart {
             this.zoomAt(e.offsetX, Math.exp(-dy * 0.0012));
         }, Object.assign({ passive: false }, sig));
         c.addEventListener('pointerdown', (e) => {
-            this.dragging = true;
-            this.dragX = e.clientX;
+            const px = e.offsetX;
+            const py = e.offsetY;
             try {
                 c.setPointerCapture(e.pointerId);
             }
             catch (_e) { /* 忽略 */ }
-            this.pointer = { x: e.offsetX, y: e.offsetY };
+            this.pointer = { x: px, y: py };
+            // 外部图层先挑：它接管了这次点击，本图就不平移
+            const taken = !!(this.hooks && this.hooks.onDown && this.hooks.onDown(px, py, e));
+            if (!taken) {
+                this.dragging = true;
+                this.dragX = e.clientX;
+            }
             this.invalidate();
         }, sig);
         c.addEventListener('pointermove', (e) => {
+            const px = e.offsetX;
+            const py = e.offsetY;
+            if (this.hooks && this.hooks.onMove)
+                this.hooks.onMove(px, py, e);
             if (this.dragging) {
                 const dx = e.clientX - this.dragX;
                 this.dragX = e.clientX;
@@ -730,11 +746,13 @@ class TVChart {
                 this.clampView();
                 this.notifyView();
             }
-            this.pointer = { x: e.offsetX, y: e.offsetY };
+            this.pointer = { x: px, y: py };
             this.notifyCrosshair();
             this.invalidate();
         }, sig);
         const endDrag = (e) => {
+            if (this.hooks && this.hooks.onUp)
+                this.hooks.onUp(e.offsetX, e.offsetY, e);
             if (!this.dragging)
                 return;
             this.dragging = false;
@@ -897,6 +915,8 @@ class TVChart {
         this.drawLines(i0, i1); // MA
         this.drawChannelLines(i0, i1); // 通道线在 K 线上面
         this.drawMarks(); // Pine plotshape 打点
+        if (this.hooks && this.hooks.onDraw)
+            this.hooks.onDraw(ctx); // 外部图层（绘图工具）
         this.drawCrosshairV();
         ctx.restore();
         this.drawPriceAxis();

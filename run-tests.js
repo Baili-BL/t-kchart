@@ -30,8 +30,8 @@ const sandbox = {
 sandbox.globalThis = sandbox;
 vm.createContext(sandbox);
 
-// 顺序不能反：pine 依赖 chart 里的 log()
-const files = ['chart.js', 'pine.js'];
+// 顺序不能反：draw / pine 都依赖 chart 里的 log()
+const files = ['chart.js', 'draw.js', 'pine.js'];
 let src = '';
 for (const f of files) {
   const p = path.join(dir, f);
@@ -41,7 +41,8 @@ for (const f of files) {
   }
   src += '\n/* ==== ' + f + ' ==== */\n' + fs.readFileSync(p, 'utf8');
 }
-src += '\nglobalThis.__pine = pineSelfTest();\n';
+src += '\nglobalThis.__draw = drawSelfTest();\n';
+src += 'globalThis.__pine = pineSelfTest();\n';
 
 try {
   vm.runInContext(src, sandbox, { filename: 'bundle.js' });
@@ -51,13 +52,20 @@ try {
   process.exit(1);
 }
 
+const draw = sandbox.__draw;
 const res = sandbox.__pine;
-console.log('');
-console.log('================ Pine 自检 ================');
-console.log('  ' + res.pass + ' PASS / ' + res.fail + ' FAIL   (共 ' + (res.pass + res.fail) + ' 条)');
-if (res.fail) {
-  console.log('\n  失败项：');
-  for (const n of res.names) if (n.indexOf('FAIL') === 0) console.log('    ' + n);
+
+function report(title, r) {
+  console.log('');
+  console.log('=============== ' + title + ' ===============');
+  console.log('  ' + r.pass + ' PASS / ' + r.fail + ' FAIL   (共 ' + (r.pass + r.fail) + ' 条)');
+  if (r.fail) {
+    console.log('\n  失败项：');
+    for (const n of r.names) if (n.indexOf('FAIL') === 0) console.log('    ' + n);
+  }
 }
+report('绘图层自检', draw);
+report('Pine 自检', res);
 console.log('===========================================');
-process.exit(res.fail ? 1 : 0);
+console.log('  合计 ' + (draw.pass + res.pass) + ' PASS / ' + (draw.fail + res.fail) + ' FAIL');
+process.exit(draw.fail + res.fail ? 1 : 0);
