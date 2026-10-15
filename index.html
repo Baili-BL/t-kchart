@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>tv-chart · 多图网格 + 联动</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0e1116; }
+  body {
+    font: 12px -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    color: #e6edf3;
+  }
+  #app { position: absolute; inset: 0; display: flex; }
+
+  /* ---------------------------------------------------------- 左侧面板 */
+  #side {
+    flex: 0 0 172px; width: 172px;
+    background: #12161c; border-right: 1px solid #222b35;
+    padding: 10px; overflow-y: auto;
+  }
+  .sec { margin-bottom: 16px; }
+  .sec-h {
+    font-size: 11px; letter-spacing: .12em; color: #6e7681;
+    text-transform: uppercase; margin-bottom: 8px;
+  }
+  .muted { color: #6e7681; font: 11px/1.5 ui-monospace, Consolas, monospace; }
+
+  /* 布局选择器：4×4 个方块，像 TradingView 那样悬停高亮 */
+  #picker {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 3px; width: 104px; margin-bottom: 6px;
+    padding: 4px; background: #0d1116; border-radius: 6px;
+    border: 1px solid #222b35;
+  }
+  #picker i {
+    display: block; height: 20px; background: #1b222b;
+    border-radius: 2px; cursor: pointer; transition: background .08s;
+  }
+  #picker i:hover { background: #2b3542; }
+  #picker i.on { background: #2f6fd0; }
+
+  /* 联动开关 */
+  .sw {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 5px 0; cursor: pointer; color: #c9d1d9;
+  }
+  .sw:hover { color: #fff; }
+  .sw .knob {
+    width: 30px; height: 17px; border-radius: 9px;
+    background: #2b3542; position: relative; transition: background .12s; flex: 0 0 auto;
+  }
+  .sw .knob::after {
+    content: ''; position: absolute; top: 2px; left: 2px;
+    width: 13px; height: 13px; border-radius: 50%;
+    background: #8b949e; transition: transform .12s, background .12s;
+  }
+  .sw.on .knob { background: #1f6feb; }
+  .sw.on .knob::after { transform: translateX(13px); background: #fff; }
+
+  /* ------------------------------------------------------------ 主区域 */
+  #main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+
+  #toolbar {
+    flex: 0 0 auto;
+    display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+    padding: 6px 8px; background: #12161c; border-bottom: 1px solid #222b35;
+  }
+  #toolbar button, #toolbar select {
+    font: inherit; color: #c9d1d9; background: #161b22;
+    border: 1px solid #26303d; border-radius: 6px;
+    padding: 4px 9px; cursor: pointer; white-space: nowrap;
+  }
+  #toolbar button:hover, #toolbar select:hover { background: #1d2530; border-color: #3a4654; }
+  #toolbar button.on { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  #toolbar .sep { width: 1px; height: 18px; background: #26303d; margin: 0 2px; }
+
+  #grid { flex: 1; min-height: 0; background: #000; position: relative; }
+
+  /* 底部显示范围条（1D 7D 1M 3M 6M YTD 1Y 5Y | ALL） */
+  #rangebar {
+    flex: 0 0 auto;
+    display: flex; align-items: center; gap: 1px;
+    padding: 2px 8px; background: #12161c; border-top: 1px solid #222b35;
+  }
+  #rangebar button {
+    font: 11px/1 ui-monospace, Consolas, monospace;
+    color: #9aa4b2; background: transparent;
+    border: 1px solid transparent; border-radius: 4px;
+    padding: 4px 8px; cursor: pointer;
+  }
+  #rangebar button:hover { background: #1d2530; color: #fff; }
+  #rangebar button.on { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  #rangebar button.off { opacity: .28; cursor: default; }
+  #rangebar button.off:hover { background: transparent; color: #9aa4b2; }
+  #rangebar .sep { width: 1px; height: 13px; background: #26303d; margin: 0 5px; }
+  #rangeInfo { margin-left: auto; }
+
+  .tv-tile {
+    position: relative; overflow: hidden;
+    background: #0e1116; border: 1px solid #1b2229;
+  }
+  .tv-tile.active { border-color: #1f6feb; }
+  .tv-tile canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .tv-badge {
+    position: absolute; top: 3px; left: 4px;
+    width: 17px; height: 17px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font: 10px/1 ui-monospace, Consolas, monospace;
+    color: #ff7b72; border: 1px solid #ff7b72; background: rgba(14,17,22,.7);
+    pointer-events: none; z-index: 2;
+  }
+  .tv-tile.active .tv-badge { color: #fff; border-color: #1f6feb; background: #1f6feb; }
+
+  /* -------------------------------------------------------------- 状态 */
+  #status {
+    flex: 0 0 auto;
+    font: 11px/1.5 ui-monospace, Consolas, monospace;
+    color: #6e7681; background: #0b0e13;
+    padding: 2px 8px; border-top: 1px solid #222b35;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  #status.bad { color: #ff7b72; background: #2a1113; }
+
+  /* 日志面板浮在底部两条栏（范围条 + 状态条）之上，别把它们盖住 */
+  #logwrap { position: absolute; left: 180px; bottom: 54px; width: min(660px, calc(100% - 200px)); }
+  #logbar {
+    font: 11px/1.6 ui-monospace, Consolas, monospace;
+    color: #8b949e; background: rgba(22,27,34,.92);
+    border: 1px solid #26303d; border-radius: 6px;
+    padding: 2px 8px; cursor: pointer; user-select: none;
+  }
+  #log {
+    font: 11px/1.55 ui-monospace, Consolas, monospace;
+    color: #7d8590; background: rgba(13,17,23,.95);
+    border: 1px solid #26303d; border-top: none;
+    border-radius: 0 0 6px 6px;
+    padding: 6px 8px; overflow: auto;
+    max-height: 180px; white-space: pre-wrap; word-break: break-all;
+  }
+  #logwrap.collapsed #log { display: none; }
+</style>
+
+<!--
+  最早期诊断。必须排在 chart.js / grid.js 之前：
+  脚本加载失败时业务代码根本不会执行，没有这段页面就永远停在 "booting…"。
+-->
+<script>
+(function () {
+  window.__diag = function (msg, isErr) {
+    var text = String(msg);
+    try { (isErr ? console.error : console.log)(text); } catch (e) {}
+    var l = document.getElementById('log');
+    if (l) {
+      var d = document.createElement('div');
+      d.textContent = text;
+      if (isErr) d.style.color = '#ff7b72';
+      l.appendChild(d);
+      l.scrollTop = l.scrollHeight;
+    }
+    if (isErr) {
+      var s = document.getElementById('status');
+      if (s) { s.textContent = text; s.className = 'bad'; }
+    }
+  };
+
+  // 捕获 JS 错误 + 资源加载失败（资源错误只在捕获阶段冒泡到 window）
+  window.addEventListener('error', function (e) {
+    if (e && e.target && e.target !== window && e.target.tagName) {
+      window.__diag('✗ 资源加载失败：<' + e.target.tagName.toLowerCase() + '> ' +
+        (e.target.src || e.target.href || ''), true);
+    } else {
+      window.__diag('✗ JS 错误：' + (e && e.message ? e.message : e) +
+        (e && e.lineno ? '  @' + e.lineno + ':' + e.colno : ''), true);
+    }
+  }, true);
+
+  window.addEventListener('unhandledrejection', function (e) {
+    var r = e && e.reason;
+    window.__diag('✗ 未处理的 Promise 拒绝：' + (r && r.stack ? r.stack : r), true);
+  });
+
+  window.addEventListener('DOMContentLoaded', function () {
+    setTimeout(function () {
+      var s = document.getElementById('status');
+      if (s && /^booting/.test(s.textContent)) {
+        window.__diag('✗ 2 秒内没启动起来。protocol=' + location.protocol +
+          '  typeof TVChart=' + (typeof TVChart) +
+          '  typeof ChartGrid=' + (typeof ChartGrid), true);
+      }
+    }, 2000);
+  });
+})();
+</script>
+</head>
+<body>
+<div id="app">
+  <aside id="side">
+    <div class="sec">
+      <div class="sec-h">Layout</div>
+      <div id="picker"></div>
+      <div class="muted" id="pickerLabel">2 × 2</div>
+    </div>
+    <div class="sec">
+      <div class="sec-h">Sync</div>
+      <div id="syncList"></div>
+    </div>
+    <div class="sec">
+      <div class="sec-h">说明</div>
+      <div class="muted">
+        点格子切换活动图（蓝框）。<br>
+        SYNC 关掉时，标的/周期只改活动图。
+      </div>
+    </div>
+  </aside>
+
+  <main id="main">
+    <div id="toolbar">
+      <select id="sym"></select>
+      <button data-tf="1D" class="on">1D</button>
+      <button data-tf="1W">1W</button>
+      <button data-tf="1M">1M</button>
+      <span class="sep"></span>
+      <button data-act="boll" class="on">BB 通道</button>
+      <button data-act="marker">圆圈：关</button>
+      <button data-act="theme">浅色</button>
+      <span class="sep"></span>
+      <button data-act="last">最近 180 根</button>
+      <button data-act="fit">适配全部</button>
+      <button data-act="test">自检（图 + 网格）</button>
+    </div>
+    <div id="grid"></div>
+    <div id="rangebar"></div>
+    <div id="status">booting…</div>
+  </main>
+</div>
+
+<div id="logwrap" class="collapsed">
+  <div id="logbar">运行日志（点开）· 始终写入 DOM，供 --dump-dom 抓取</div>
+  <div id="log"></div>
+</div>
+
+<!-- 两个都是经典脚本（无 import/export），顺序不能反：grid 依赖 chart -->
+<script src="chart.js"></script>
+<script src="grid.js"></script>
+
+<script>
+(function () {
+  'use strict';
+
+  var statusEl = document.getElementById('status');
+
+  if (typeof TVChart !== 'function' || typeof ChartGrid !== 'function') {
+    window.__diag('✗ 脚本没加载成功（TVChart=' + (typeof TVChart) +
+      '  ChartGrid=' + (typeof ChartGrid) + '）', true);
+    window.__diag('  排查：① chart.js / grid.js 是否与 index.html 同目录', false);
+    window.__diag('        ② 浏览器 Console / Network 是否报 404 或语法错误', false);
+    return;
+  }
+  window.__diag('✓ 已加载  protocol=' + location.protocol + '  href=' + location.href, false);
+
+  document.getElementById('logbar').addEventListener('click', function () {
+    document.getElementById('logwrap').classList.toggle('collapsed');
+  });
+
+  /* ------------------------------------------------------------ 网格 */
+  var grid;
+  try {
+    grid = new ChartGrid('#grid', { rows: 2, cols: 2, theme: 'dark', legendInset: 34 });
+  } catch (e) {
+    window.__diag('✗ 初始化网格失败：' + (e && e.stack ? e.stack : e), true);
+    return;
+  }
+  window.__grid = grid;
+
+  /* -------------------------------------------------- 布局选择器 4×4 */
+  var picker = document.getElementById('picker');
+  var pickerLabel = document.getElementById('pickerLabel');
+  var PICK = 4;
+  var cells = [];
+
+  function paintPicker(hr, hc) {
+    for (var i = 0; i < cells.length; i++) {
+      cells[i].el.classList.toggle('on', cells[i].r <= hr && cells[i].c <= hc);
+    }
+    pickerLabel.textContent = (hr + 1) + ' × ' + (hc + 1);
+  }
+
+  for (var r = 0; r < PICK; r++) {
+    for (var c = 0; c < PICK; c++) {
+      (function (rr, cc) {
+        var d = document.createElement('i');
+        d.addEventListener('mouseenter', function () { paintPicker(rr, cc); });
+        d.addEventListener('click', function () {
+          grid.setLayout(rr + 1, cc + 1);
+          paintPicker(rr, cc);
+          report();
+        });
+        picker.appendChild(d);
+        cells.push({ el: d, r: rr, c: cc });
+      })(r, c);
+    }
+  }
+  picker.addEventListener('mouseleave', function () {
+    var L = grid.layoutInfo();
+    paintPicker(L.rows - 1, L.cols - 1);
+  });
+
+  /* --------------------------------------------------------- 联动开关 */
+  var SYNCS = [
+    { key: 'crosshair', label: '十字光标' },
+    { key: 'range', label: '时间轴范围' },
+    { key: 'symbol', label: '标的' },
+    { key: 'interval', label: '周期' }
+  ];
+  var syncList = document.getElementById('syncList');
+  var syncEls = {};
+  SYNCS.forEach(function (s) {
+    var row = document.createElement('div');
+    row.className = 'sw on';
+    var t = document.createElement('span');
+    t.textContent = s.label;
+    var k = document.createElement('span');
+    k.className = 'knob';
+    row.appendChild(t);
+    row.appendChild(k);
+    row.addEventListener('click', function () {
+      var on = !row.classList.contains('on');
+      row.classList.toggle('on', on);
+      grid.setSync(s.key, on);
+      report();
+    });
+    syncList.appendChild(row);
+    syncEls[s.key] = row;
+  });
+
+  /* ------------------------------------ 底部显示范围（视口覆盖多长时间） */
+  // ⚠️ 这跟顶栏的 1D/1W/1M（每根 bar 代表多久）是两回事，别混
+  var rangebar = document.getElementById('rangebar');
+  var rangeEls = {};
+
+  RANGES.forEach(function (r) {
+    if (r.key === 'ALL') {
+      var sp = document.createElement('span');
+      sp.className = 'sep';
+      rangebar.appendChild(sp);
+    }
+    var b = document.createElement('button');
+    b.textContent = r.label;
+    b.dataset.range = r.key;
+    rangebar.appendChild(b);
+    rangeEls[r.key] = b;
+  });
+  var rangeInfo = document.createElement('span');
+  rangeInfo.id = 'rangeInfo';
+  rangeInfo.className = 'muted';
+  rangebar.appendChild(rangeInfo);
+
+  rangebar.addEventListener('click', function (e) {
+    var b = e.target && e.target.closest ? e.target.closest('button[data-range]') : null;
+    if (!b) return;
+    grid.setRange(b.dataset.range);
+    report();
+  });
+
+  // 当前视口跨度最接近哪个范围 —— 手动缩放后高亮也会跟着走
+  function computeActiveRange(c) {
+    if (!c || !c.bars.length) return null;
+    var vt = c.viewTimes();
+    if (!vt) return null;
+    var first = c.bars[0].time;
+    var last = c.bars[c.bars.length - 1].time;
+    var all = last - first;
+    var span = vt[1] - vt[0];
+    if (all > 0 && span >= all * 0.97) return 'ALL';
+    var ytd = new Date(new Date(last).getFullYear(), 0, 1).getTime();
+    if (Math.abs(vt[0] - ytd) < 86400000 * 7) return 'YTD';
+    var best = null;
+    var bestErr = 1e9;
+    for (var i = 0; i < RANGES.length; i++) {
+      var r = RANGES[i];
+      if (r.ms == null) continue;
+      var err = Math.abs(Math.log((span || 1) / r.ms));
+      if (err < bestErr) { bestErr = err; best = r.key; }
+    }
+    return bestErr < Math.log(1.6) ? best : null;
+  }
+
+  function refreshRange() {
+    var c = grid.charts()[grid.activeIndex()];
+    var avail = grid.rangeAvailability();
+    for (var i = 0; i < avail.length; i++) {
+      var el = rangeEls[avail[i].key];
+      if (el) el.classList.toggle('off', !avail[i].ok);
+    }
+    var act = computeActiveRange(c);
+    Object.keys(rangeEls).forEach(function (k) {
+      rangeEls[k].classList.toggle('on', k === act);
+    });
+    rangeInfo.textContent = grid.viewSpanDays().toFixed(0) + 'd span';
+  }
+
+  /* -------------------------------------------------------- 工具栏（顶） */
+  var symSel = document.getElementById('sym');
+  SYMBOLS.forEach(function (s) {
+    var o = document.createElement('option');
+    o.value = s.ticker;
+    o.textContent = s.ticker + '  ' + s.name;
+    symSel.appendChild(o);
+  });
+  symSel.addEventListener('change', function () {
+    grid.setSymbol(symSel.value);
+    report();
+  });
+
+  var bollBtn = document.querySelector('[data-act="boll"]');
+  var markerBtn = document.querySelector('[data-act="marker"]');
+  var themeBtn = document.querySelector('[data-act="theme"]');
+  var MARKERS = ['none', 'touch', 'extremum'];
+  var MARKER_LABEL = { none: '圆圈：关', touch: '圆圈：碰带', extremum: '圆圈：极值' };
+  var markerIx = 0;
+  var themeName = 'dark';
+
+  document.getElementById('toolbar').addEventListener('click', function (e) {
+    var btn = e.target && e.target.closest ? e.target.closest('button') : null;
+    if (!btn) return;
+
+    var tf = btn.dataset.tf;
+    if (tf) {
+      grid.setTimeframe(tf);
+      var tfs = document.querySelectorAll('[data-tf]');
+      for (var i = 0; i < tfs.length; i++) tfs[i].classList.toggle('on', tfs[i] === btn);
+      report();
+      return;
+    }
+
+    var act = btn.dataset.act;
+    if (act === 'boll') {
+      var on = !bollBtn.classList.contains('on');
+      bollBtn.classList.toggle('on', on);
+      grid.eachTile(function (c) { c.setChannelVisible('bb', on); });
+      log('BB 通道 ' + (on ? '显示' : '隐藏'));
+    } else if (act === 'marker') {
+      markerIx = (markerIx + 1) % MARKERS.length;
+      var mode = MARKERS[markerIx];
+      grid.eachTile(function (c) { c.setChannelMarker('bb', mode); });
+      markerBtn.textContent = MARKER_LABEL[mode];
+      markerBtn.classList.toggle('on', mode !== 'none');
+      log('通道圆圈规则 -> ' + mode);
+    } else if (act === 'theme') {
+      themeName = themeName === 'dark' ? 'light' : 'dark';
+      grid.setTheme(themeName);
+      themeBtn.textContent = themeName === 'dark' ? '浅色' : '深色';
+      themeBtn.classList.toggle('on', themeName === 'light');
+      log('主题 -> ' + themeName);
+    } else if (act === 'last') {
+      grid.showLastAll(180);
+    } else if (act === 'fit') {
+      grid.fitAll();
+    } else if (act === 'test') {
+      runTest();
+    }
+    report();
+  });
+
+  /* -------------------------------------------------------------- 自检 */
+  function runTest() {
+    var c = grid.charts()[grid.activeIndex()];
+    if (!c) return;
+
+    log('--- 图表自检（第 ' + (grid.activeIndex() + 1) + ' 格）---');
+    var res;
+    try {
+      res = selfTest(c);
+    } catch (err) {
+      window.__diag('✗ 图表自检抛异常：' + (err && err.stack ? err.stack : err), true);
+      return;
+    }
+
+    log('--- 网格自检 ---');
+    var g;
+    try {
+      g = gridSelfTest(grid);
+    } catch (err) {
+      window.__diag('✗ 网格自检抛异常：' + (err && err.stack ? err.stack : err), true);
+      return;
+    }
+
+    var L = grid.layoutInfo();
+    paintPicker(L.rows - 1, L.cols - 1);
+    var tail = 'SELFTEST pass=' + (res.pass + g.pass) + ' fail=' + (res.fail + g.fail);
+    document.title = tail;
+    log(tail);
+    report();
+    return { pass: res.pass + g.pass, fail: res.fail + g.fail };
+  }
+  window.__selftest = runTest;
+
+  /* -------------------------------------------------------------- 状态 */
+  function report() {
+    var L = grid.layoutInfo();
+    var c = grid.charts()[grid.activeIndex()];
+    statusEl.className = '';
+    statusEl.textContent =
+      'layout=' + L.rows + 'x' + L.cols + '(' + L.total + ')  active=#' + (grid.activeIndex() + 1) +
+      '  ' + grid.activeSymbol() + ' ' + grid.timeframeNow() +
+      '  sync=' + JSON.stringify(grid.syncFlags()) +
+      (c ? '  | ' + c.debugInfo() : '');
+    refreshRange();
+  }
+
+  grid.el.addEventListener('layoutchange', function () {
+    report();
+  });
+  // 拖动/缩放之后底部范围高亮要跟着走
+  grid.el.addEventListener('viewchange', refreshRange);
+  document.getElementById('grid').addEventListener('pointerdown', function () {
+    setTimeout(report, 0);   // 活动格在 pointerdown 里切换，等一拍再读
+  });
+  window.addEventListener('resize', report);
+
+  /* -------------------------------------------------------------- 启动 */
+  try {
+    grid.eachTile(function (c) { c.drawNow(); });
+  } catch (e) {
+    window.__diag('✗ 首帧绘制失败：' + (e && e.stack ? e.stack : e), true);
+    return;
+  }
+  report();
+
+  // 自动跑自检。⚠️ 不能只靠 requestAnimationFrame ——
+  // 后台标签页和 headless 未合成页面里 rAF 可能根本不触发，
+  // 页面看起来「启动了但自检没跑」。所以加一个 setTimeout 兜底，用 flag 去重。
+  var started = false;
+  function autostart() {
+    if (started) return;
+    started = true;
+    runTest();
+    log('READY 页面就绪');
+  }
+  requestAnimationFrame(function () {
+    requestAnimationFrame(autostart);
+  });
+  setTimeout(autostart, 400);
+})();
+</script>
+</body>
+</html>
