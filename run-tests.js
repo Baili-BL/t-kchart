@@ -30,8 +30,8 @@ const sandbox = {
 sandbox.globalThis = sandbox;
 vm.createContext(sandbox);
 
-// 顺序不能反：draw / pine 都依赖 chart 里的 log()
-const files = ['chart.js', 'draw.js', 'pine.js'];
+// 顺序不能反：draw / pine / equity 都依赖 chart 里的 log() 等
+const files = ['chart.js', 'draw.js', 'pine.js', 'equity.js'];
 let src = '';
 for (const f of files) {
   const p = path.join(dir, f);
@@ -43,6 +43,7 @@ for (const f of files) {
 }
 src += '\nglobalThis.__draw = drawSelfTest();\n';
 src += 'globalThis.__pine = pineSelfTest();\n';
+src += 'globalThis.__eq = equitySelfTest();\n';
 
 try {
   vm.runInContext(src, sandbox, { filename: 'bundle.js' });
@@ -54,6 +55,7 @@ try {
 
 const draw = sandbox.__draw;
 const res = sandbox.__pine;
+const eqres = sandbox.__eq;
 
 function report(title, r) {
   console.log('');
@@ -66,6 +68,8 @@ function report(title, r) {
 }
 report('绘图层自检', draw);
 report('Pine 自检', res);
+report('权益图自检（纯计算部分）', eqres);
 console.log('===========================================');
-console.log('  合计 ' + (draw.pass + res.pass) + ' PASS / ' + (draw.fail + res.fail) + ' FAIL');
-process.exit(draw.fail + res.fail ? 1 : 0);
+console.log('  合计 ' + (draw.pass + res.pass + eqres.pass) + ' PASS / ' +
+  (draw.fail + res.fail + eqres.fail) + ' FAIL');
+process.exit(draw.fail + res.fail + eqres.fail ? 1 : 0);

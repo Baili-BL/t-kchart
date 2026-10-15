@@ -10,14 +10,15 @@
 | `index.html` | **多图工作区** —— 1×1~4×4 网格、联动、通道、显示范围条 |
 | `pine.html` | **Pine 编辑器** —— 左边写脚本，右边看图上输出 + 变量快照 |
 | `chart.html` | **单图 + 绘图工具** —— 左侧绘图工具栏、可拖动/磁吸/撤销的图形 |
+| `equity.html` | **权益曲线** —— Strategy Tester 那张图：折线 + 每根盈亏柱状 + 回撤统计 |
 
-| 多图工作区 | Pine 编辑器 |
-| --- | --- |
-| ![grid](shot-grid.png) | ![pine](shot-pine.png) |
+| 多图工作区 | Pine 编辑器 | 权益曲线 |
+| --- | --- | --- |
+| ![grid](shot-grid.png) | ![pine](shot-pine.png) | ![equity](shot-equity.png) |
 
 ![draw](shot-chart.png)
 
-（三张图都是 headless Chrome 实际跑出来的，不是设计稿。）
+（四张图都是 headless Chrome 实际跑出来的，不是设计稿。）
 
 ---
 
@@ -50,7 +51,7 @@ node server.mjs
 
 > ⚠️ 早期版本用的是 `<script type="module">` + `import './chart.js'`，**双击打开必然白屏**
 > —— 模块被 CORS 拦掉、页面却什么也不说。现在已改成经典脚本，并且**加载失败会大声报错**
-> （见 §14 排查）。
+> （见 §15 排查）。
 
 直接操作图：
 
@@ -71,13 +72,15 @@ node server.mjs
 | `grid.ts` | **唯一真相**。多图网格 + 联动，约 450 行 |
 | `pine.ts` | **唯一真相**。Pine v5 子集解释器，约 1100 行 |
 | `draw.ts` | **唯一真相**。绘图工具层，约 700 行 |
-| `chart.js` / `grid.js` / `pine.js` / `draw.js` | `tsc` 生成的产物。**别手改**（见 §5） |
+| `equity.ts` | **唯一真相**。权益曲线 + 回测口径，约 900 行 |
+| `chart.js` / `grid.js` / `pine.js` / `draw.js` / `equity.js` | `tsc` 生成的产物。**别手改**（见 §5） |
 | `index.html` | 多图工作区页面 |
 | `pine.html` | Pine 编辑器页面 |
 | `chart.html` | 单图 + 左侧绘图工具栏 |
-| `run-tests.js` | 在 Node 里跑绘图 + Pine 自检（不需要浏览器） |
+| `equity.html` | 权益曲线页面 |
+| `run-tests.js` | 在 Node 里跑绘图 / Pine / 权益图自检（不需要浏览器） |
 | `server.mjs` | 最小静态服务，默认 `127.0.0.1:5180`（**可选**，双击 HTML 即可） |
-| `tsconfig.json` | `strict: true`，`target/module: ES2020`，include 四个 .ts |
+| `tsconfig.json` | `strict: true`，`target/module: ES2020`，include 五个 .ts |
 
 > **为什么是全局脚本而不是 ESM 模块？** 因为「单页 HTML + 无构建」这个目标下，
 > 双击打开是最自然的用法，而 ESM 的 `import` 在 `file://` 下会被 CORS 直接拦死。
@@ -248,12 +251,15 @@ Select-String -Path tv-chart\dom.html -Pattern 'FAIL|SELFTEST|READY'
 ```
 node run-tests.js                                   → 绘图层 39 PASS / 0 FAIL
                                                       Pine   49 PASS / 0 FAIL
+                                                      权益图 23 PASS / 0 FAIL（纯计算；另 11 条需要 canvas）
 chrome --dump-dom .../index.html                    → SELFTEST   54 PASS / 0 FAIL
 chrome --dump-dom .../pine.html                     → PINETEST   49 PASS / 0 FAIL
 chrome --dump-dom .../chart.html                    → CHARTTEST  87 PASS / 0 FAIL
+chrome --dump-dom .../equity.html                   → EQTEST     34 PASS / 0 FAIL
 ```
 
-（`SELFTEST 54` = 图表 48 + 网格 6；`CHARTTEST 87` = 绘图 39 + 图表 48。）
+（`SELFTEST 54` = 图表 48 + 网格 6；`CHARTTEST 87` = 绘图 39 + 图表 48；
+`EQTEST 34` = 纯计算 23 + canvas 11。）
 
 ### 自检覆盖了什么
 
@@ -575,7 +581,8 @@ TradingView 文档实现的，但**没有对着真实 TV 逐值核过**。你的
 | T3 工作流 | 状态 | 说明 |
 | --- | --- | --- |
 | **Pine 引擎** | ✅ Phase 1 完成 | 词法+语法+序列运行时+45 内置+plot 输出，49 条自检 |
-| Pine 撮合（`strategy.*`） | ⬜ Phase 2 | 下单/持仓/手续费/滑点/权益曲线/绩效指标 |
+| Pine 撮合（`strategy.*`） | 🟡 输出端已就绪 | `equity.ts` 的渲染和统计已完成；缺的是 `strategy.*` 撮合本身 |
+| **权益曲线图** | ✅ 完成 | 折线 + 每根盈亏柱状 + 回撤填充 + 末端标签 + 统计；见 §14 |
 | **绘图工具框架** | ✅ 框架完成 | `draw.ts`：9 种工具 + 命中/拖动/手柄/磁吸/撤销/持久化，39 条自检；**79 种全量不承诺** |
 | 左侧工具栏 UI | 🟡 暂行版 | 照 TradingView 做的；**未按设计稿**（链接打不开），等稿子改皮 |
 | 顶栏 / 右侧面板 | ⬜ | 等设计稿 |
@@ -584,12 +591,70 @@ TradingView 文档实现的，但**没有对着真实 TV 逐值核过**。你的
 | **逐像素视觉对等** | ❌ 不做 | 需要参考截图逐帧比，我没有也不打算声称有 |
 | Pine **全兼容** | ❌ 不接 | 见 §12 开头，理由不是懒 |
 
-**下一步建议顺序**：设计稿到位后先把左侧工具栏的皮定下来（引擎不动）→
-顶栏 / 右侧面板 → Bar Replay → Pine 撮合。
+**下一步建议顺序**：Pine 撮合 `strategy.*`（权益图的输出端已经就绪，接上就能看到真实回测）
+→ 设计稿到位后定左侧工具栏的皮 → 顶栏 / 右侧面板 → Bar Replay。
 
 ---
 
-## 14. 排查：页面卡在 `booting…`
+## 14. 权益曲线图（`equity.ts`）
+
+页面是 `equity.html`。就是 TradingView Strategy Tester 那张图：折线权益曲线 + 每根盈亏柱状。
+
+### 为什么另起一个组件，不塞进 TVChart
+
+TVChart 是「蜡烛 + 多通道」的骨架，这张图有三处根本不同：
+
+1. 没有蜡烛，是**折线 + 柱状**两层序列
+2. **数值轴必须包含 0** —— 柱状从 0 轴上下生长，这是硬约束，不是自动缩放的副产物。
+   轴一旦把 0 排除在外，整张图的语义就崩了
+3. 折线和柱状是**两个量纲**叠在一个轴上（累计权益 vs 单根盈亏），
+   轴范围要同时装下两者的极值 —— 只看权益的话，某根插一根大阴线、柱子探到权益范围之外就被切掉了
+
+硬塞进 TVChart 会把它变成一坨 `if`。共用的只有刻度/时间格式那几个纯函数。
+
+### 三个真踩过的坑
+
+**① 「红线配绿底」。** 折线单色（红）但填充用了正负色（绿），画面自相矛盾。
+原因是参考图里线是红的 —— 但那是**因为权益是负的**，不是配色选择。
+所以默认 `colorBySign: true`，并且填充必须跟折线同色。
+
+**② 回测的 `entryEquity` 记成了初始资金而不是建仓时的权益。**
+症状：13 笔交易胜率 **100%**。这个数字一看就不对 —— 均线策略不可能全胜。
+改成 `entryEquity = cash`（建仓前那一刻的全部权益）后胜率变成 **38.5%**，
+而且逐笔之和精确等于净利。我为此加了两条断言：
+「逐笔之和与净利同量级」「胜率不是 100%」。
+
+**③ 纯计算测试和 canvas 测试必须分开。**
+`typeof document === 'undefined'` 时跳过 canvas 那 11 条并**明说跳过了**，
+否则 `node run-tests.js` 会直接挂在 `document.createElement` 上。
+
+### 一个诚实的局限
+
+权益曲线的量程常常远大于单根盈亏（例：900 根日线上权益在 0~216,000 波动，单根盈亏只有 ±2,000）。
+**叠在一个轴上时柱状会被压成一条线，几乎看不见。** TradingView 也是这个行为。
+我没有给柱状开独立坐标轴 —— 那会让人误读成两个可比量。
+真要解决得做「柱状归一化」或拆副图，那是另一个决定。
+
+### 回测口径（写清楚，免得数字对不上时互相猜）
+
+`simulateMaCross()` 是最小可用的双均线回测，**只用来喂演示数据**：
+
+- 只做多、满仓、不加杠杆、**不含手续费和滑点**
+- 快线上穿慢线 → **下一根开盘**建仓；下穿 → 下一根开盘平仓（避免用当根收盘价成交的前视偏差）
+- 权益按**收盘价盯市**，所以每根都有盈亏，柱状才是连续的
+
+这正是 Pine 撮合（T3 Phase 2）将来要接的口：`strategy.*` 跑完吐同样的
+`{ points, trades, positions, netProfit, maxDrawdown, winRate }` 结构，上面这套渲染一行都不用改。
+
+### 关于参考图底部那条色带
+
+我按**持仓区间**实现了（`setPositions()`，长仓 = 盈利色，画在绘图区最底一条 2px 色带）。
+**这是我的猜测，不确定和原图一致。** 如果你知道它到底是什么（买持基准？多空状态？），
+告诉我，接口已经在了，改语义是几行的事。
+
+---
+
+## 15. 排查：页面卡在 `booting…`
 
 `booting…` 是 `#status` 的初始文本，只有 `report()` 会改写它。它一直不变 = **业务脚本压根没执行**。
 最常见的原因按概率排序：
@@ -612,7 +677,7 @@ TradingView 文档实现的，但**没有对着真实 TV 逐值核过**。你的
 
 ---
 
-## 15. 许可
+## 16. 许可
 
 本目录代码为自己手写，无第三方依赖，随你处置。
 
