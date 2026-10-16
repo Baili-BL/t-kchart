@@ -27,39 +27,47 @@
 
 ### 模块
 
-| 文件 | 内容 | 行数 |
-| --- | --- | --- |
-| `chart.ts` | 单图：蜡烛/成交量、双轴、十字光标、光标锚定缩放、通道、主题、显示范围 | ~1800 |
-| `grid.ts` | 多图网格 + 联动（1×1~4×4，按时间对齐） | ~480 |
-| `pine.ts` | Pine v5 子集解释器（缩进敏感词法 + 序列语义运行时 + 45 内置） | ~1900 |
-| `draw.ts` | 绘图工具层（9 种工具 + 命中/拖动/手柄/磁吸/撤销/持久化） | ~700 |
-| `equity.ts` | 权益曲线 + 双均线回测口径 | ~950 |
-| `analytics.ts` | 收益分布 / 交易环形图 / 季节性叠加线 | ~1300 |
+| 路径 | 内容 |
+| --- | --- |
+| `src/engine/chart.ts` | 单图：蜡烛/成交量、双轴、十字光标、光标锚定缩放、通道、主题、显示范围 |
+| `src/engine/grid.ts` | 多图网格 + 联动（1×1~4×4，按时间对齐）；可注入 `dataSource`、每格独立周期、`activechange` 事件 |
+| `src/engine/pine.ts` | Pine v5 子集解释器 |
+| `src/engine/draw.ts` | 绘图工具层（9 种工具） |
+| `src/engine/equity.ts` | 权益曲线 + 双均线回测口径 |
+| `src/engine/analytics.ts` | 收益分布 / 交易环形图 / 季节性叠加线 |
+| `src/agent/` | Agent 抽象（provider / runner / 工具集）+ mock provider + DeepSeek 空壳 |
+| `src/workspace/` | 图表区 React 外壳（顶栏、绘图栏、范围条、PaperTrade、右侧面板/图标栏） |
+| `src/sidebar/`、`src/app/` | 左侧菜单、三栏外壳、其它页面占位 |
+| `src/data/mockBars.ts` | 演示数据源（TSLA/AAPL/NVDA/MSFT/SPY） |
 
 ### 页面
 
-| 页面 | 内容 |
-| --- | --- |
-| `index.html` | 多图工作区 |
-| `pine.html` | Pine 编辑器 |
-| `chart.html` | 单图 + 左侧绘图工具栏 |
-| `equity.html` | 权益曲线 |
-| `analytics.html` | 统计组件 |
+单页应用（Vite + React）。旧的 `index/pine/chart/equity/analytics.html` 已移除（可从 git 历史找回）；
+Pine 编辑器、权益曲线、统计组件目前**没有对应的 UI 入口**，引擎和自检都还在，见 2.13。
 
 ### 测试基线（全部实跑通过）
 
 ```
-tsc --noEmit (strict)        0 错误
-node run-tests.js            绘图 39 + Pine 49 + 权益 24 + 统计 30 = 142 PASS / 0 FAIL
-chrome index.html            SELFTEST   54 PASS / 0 FAIL
-chrome pine.html             PINETEST   49 PASS / 0 FAIL
-chrome chart.html            CHARTTEST  87 PASS / 0 FAIL
-chrome equity.html           EQTEST     35 PASS / 0 FAIL
-chrome analytics.html        ANATEST    46 PASS / 0 FAIL
-                             浏览器侧合计 271 条
+npm run typecheck                          0 错误（strict）
+npm test (vitest)                          引擎 142 PASS（绘图 39 + Pine 49 + 权益 24 + 统计 30）
+                                           + Agent 19 + 工作区 13 + 数据 13 = 共 49 个用例
+浏览器侧（dev 控制台 __app.runBrowserSelfTests()）
+                                           图表 49（改造前 48，新增 1 条 setRange 回归）+ 网格 6
+                                           + 权益 35 + 统计 46
+E2E（puppeteer 驱动 headless Chrome，未入库）  27 PASS / 0 FAIL
 ```
 
 **任何改动之后这套数字必须只增不减。** 加功能要加断言，改逻辑不能让已有断言变红。
+
+### 改造时对引擎做过的改动（逻辑之外）
+
+1. 六个文件由全局脚本改为 ESM：补 `export`，跨文件依赖改 `import`。算法一行没动。
+2. `grid.ts`：`GridOptions` 增加 `dataSource` / `symbols` / `chartOptions`；`Tile` 增加 `timeframe`（每格独立周期）；
+   新增 `activechange` 事件、`activeTimeframe()`、`setTileTimeframe()`。
+3. **修了两个真 bug**（都是不报错、只是不对的那类）：
+   - `chart.setRange()`：1px 下限装不下整段范围时，视口从范围起点往右铺，用户点「1M」看到的是最老的一段、最新一根在屏外。
+     现在靠右对齐，并加了回归断言。
+   - `grid.ensureTiles()`：联动「标的」开着时，切到 NVDA 再增加格子，新格子仍是初始标的 TSLA。现在跟随当前标的。
 
 ---
 
@@ -116,13 +124,16 @@ chrome analytics.html        ANATEST    46 PASS / 0 FAIL
 
 ### P1 — 等设计稿
 
-#### 2.5 顶栏 / 右侧面板 / 左侧工具栏的皮
+#### 2.5 顶栏 / 右侧面板 / 左侧工具栏
 
-- 状态：🟡 顶栏和右侧是**暂行版**；左侧工具栏是照 TradingView 截图做的，**没按设计稿**
-- 原因：你给的 Magic Patterns 链接打不开（`/imported/...` 是登录态页面，直出 HTTP 500）
-- **完成判据**：拿到设计稿（导出 HTML/JSX 或截图）后，
-  1. 视觉对齐（headless 截图并排比对）
-  2. **引擎不动** —— 如果改皮改了引擎，说明抽象没做对
+- 状态：✅ 已接入。顶栏、右侧栏、左侧绘图栏都是 TradingView 稿的原 DOM 组件（`src/workspace/dom/`），React 只做外壳与 store 同步。
+  窄屏时顶栏按容器宽度逐级收起次要按钮（`@container`），避免挤出右侧面板。
+- 遗留：
+  1. 顶栏「图表样式」只有 K 线图可用 —— 引擎目前只有蜡烛图，美国线/线形图/面积图选了会 toast 并回退
+  2. 顶栏「回放」「保存」「警报」「比较」「快照」「设置」是占位提示，分别对应 2.2、2.9 与未排期项；撤销/重做按钮目前恒可点（未读取 DrawLayer 的栈深度）
+  3. 左侧绘图栏有很多菜单项（形态、仓位、笔刷、图标…）引擎没有对应工具，点击会 toast「暂未实现」，见 2.8
+  4. 右侧图标栏（`dom/rightbar.ts` 原稿）：只有「自选表」面板可用（点一行切换标的）；警报 / 对象树 / Pine Editor / 日历等点开是空态；「AI Copilot」展开左侧 Agent，「筛选器」跳转 Strategy Screener
+  5. 浅色是主稿；深色主题下左侧绘图栏是用 CSS `filter` 反相凑的，不是正经的深色皮肤
 
 ### P2 — 成本较大
 
@@ -133,6 +144,12 @@ chrome analytics.html        ANATEST    46 PASS / 0 FAIL
 | 2.8 | 绘图工具扩充（现在 9 种） | 🟡 | 每种 30~80 行 | 每种工具：画法 + 命中 + 手柄 + 撤销，四条都要有断言 |
 | 2.9 | 布局存档（localStorage / 服务端） | ⬜ | 小 | 存/读往返一致，含视口、通道开关、绘图、联动开关 |
 | 2.10 | 手机端手势：双指缩放、惯性滑动 | ⬜ | 中 | 真机或 Chrome 设备模拟下截图 + 手势日志 |
+| 2.12 | **接入 DeepSeek harness** | ⬜ | 中 | 实现 `providers/deepseek.ts` 的 `send()`；用真实 harness 跑通「文本 → 工具调用 → 结果回灌 → 总结」；工具参数校验失败时模型能看到错误并自我修正；密钥由服务端持有，不进前端包 |
+| 2.13 | Pine 编辑器 / 权益曲线 / 统计组件的 UI 入口 | ⬜ | 中 | 在三栏里找到位置（右侧图标栏的 Pine Editor、Strategies 页的权益曲线与统计）；引擎自检不回归 |
+| 2.14 | 真实行情数据源（替换 `mockBars.ts`） | ⬜ | 中 | 同 2.7；另外要覆盖 `1m~4h` 日内周期与交易时段（RTH/ETH 按钮现在只是个开关） |
+| 2.15 | PaperTrade 接入权益曲线 / 图上标记 | ⬜ | 小 | 下单后图上出现成交标记；持仓口径沿用 `paperAccount.ts`（含反手），不变式测试保留 |
+| 2.16 | Agent 工具扩充 | ⬜ | 小 | 绘图（画趋势线/水平线）、加 MA/通道参数、读取当前图表状态；每个工具带参数校验与失败用例 |
+
 
 ### P3 — 价值待评估
 
@@ -345,12 +362,11 @@ Rust 侧用 `Result<T, PineError>` + 明确的错误枚举，**不要用 `unwrap
 
 | 项 | 值 |
 | --- | --- |
-| Node | `D:\node\node.exe`（v14.21.3，npm 6.14.18） |
-| TypeScript | `研报复现\.tools\node_modules\typescript`（5.4.5，**没有全局 tsc**） |
-| 编译 | `node ..\.tools\node_modules\typescript\bin\tsc -p tsconfig.json` |
-| Chrome | `C:\Program Files\Google\Chrome\Application\chrome.exe`（headless 验证用） |
-| Git | `D:\Git\cmd\git.exe`，远端 SSH（`git@github.com:Baili-BL/t-kchart.git`） |
-| **Rust** | ❌ **未安装**（`rustc` / `cargo` / `rustup` 都不在 PATH） |
+| Node | 20+（开发时用的是 Node 24） |
+| 依赖 | `react` / `react-dom` / `zustand`（运行时）；`typescript` / `vite` / `vitest` / `@vitejs/plugin-react`（开发） |
+| 类型检查 | `npm run typecheck` |
+| 单测 | `npm test` |
+| 浏览器验证 | 开发模式下 `window.__app`（`getGrid` / `chartStore` / `runBrowserSelfTests`）；E2E 用 puppeteer-core 驱动系统 Chrome（脚本未入库） |
+| **Rust** | ❌ **未安装**（见第 3 节，移植计划不变） |
 
-> npm 6 下 `npx --yes` 不可用，直接调 `node <路径>/tsc` 最省事。
-> `tsconfig.json` 里**不要写 `"outDir"`** —— 写 `"."` 会让 tsc 把源码目录自己排除掉，报 `TS18003`。
+> `~/.gitconfig` 里如果配了本地代理（如 `http.proxy=127.0.0.1:7897`）而代理没开，`git clone` 会失败；`git -c http.proxy= -c https.proxy= ...` 可绕过。
