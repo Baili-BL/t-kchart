@@ -4,6 +4,7 @@ import { PineEngine } from '../engine/pine';
 import { MOCK_SYMBOLS } from '../data/mockBars';
 import { TIMEFRAMES, useChartStore } from '../store/chartStore';
 import { getGrid } from './gridRegistry';
+import { replayControl } from './replayActions';
 
 /**
  * ChartControls 的真实实现：
@@ -15,6 +16,7 @@ export const chartControls: ChartControls = {
   setTimeframe: (tf) => useChartStore.getState().setTimeframe(tf),
   setLayout: (rows, cols) => useChartStore.getState().setLayout(rows, cols),
   setChartStyle: (style) => useChartStore.getState().setChartStyle(style),
+  replay: (action, value) => replayControl(action, value),
   setIndicator: (indicator, visible) => {
     if (indicator === 'bb') useChartStore.getState().setBb(visible);
   },

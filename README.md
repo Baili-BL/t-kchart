@@ -87,9 +87,9 @@ VITE_DEEPSEEK_MODEL=deepseek-chat
 | 层 | 命令 | 内容 |
 | --- | --- | --- |
 | 类型 | `npm run typecheck` | `strict: true`，0 错误 |
-| 引擎（Node） | `npm test` | 绘图 39 + Pine 49 + Pine 撮合 69 + 权益 26 + 统计 34 = 217（基线，只增不减） |
+| 引擎（Node） | `npm test` | 绘图 39 + Pine 49 + Pine 撮合 69 + 权益 26 + 统计 34 + 回放 27 = 244（基线，只增不减） |
 | Agent / 工作区 / 数据 | `npm test` | 意图解析、工具校验、runner 循环（含报错/中断/死循环兜底）、模拟账户不变式、范围高亮、mock 数据不变式 |
-| 引擎（浏览器，需 canvas） | 开发模式下控制台 `await __app.runBrowserSelfTests()` | 图表 61 + 网格 6 + 权益 37 + 统计 50 |
+| 引擎（浏览器，需 canvas） | 开发模式下控制台 `await __app.runBrowserSelfTests()` | 图表 76 + 网格 6 + 权益 37 + 统计 50 |
 
 `__app` 只在 `npm run dev` 下挂到 `window`，生产包里没有。
 
@@ -483,12 +483,12 @@ ta.* 的递推公式（EMA/RMA 的 SMA 播种、RSI、ATR、BOLL、MACD）、元
 | **绘图工具框架** | ✅ 框架完成 | `draw.ts`：9 种工具 + 命中/拖动/手柄/磁吸/撤销/持久化，39 条自检；**79 种全量不承诺** |
 | 左侧工具栏 UI | ✅ 已接入 | 沿用 `src/workspace/dom/sidebar.ts`，经 `drawBus` 接到各格 `DrawLayer` |
 | 顶栏 / 右侧栏 | ✅ 已接入 | 沿用 `dom/toolbar.ts` / `dom/rightbar.ts`（设计稿 1:1），经句柄与 store 双向同步；右侧面板目前只有自选表可用，其余是空态 |
-| **Bar Replay** | ⬜ | 便宜且价值高（~200 行）：截断序列 + 步进 + 自动播放 |
+| **Bar Replay** | ✅ 完成 | `replay.ts` 状态机 + `KChart.setReplayCount` 截断重算；只作用于当前格；最后一根显示完整 K 线（无逐笔数据，不造 forming 半根）；27 条自检 |
 | 告警面板 | ⬜ | ~150 行，价值低 |
 | **逐像素视觉对等** | ❌ 不做 | 需要参考截图逐帧比，我没有也不打算声称有 |
 | Pine **全兼容** | ❌ 不接 | 见 §12 开头，理由不是懒 |
 
-**下一步建议顺序**：Bar Replay（顶栏回放按钮已留位）→ 接入 DeepSeek harness。
+**下一步建议顺序**：接入 DeepSeek harness。
 
 ---
 

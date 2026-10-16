@@ -44,6 +44,26 @@ export function planToolCalls(text: string): ToolCall[] {
     calls.push({ id: nid('call'), name: 'set_range', arguments: { range: rg[1] } });
   }
 
+  // 回放：先判退出 / 暂停 / 步进 / 速度，最后才是「回放」本身（进入）
+  if (/回放|replay/i.test(text)) {
+    const speed = text.match(/每秒\s*(\d+)\s*根|(\d+)\s*(?:根\/秒|倍速)/);
+    const n = text.match(/(\d+)\s*根/);
+    const act: [string, Record<string, unknown>] | null = /退出|停止|结束|关闭|stop|exit/i.test(text)
+      ? ['stop', {}]
+      : /暂停|pause/i.test(text)
+        ? ['pause', {}]
+        : speed
+          ? ['speed', { value: Number(speed[1] ?? speed[2]) }]
+          : /播放|play/i.test(text)
+            ? ['play', {}]
+            : /下一根|前进|step/i.test(text)
+              ? ['step', n ? { value: Number(n[1]) } : {}]
+              : /上一根|后退|back/i.test(text)
+                ? ['back', n ? { value: Number(n[1]) } : {}]
+                : ['start', {}];
+    calls.push({ id: nid('call'), name: 'replay', arguments: { action: act[0], ...act[1] } });
+  }
+
   // 样式：先判面积/折线/美国线，最后才是「K线」
   const styleKey = /面积/.test(text)
     ? 'area'
@@ -111,7 +131,7 @@ export function createMockProvider(opts: { delayMs?: number } = {}): AgentProvid
       if (calls.length === 0) {
         yield* streamText(
           '我是 Quant 助手（mock 模式）。试试:\n' +
-            '- "切到 NVDA"\n- "用 1h 周期"\n- "显示 1Y 范围"\n- "布局 2x2"\n- "打开布林带"\n- "切成面积图"\n\n' +
+            '- "切到 NVDA"\n- "用 1h 周期"\n- "显示 1Y 范围"\n- "布局 2x2"\n- "打开布林带"\n- "切成面积图"\n- "开始回放" / "回放 5 根/秒" / "回放下一根"\n\n' +
             '接入 DeepSeek harness 后，这里会换成真实的推理与工具调用。',
           req.signal,
           delay,

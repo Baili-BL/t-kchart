@@ -460,6 +460,12 @@ export class KChart {
   private dragging = false;
   private dragX = 0;
 
+  /**
+   * 回放期间保存的**完整**数据；null = 没在回放。
+   * `bars` 在回放时是它的前缀（原地改写，外面拿着的数组引用不会变孤儿）。
+   */
+  private replayFull: Bar[] | null = null;
+
   private ma: Line[] = [];
   /** addLine() 加进来的通用叠加线（Pine 的 plot 输出走这里） */
   private extraLines: Line[] = [];
@@ -673,6 +679,60 @@ export class KChart {
     return res;
   }
 
+  /* ------------------------------------------------------- 回放（Bar Replay） */
+
+  /**
+   * 只显示前 k 根（k = null 退出回放、恢复全部）。
+   * 指标 / 通道按截断后的序列**全量重算**，所以与「直接喂前 k 根」逐值一致，不泄露未来。
+   * 保持视口：最新一根跑出右边缘就把视口往右带，退回时最新一根跑出左边缘就往左带。
+   */
+  setReplayCount(k: number | null): void {
+    if (k === null) {
+      if (!this.replayFull) return;
+      const full = this.replayFull;
+      this.replayFull = null;
+      this.bars.length = 0;
+      for (const b of full) this.bars.push(b);
+      this.syncIndex = null;
+      this.buildIndicators();
+      this.clampView();
+      this.notifyView();
+      this.invalidate();
+      return;
+    }
+    if (!this.replayFull) this.replayFull = this.bars.slice();
+    const full = this.replayFull;
+    if (!full.length) return;
+    const cnt = clamp(Math.round(k), 1, full.length);
+    this.bars.length = 0;
+    for (let i = 0; i < cnt; i++) this.bars.push(full[i]);
+    this.syncIndex = null;
+    this.buildIndicators();
+    const vis = this.plot.w / this.view.barW;
+    if (cnt > this.view.from + vis - 2) this.view.from = cnt - vis + 3; // 右边留 3 根的余量
+    else if (cnt - 1 < this.view.from) this.view.from = cnt - vis * 0.5;
+    this.clampView();
+    this.notifyView();
+    this.invalidate();
+  }
+
+  /** 回放中返回当前显示的根数，否则 null */
+  replayCount(): number | null {
+    return this.replayFull ? this.bars.length : null;
+  }
+
+  /** 完整数据的根数（回放时 ≠ bars.length） */
+  fullBarCount(): number {
+    return this.replayFull ? this.replayFull.length : this.bars.length;
+  }
+
+  /** 视口正中间那一根的下标（回放默认从这里开始），夹在 [0, n-1] */
+  centerIndex(): number {
+    const n = this.bars.length;
+    if (!n) return -1;
+    return clamp(Math.round(this.view.from + this.plot.w / this.view.barW / 2), 0, n - 1);
+  }
+
   /** 当前视口左右边缘对应的时间。空数据返回 null。 */
   viewTimes(): [number, number] | null {
     const n = this.bars.length;
@@ -761,6 +821,7 @@ export class KChart {
    */
   setBars(bars: Bar[], meta?: { symbol?: string; timeframe?: string }): void {
     const clean = normalizeBars(bars);
+    this.replayFull = null; // 换数据 = 回放作废，旧的完整数据已经不是这个标的 / 周期的了
     this.bars.length = 0;
     for (const b of clean) this.bars.push(b);
     if (meta) {
@@ -1010,6 +1071,14 @@ export class KChart {
    * 更大 time = 追加新的一根。这是实时行情的唯一入口。
    */
   update(bar: Bar): void {
+    // 回放中：实时行情只更新完整数据，不动正在回放的画面（否则会把「未来」漏进来）
+    if (this.replayFull) {
+      const full = this.replayFull;
+      const m = full.length;
+      if (m && bar.time === full[m - 1].time) full[m - 1] = bar;
+      else if (!m || bar.time > full[m - 1].time) full.push(bar);
+      return;
+    }
     const n = this.bars.length;
     if (n && bar.time === this.bars[n - 1].time) {
       this.bars[n - 1] = bar;
@@ -2064,6 +2133,68 @@ export function selfTest(chart: KChart): TestResult {
   if (chart.bars.length === n0 + 1) chart.bars.length = n0;
   chart.bars[n0 - 1] = snap;
   chart.buildIndicators();
+
+  // --- Bar Replay：截断显示、指标按截断序列重算 ---
+  {
+    const fullN = chart.bars.length;
+    const arrRef = chart.bars;
+    const fullCopy = chart.bars.slice();
+    const K = Math.min(150, fullN - 10);
+    const cl = (n: number): number[] => fullCopy.slice(0, n).map((b) => b.close);
+    const sameVals = (x: (number | null)[], y: (number | null)[]): boolean =>
+      x.length === y.length && x.every((v, i) => (v === null) === (y[i] === null) && (v === null || Math.abs(v - (y[i] as number)) <= 1e-9));
+    const bbNow = (): { u: (number | null)[]; m: (number | null)[]; l: (number | null)[] } => {
+      const ch = chart.channels.find((c) => c.id === 'bb');
+      return ch ? { u: ch.upper.values, m: ch.basis.values, l: ch.lower.values } : { u: [], m: [], l: [] };
+    };
+    const maNow = (): (number | null)[][] => chart.activeLines().slice(0, 3).map((l) => l.values);
+
+    chart.setReplayCount(K);
+    t('回放：只显示前 K 根', chart.bars.length === K && chart.replayCount() === K && chart.fullBarCount() === fullN,
+      chart.bars.length + ' / ' + fullN);
+    t('回放：bars 数组原地截断（外面拿着的引用不会变孤儿）', chart.bars === arrRef);
+    t('回放：显示的就是原数据的前缀（逐根同一个对象）', chart.bars.every((b, i) => b === fullCopy[i]));
+    const ma = maNow();
+    const refMa = [sma(cl(K), 5), sma(cl(K), 10), sma(cl(K), 20)];
+    t('回放：MA5/10/20 与「直接喂前 K 根」逐值一致，且没有多出未来的值',
+      ma.every((v, i) => sameVals(v, refMa[i])), ma.map((v) => v.length).join(','));
+    const bb = bollinger(cl(K), 20, 2);
+    const bn = bbNow();
+    t('回放：布林通道与「直接喂前 K 根」逐值一致',
+      sameVals(bn.u, bb.upper.values) && sameVals(bn.m, bb.mid.values) && sameVals(bn.l, bb.lower.values));
+    t('回放：最新一根在视口内（步进时视口会跟上）', chart.visible()[1] >= K - 1 && chart.visible()[0] <= K - 1,
+      '[' + chart.visible() + '] K=' + K);
+
+    chart.setReplayCount(K + 1);
+    chart.setReplayCount(K);
+    t('回放：前进再后退，指标与第一次完全相同（没有残留状态）',
+      maNow().every((v, i) => sameVals(v, refMa[i])) && chart.bars.length === K);
+    const far = Math.max(1, K - 120);
+    chart.setReplayCount(far);
+    t('回放：退到很早的位置，最新一根仍可见', chart.visible()[1] >= far - 1 && chart.visible()[0] <= far - 1,
+      '[' + chart.visible() + '] far=' + far);
+    chart.setReplayCount(10 * fullN);
+    t('回放：超过总数会夹到总数', chart.bars.length === fullN);
+    chart.setReplayCount(0);
+    t('回放：小于 1 会夹到 1 根', chart.bars.length === 1);
+
+    // 回放中来了实时行情：只进完整数据，不动画面
+    chart.setReplayCount(K);
+    const lastFull = fullCopy[fullN - 1];
+    chart.update({ time: lastFull.time + 86400000, open: lastFull.close, high: lastFull.close, low: lastFull.close, close: lastFull.close, volume: 1 });
+    t('回放中的 update() 不改变画面，但完整数据 +1', chart.bars.length === K && chart.fullBarCount() === fullN + 1);
+
+    chart.setReplayCount(null);
+    t('退出回放：恢复全部（含回放期间新增的那根）', chart.bars.length === fullN + 1 && chart.replayCount() === null);
+    chart.bars.length = fullN; // 还原 update 追加的那根，保持自检幂等
+    chart.buildIndicators();
+    t('退出回放：指标与完整数据重算一致',
+      maNow().every((v, i) => sameVals(v, [sma(cl(fullN), 5), sma(cl(fullN), 10), sma(cl(fullN), 20)][i])));
+    chart.setReplayCount(K);
+    chart.setBars(fullCopy);
+    t('回放中换数据（setBars）= 回放作废、显示新数据全部', chart.replayCount() === null && chart.bars.length === fullN);
+    t('centerIndex 落在数据范围内', chart.centerIndex() >= 0 && chart.centerIndex() <= chart.bars.length - 1);
+  }
 
   // 收尾：恢复成初始视图
   chart.showLast(180);

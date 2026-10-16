@@ -1,6 +1,7 @@
 import { ChartGridView } from './ChartGridView';
 import { DrawToolbar } from './DrawToolbar';
 import { PaperTrade } from './PaperTrade';
+import { ReplayBar } from './ReplayBar';
 import { RangeBar } from './RangeBar';
 import { RightPanel } from './RightPanel';
 import { RightRail } from './RightRail';
@@ -17,6 +18,7 @@ export function ChartWorkspace(): JSX.Element {
           <div className="ws-grid">
             <ChartGridView />
             <PaperTrade />
+            <ReplayBar />
           </div>
         </div>
         <RangeBar />

@@ -8,6 +8,8 @@ import { LAYOUT_PRESETS, STYLE_LABELS, styleFromLabel, useChartStore } from '../
 import type { SyncState } from '../store/chartStore';
 import { MOCK_SYMBOLS } from '../data/mockBars';
 import { drawBus } from './drawBus';
+import { replayController } from '../store/replayStore';
+import { toggleReplay } from './replayActions';
 
 const SYNC_LABELS: { key: keyof SyncState; label: string }[] = [
   { key: 'symbol', label: '标的' },
@@ -190,8 +192,9 @@ export function TopBar(): JSX.Element {
         tbRef.current?.setAlertOn(false);
       },
       onReplay: () => {
-        toast('Bar Replay 尚未实现（TODO 2.2）');
-        tbRef.current?.setReplayOn(false);
+        const r = toggleReplay();
+        if (!r.ok) toast(r.message);
+        tbRef.current?.setReplayOn(replayController.state().active);
       },
       onUndo: () => drawBus.undo(),
       onRedo: () => drawBus.redo(),
@@ -212,7 +215,11 @@ export function TopBar(): JSX.Element {
     };
     push(st());
     const unsub = useChartStore.subscribe(push);
+    // 回放被别处结束（换标的、切格、控制条「退出」、Agent）时，顶栏按钮要跟着弹起
+    tb.setReplayOn(replayController.state().active);
+    const unReplay = replayController.subscribe((r) => tb.setReplayOn(r.active));
     return () => {
+      unReplay();
       unsub();
       tbRef.current = null;
       tb.root.remove();
