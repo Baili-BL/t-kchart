@@ -19,7 +19,7 @@
  * 所以下面每一条实现都尽量写成「错了能看出来」，并且配了手算自检。
  *
  * 支持：
- *   //@version=5 / indicator() / strategy()(仅声明) / input.*
+ *   //@version=5 / indicator() / strategy() / input.*
  *   变量：x =  /  x :=  /  var x =  /  [a,b] = f()
  *   控制：if / else / if 表达式 / for [to] [by] / while / 三元
  *   函数：f(a, b) => expr  和 多行缩进体
@@ -27,14 +27,19 @@
  *   算子：+ - * / %  == != < <= > >=  and or not  ?:  字符串 +
  *   内置：ta.* / math.* / input.* / nz / na / fixnan / str.tostring / color.*
  *         plot / plotshape / plotchar / bgcolor / hline
+ *         strategy.entry / close / close_all / exit / cancel / cancel_all（撮合口径见 strategy.ts）
+ *         strategy.position_size / position_avg_price / equity / netprofit / openprofit /
+ *               initial_capital / opentrades / closedtrades
  *
  * 不支持（明确拒答，不静默给错值）：
- *   strategy.* 撮合交易、数组/矩阵/map、request.*、table.*、label.*、line.*、
+ *   strategy.* 里除上面之外的（limit/stop 入场单、risk.*、order…）、数组/矩阵/map、request.*、table.*、label.*、line.*、
  *   barstate.*、fill()、box.*、多返回值以外的元组、`f(x)[1]` 以外的复杂历史引用
  * ===========================================================================
  */
 
 import { Bar, KChart, log } from './chart';
+import { StrategyBroker, StrategyError, strategyConfigFromDecl } from './strategy';
+import type { StrategyResult } from './strategy';
 
 /* ===========================================================================
  * 1. NA 与基础类型
@@ -675,6 +680,10 @@ export function pineParse(src: string): any {
     if (!n) return dflt;
     if (n.k === 'num' || n.k === 'str' || n.k === 'bool') return n.v;
     if (n.k === 'na') return null;
+    // strategy(default_qty_type = strategy.percent_of_equity) 这类常量
+    if (n.k === 'ident' && n.name in PINE_CONSTS) return PINE_CONSTS[n.name];
+    // 负数字面量：slippage = -1 之类（会在 strategyConfigFromDecl 里被明确拒绝，而不是被当成默认值）
+    if (n.k === 'un' && n.op === '-' && n.a && n.a.k === 'num') return -n.a.v;
     return dflt;
   };
   const opts: any = {};
@@ -742,12 +751,15 @@ export const PINE_CONSTS: { [k: string]: any } = {
   'size.huge': 'huge',
   'barmerge.gaps_off': 'gaps_off',
   'barmerge.lookahead_off': 'lookahead_off',
-  // strategy/position 常量先占位，Phase 2 的撮合引擎会用到
+  // strategy 方向 / 仓位类型 / 手续费类型
   'strategy.long': 'long',
   'strategy.short': 'short',
   'strategy.percent_of_equity': 'percent_of_equity',
   'strategy.fixed': 'fixed',
   'strategy.cash': 'cash',
+  'strategy.commission.percent': 'percent',
+  'strategy.commission.cash_per_order': 'cash_per_order',
+  'strategy.commission.cash_per_contract': 'cash_per_contract',
   'math.max_bars_back': 5000,
 };
 
@@ -776,7 +788,86 @@ export function setPrev(ctx: PBuiltinCtx, node: any, key: string, v: any): void 
   st[key] = v;
 }
 
+/** strategy.* 只能出现在 strategy(...) 脚本里；indicator 里调用要明确报错 */
+function brokerOf(ctx: PBuiltinCtx, fn: string): StrategyBroker {
+  const b = ctx.engine.broker as StrategyBroker | null;
+  if (!b) throw new Error(fn + ' 只能在 strategy(...) 脚本里调用，当前脚本是 indicator(...)');
+  return b;
+}
+
+/** 位置参数优先，其次关键字参数；两处都没有就是 undefined */
+function argOf(a: any[], kw: any, i: number, name: string): any {
+  return a[i] !== undefined ? a[i] : kw[name];
+}
+
+/** `when=` 条件；没写就当 true。Pine v5 仍然支持这个参数 */
+function whenOk(kw: any): boolean {
+  return kw.when === undefined ? true : truthy(kw.when);
+}
+
+function strId(v: any, fn: string): string {
+  if (isNa(v) || typeof v !== 'string' || !v) throw new StrategyError(fn + ' 需要一个非空的字符串 id');
+  return v;
+}
+
+/** 传了就报错：不支持的参数不能被悄悄忽略，否则回测和脚本写的对不上 */
+function rejectGiven(fn: string, given: { [k: string]: any }, why: string): void {
+  for (const k in given) {
+    if (!isNa(given[k])) throw new StrategyError(fn + '(' + k + '=…) 暂不支持：' + why);
+  }
+}
+
 export const PINE_BUILTINS: { [k: string]: (ctx: PBuiltinCtx, node: any, a: any[], kw: any) => any } = {
+
+  /* ------------------------------------------------------------- 策略撮合 */
+  'strategy.entry': (ctx, node, a, kw) => {
+    const b = brokerOf(ctx, 'strategy.entry');
+    if (!whenOk(kw)) return NA;
+    const id = strId(argOf(a, kw, 0, 'id'), 'strategy.entry');
+    const dir = argOf(a, kw, 1, 'direction');
+    const qty = argOf(a, kw, 2, 'qty');
+    rejectGiven('strategy.entry', { limit: argOf(a, kw, 3, 'limit'), stop: argOf(a, kw, 4, 'stop') },
+      '只支持市价入场，limit / stop 入场单暂不支持');
+    b.placeEntry(id, dir, isNa(qty) ? null : toNum(qty));
+    return NA;
+  },
+  'strategy.close': (ctx, node, a, kw) => {
+    const b = brokerOf(ctx, 'strategy.close');
+    if (!whenOk(kw)) return NA;
+    rejectGiven('strategy.close', { qty: argOf(a, kw, 2, 'qty'), qty_percent: argOf(a, kw, 3, 'qty_percent') },
+      '只能整笔平仓，部分平仓暂不支持');
+    b.placeClose(strId(argOf(a, kw, 0, 'id'), 'strategy.close'));
+    return NA;
+  },
+  'strategy.close_all': (ctx, node, a, kw) => {
+    const b = brokerOf(ctx, 'strategy.close_all');
+    if (!whenOk(kw)) return NA;
+    b.placeCloseAll();
+    return NA;
+  },
+  'strategy.exit': (ctx, node, a, kw) => {
+    const b = brokerOf(ctx, 'strategy.exit');
+    if (!whenOk(kw)) return NA;
+    rejectGiven('strategy.exit', {
+      qty: argOf(a, kw, 2, 'qty'), qty_percent: argOf(a, kw, 3, 'qty_percent'),
+      profit: argOf(a, kw, 4, 'profit'), loss: argOf(a, kw, 6, 'loss'),
+      trail_price: kw.trail_price, trail_points: kw.trail_points, trail_offset: kw.trail_offset,
+    }, '只支持绝对价格的 stop / limit，点数止盈止损、移动止损、部分平仓暂不支持');
+    const from = argOf(a, kw, 1, 'from_entry');
+    const lim = argOf(a, kw, 5, 'limit');
+    const stp = argOf(a, kw, 7, 'stop');
+    b.placeExit(strId(argOf(a, kw, 0, 'id'), 'strategy.exit'), isNa(from) ? null : String(from),
+      isNa(stp) ? null : toNum(stp), isNa(lim) ? null : toNum(lim));
+    return NA;
+  },
+  'strategy.cancel': (ctx, node, a, kw) => {
+    brokerOf(ctx, 'strategy.cancel').cancel(strId(argOf(a, kw, 0, 'id'), 'strategy.cancel'));
+    return NA;
+  },
+  'strategy.cancel_all': (ctx) => {
+    brokerOf(ctx, 'strategy.cancel_all').cancelAll();
+    return NA;
+  },
 
   /* ------------------------------------------------------------- 输出 */
   plot: (ctx, node, a, kw) => {
@@ -1186,6 +1277,10 @@ export function pEval(node: any, env: PEnv, eng: any): any {
       const s = env.lookup(node.name);
       if (s) return s.get(0);
       if (node.name in PINE_CONSTS) return PINE_CONSTS[node.name];
+      if (eng.broker && node.name.indexOf('strategy.') === 0) {
+        const v = eng.broker.varValue(node.name);
+        if (v !== undefined) return v === null ? NA : v;
+      }
       for (const pre of PINE_CONST_PREFIXES) {
         if (node.name.indexOf(pre) === 0) {
           throw new Error('「' + node.name + '」这一类在这个 Pine 子集里还没实现');
@@ -1365,10 +1460,12 @@ export class PineEngine {
   logs: string[];
   bar: number;
   error: string | null;
+  /** strategy(...) 脚本才有；indicator 为 null */
+  broker: StrategyBroker | null;
 
   private plotByNode: Map<any, any>;
 
-  constructor(code: string, bars: Bar[], opts?: { inputs?: any; symbol?: string; timeframe?: string }) {
+  constructor(code: string, bars: Bar[], opts?: { inputs?: any; symbol?: string; timeframe?: string; mintick?: number }) {
     this.code = code;
     this.bars = bars;
     this.program = pineParse(code);
@@ -1387,6 +1484,9 @@ export class PineEngine {
     this.error = null;
     this.symbol = (opts && opts.symbol) || 'DEMO';
     this.timeframe = (opts && opts.timeframe) || '1D';
+    this.broker = this.kind === 'strategy'
+      ? new StrategyBroker(strategyConfigFromDecl(this.program.opts, { mintick: opts && opts.mintick }))
+      : null;
   }
 
   symbol: string;
@@ -1475,11 +1575,23 @@ export class PineEngine {
 
   run(): this {
     const n = this.bars.length;
-    for (let i = 0; i < n; i++) {
-      this.bar = i;
-      this.setBarVars(i);
-      pExecBody(this.program.body, this.globalEnv, this);
-      this.globalEnv.commitAll(new Set());
+    const br = this.broker;
+    try {
+      for (let i = 0; i < n; i++) {
+        this.bar = i;
+        if (br) br.beginBar(i, this.bars[i]);
+        this.setBarVars(i);
+        pExecBody(this.program.body, this.globalEnv, this);
+        this.globalEnv.commitAll(new Set());
+        if (br) {
+          br.afterScript();
+          br.endBar();
+        }
+      }
+    } catch (e) {
+      // 错误照常往外抛（调用方要看见），同时记在 engine.error 上方便 UI 读取
+      this.error = e instanceof Error ? e.message : String(e);
+      throw e;
     }
     // 补齐稀疏数组，方便下游按索引取
     for (const p of this.plots) {
@@ -1487,6 +1599,11 @@ export class PineEngine {
       if (p.values.length > n) p.values.length = n;
     }
     return this;
+  }
+
+  /** strategy 脚本的回测结果（权益点、成交、绩效）；indicator 脚本返回 null */
+  strategyResult(): StrategyResult | null {
+    return this.broker ? this.broker.result() : null;
   }
 
   /** 最后一根 bar 上所有变量的值，自检和「数据窗口」都用它 */
@@ -1537,6 +1654,25 @@ export class PineEngine {
         });
       }
       if (list.length) chart.addMarkers(list);
+    }
+    // 策略成交：入场标在 K 线外侧（多头在下、空头在上），出场画 ×
+    if (this.broker) {
+      const r = this.broker.result();
+      const pts: { index: number; price: number; color: string; text: string; above: boolean }[] = [];
+      const bar = (i: number): Bar | undefined => this.bars[i];
+      const entry = (l: { id: string; dir: string; bar: number }): void => {
+        const b = bar(l.bar);
+        if (!b) return;
+        const long = l.dir === 'long';
+        pts.push({ index: l.bar, price: long ? b.low : b.high, color: long ? '#089981' : '#f23645', text: (long ? '▲ ' : '▼ ') + l.id, above: !long });
+      };
+      for (const t of r.tradeList) {
+        entry({ id: t.entryId, dir: t.dir, bar: t.entryBar });
+        const b = bar(t.exitBar);
+        if (b) pts.push({ index: t.exitBar, price: t.dir === 'long' ? b.high : b.low, color: t.profit >= 0 ? '#089981' : '#f23645', text: '×', above: t.dir === 'long' });
+      }
+      for (const l of r.openTrades) entry(l);
+      if (pts.length) chart.addMarkers(pts);
     }
   }
 

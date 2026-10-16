@@ -9,6 +9,9 @@ const TICKERS = ['TSLA', 'AAPL', 'NVDA', 'MSFT', 'SPY'];
 const TF_RE = /\b(1m|5m|15m|30m|1h|4h|1d|1w|1M)\b/i;
 const RANGE_RE = /\b(1D|7D|1M|3M|6M|YTD|1Y|5Y|ALL)\b/;
 const LAYOUT_RE = /(\d)\s*[x×*]\s*(\d)/i;
+/** 「7 图」「12 个图」「4 张图」＋可选的「第 3 种」 */
+const LAYOUT_COUNT_RE = /(\d{1,2})\s*(?:个|张)?图(?!表|形|标)/;
+const LAYOUT_VARIANT_RE = /第\s*(\d+)\s*种/;
 
 let seq = 0;
 const nid = (p: string): string => p + '-' + Date.now().toString(36) + '-' + (seq++).toString(36);
@@ -30,8 +33,16 @@ export function planToolCalls(text: string): ToolCall[] {
   if (ticker) calls.push({ id: nid('call'), name: 'set_symbol', arguments: { symbol: ticker } });
 
   const lay = text.match(LAYOUT_RE);
+  const cnt = text.match(LAYOUT_COUNT_RE);
   if (lay) {
     calls.push({ id: nid('call'), name: 'set_layout', arguments: { rows: Number(lay[1]), cols: Number(lay[2]) } });
+  } else if (cnt && /布局|layout|分屏|多图|切成|改成|换成|设为|设置/i.test(text)) {
+    const v = text.match(LAYOUT_VARIANT_RE);
+    calls.push({
+      id: nid('call'),
+      name: 'set_layout',
+      arguments: v ? { count: Number(cnt[1]), variant: Number(v[1]) } : { count: Number(cnt[1]) },
+    });
   }
 
   const tf = text.match(TF_RE);
@@ -42,6 +53,26 @@ export function planToolCalls(text: string): ToolCall[] {
   const rg = text.match(RANGE_RE);
   if (rg && /range|范围|显示|看/i.test(text)) {
     calls.push({ id: nid('call'), name: 'set_range', arguments: { range: rg[1] } });
+  }
+
+  // 回放：先判退出 / 暂停 / 步进 / 速度，最后才是「回放」本身（进入）
+  if (/回放|replay/i.test(text)) {
+    const speed = text.match(/每秒\s*(\d+)\s*根|(\d+)\s*(?:根\/秒|倍速)/);
+    const n = text.match(/(\d+)\s*根/);
+    const act: [string, Record<string, unknown>] | null = /退出|停止|结束|关闭|stop|exit/i.test(text)
+      ? ['stop', {}]
+      : /暂停|pause/i.test(text)
+        ? ['pause', {}]
+        : speed
+          ? ['speed', { value: Number(speed[1] ?? speed[2]) }]
+          : /播放|play/i.test(text)
+            ? ['play', {}]
+            : /下一根|前进|step/i.test(text)
+              ? ['step', n ? { value: Number(n[1]) } : {}]
+              : /上一根|后退|back/i.test(text)
+                ? ['back', n ? { value: Number(n[1]) } : {}]
+                : ['start', {}];
+    calls.push({ id: nid('call'), name: 'replay', arguments: { action: act[0], ...act[1] } });
   }
 
   // 样式：先判面积/折线/美国线，最后才是「K线」
@@ -111,7 +142,7 @@ export function createMockProvider(opts: { delayMs?: number } = {}): AgentProvid
       if (calls.length === 0) {
         yield* streamText(
           '我是 Quant 助手（mock 模式）。试试:\n' +
-            '- "切到 NVDA"\n- "用 1h 周期"\n- "显示 1Y 范围"\n- "布局 2x2"\n- "打开布林带"\n- "切成面积图"\n\n' +
+            '- "切到 NVDA"\n- "用 1h 周期"\n- "显示 1Y 范围"\n- "布局 2x2"\n- "打开布林带"\n- "切成面积图"\n- "开始回放" / "回放 5 根/秒" / "回放下一根"\n\n' +
             '接入 DeepSeek harness 后，这里会换成真实的推理与工具调用。',
           req.signal,
           delay,

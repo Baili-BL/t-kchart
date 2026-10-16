@@ -87,9 +87,9 @@ VITE_DEEPSEEK_MODEL=deepseek-chat
 | 层 | 命令 | 内容 |
 | --- | --- | --- |
 | 类型 | `npm run typecheck` | `strict: true`，0 错误 |
-| 引擎（Node） | `npm test` | 绘图 39 + Pine 49 + 权益 24 + 统计 30 = 142（基线，只增不减） |
+| 引擎（Node） | `npm test` | 绘图 39 + Pine 49 + Pine 撮合 69 + 权益 26 + 统计 34 + 回放 27 + 布局目录 346 = 590（基线，只增不减） |
 | Agent / 工作区 / 数据 | `npm test` | 意图解析、工具校验、runner 循环（含报错/中断/死循环兜底）、模拟账户不变式、范围高亮、mock 数据不变式 |
-| 引擎（浏览器，需 canvas） | 开发模式下控制台 `await __app.runBrowserSelfTests()` | 图表 57 + 网格 6 + 权益 35 + 统计 46 |
+| 引擎（浏览器，需 canvas） | 开发模式下控制台 `await __app.runBrowserSelfTests()` | 图表 76 + 网格 20 + 权益 37 + 统计 50 |
 
 `__app` 只在 `npm run dev` 下挂到 `window`，生产包里没有。
 
@@ -130,8 +130,8 @@ VITE_DEEPSEEK_MODEL=deepseek-chat
 
 **多图网格（`grid.ts`）**
 
-- **Layout + Sync**：1×1 到 4×4 共 16 格，每格是**独立的 `KChart` 实例**
-  （各自有坐标轴、图例、指标、缩放）；联动项：十字光标 / 时间轴范围 / 标的 / 周期
+- **Layout + Sync**：1 到 16 格、55 种排法，每格是**独立的 `KChart` 实例**
+  （各自有坐标轴、图例、指标、缩放）；联动项：十字线 / 时间 / 日期范围 / 商品代码 / 周期
 - **主图样式**：K 线 / 美国线 / 线形图（收盘价折线）/ 面积图，`KChart.setStyle()` 切换；线形与面积的价格轴只按收盘价取范围；`ChartGrid.setChartStyle()` 让所有格一起变
 - 联动**按时间对齐**（`viewTimes()` / `setViewTimes()` / `indexAtTime()` 二分），不按像素 —— 见 §10
 
@@ -193,6 +193,15 @@ this.view.from = anchor - (px - this.plot.l) / this.view.barW;
 **⑦ `barW` 有 1px 下限**，所以 `fitContent()` 在「bar 数量 × 1px > 绘图宽度」时**装不下全部**，
 此时它会靠右对齐、保证最后一根可见。自检里这条断言写的就是这个真实契约（`canFit` 分支），
 不是「首尾都可见」那种在窄窗口下会假失败的写法。真要装下 5000 根，就得做 LOD 聚合。
+
+同一个下限也影响 `setViewTimes(t0, t1)`：目标区间比视口宽时它以 t0 为左边缘往右铺，**静默只显示左侧一段**。
+要「让某段时间可见」请用 `revealSpan(t0, t1)`（装不下时靠右对齐 t1，返回 false），`maxVisibleBars()` 给出当前最多能放多少根。
+`setRange` 和多图的「范围联动」都走 `revealSpan`。
+
+**⑧ 统计组件的三个对账坑**（都有回归自检）：
+1. 回测的 `positions` 在收尾仍持仓时比成交多一段，那段带 `open: true`，**不是一笔成交**；
+   把 positions 当成交列表去映射收益率会多出 ret=0 的幽灵交易，直方图各箱之和就对不上总数。用 `closedPositions()`。
+2. 直方图分箱和命中判定必须共用 `binIndexOf`：朴素的 `floor((v-lo)/w)` 在浮点边界上会和「`from <= v < to`」差一箱。
 
 ---
 
@@ -279,18 +288,21 @@ chart.viewSpan() / 86400000;   // 当前视口覆盖多少天
 
 ## 引擎 §10 多图网格 + 联动
 
-左侧 Layout 选 1×1 ~ 4×4（最多 16 格），Sync 四个开关控制联动。
+顶栏「布局」菜单：13 行（1–10、12、14、16 张图）共 **55 种排法**，不只是均匀网格（有「左大右小」「上 1 下 3」「7 列」等），
+数据在 `layouts.ts`（每种 = 一组铺满单位方块、互不重叠的矩形；`gridTemplate()` 翻成 CSS Grid 的轨道 + 跨度，图标用设计稿原图标 `src/ui/layoutIcons.ts`，键 = 布局 id，缺图标时退回按几何画的描边框）。
+「同步到所有图表」五个开关：商品代码 / 周期 / 十字线 / 时间 / 日期范围。
 每格左上角有编号徽章，**蓝框那一格是「活动图」**——关掉 SYNC 时，换标的/周期只改它。
 
 ```ts
 const grid = new ChartGrid('#grid', {
-  rows: 2, cols: 2,
+  layoutId: '4-3',                       // 目录 id；也可以传 rows / cols（只认目录里存在的均匀网格）
   theme: 'dark',
   legendInset: 34,                       // 给左上角徽章让位
-  sync: { symbol: true, interval: true, crosshair: true, range: true },
+  sync: { symbol: true, interval: true, crosshair: true, time: true, range: true },
 });
 
-grid.setLayout(3, 4);                    // 任意 r×c，最多 4×4
+grid.setLayoutId('7-1');                 // 目录里的任意一种；未知 id 返回 false、不动
+grid.setLayout(2, 2);                    // 兼容旧入口：只认目录里存在的均匀网格，没有就返回 false
 grid.setSync('crosshair', false);
 grid.setSymbol('300750.SZ');
 grid.setTimeframe('1W');
@@ -399,7 +411,7 @@ Pine 的语法很浅，真正决定数值对不对的是执行模型。这三条
 ### 支持
 
 ```
-//@version=5 / indicator() / strategy()（仅声明，不撮合） / input.*
+//@version=5 / indicator() / strategy() / input.*
 变量：x =   x :=   var x =   [a, b] = f()
 控制：if / else / if 当表达式 / for [to] [by] / while / 三元
 函数：f(a, b) => expr   和   多行缩进体（最后一条表达式的值即返回值）
@@ -409,10 +421,27 @@ Pine 的语法很浅，真正决定数值对不对的是执行模型。这三条
        crossover,crossunder,barssince,valuewhen,macd,bb}
       math.* / nz / na / fixnan / str.tostring / str.length / color.*
       plot / plotshape / plotchar / bgcolor / hline
+      strategy.{entry,close,close_all,exit,cancel,cancel_all}
+      strategy.{position_size,position_avg_price,equity,netprofit,openprofit,
+                initial_capital,opentrades,closedtrades}（只读变量）
 ```
 
-**明确不支持**（遇到就抛错，不静默给 na）：`strategy.*` 撮合、数组/矩阵/map、
+**明确不支持**（遇到就抛错，不静默给 na）：`strategy.*` 里除上面之外的（limit/stop 入场单、`risk.*`、`order` …）、数组/矩阵/map、
 `request.*` / `table.*` / `label.*` / `line.*` / `box.*`、`fill()`、`barstate.*`。
+
+### 12.1 `strategy.*` 撮合口径（`strategy.ts`）
+
+写清楚，免得数字对不上时互相猜：
+
+- **成交时机**：脚本在一根 bar 收盘后运行，下的单在**下一根开盘价**成交；`process_orders_on_close=true` 时当根收盘价成交。
+- **只做市价入场**。`entry` 带 `limit` / `stop`、`exit` 带 `profit` / `loss` / `trail_*` / `qty`，**直接抛错**，不会被悄悄忽略。
+- **反手**：反向 `entry` = 先平掉全部反向持仓，再开新仓。**pyramiding**：同方向最多 `max(1, pyramiding)` 笔；同 id 已持仓时再次 `entry` 被忽略。
+- **stop / limit 退出**：绝对价格，下一根起生效；跳空越过价位按**开盘价**成交；同一根里止损、止盈都够得着时**止损先成交**（悲观）。
+- **手续费**（`percent` / `cash_per_order` / `cash_per_contract`）进出各收一次，从权益里扣；**滑点**（`slippage × mintick`）永远对自己不利。
+- **仓位**：`fixed` / `percent_of_equity` / `cash`；后两者**预留手续费**，所以 100% 权益不会被自己的手续费挤成「保证金不足」。
+- **保证金**：持仓名义价值 × margin% 不得超过扣完手续费后的权益；**不足时抛错**，不静默不下单；`margin=0` 不检查。
+- **权益** = 初始资金 + 已实现盈亏 − 手续费 + 持仓浮盈，按收盘价盯市。结果与 `simulateMaCross()` 同构，权益图 / 统计组件直接吃。
+- 两个历史坑做成了回归自检（`strategyTest.ts`）：① 100% 权益被判保证金不足 → 0 笔成交且不报错；② 空头凭空多出「同日进同出」的幽灵成交。
 
 ### 用法
 
@@ -451,19 +480,18 @@ ta.* 的递推公式（EMA/RMA 的 SMA 播种、RSI、ATR、BOLL、MACD）、元
 | T3 工作流 | 状态 | 说明 |
 | --- | --- | --- |
 | **Pine 引擎** | ✅ Phase 1 完成 | 词法+语法+序列运行时+45 内置+plot 输出，49 条自检 |
-| Pine 撮合（`strategy.*`） | 🟡 输出端已就绪 | `equity.ts` 的渲染和统计已完成；缺的是 `strategy.*` 撮合本身 |
+| **Pine 撮合（`strategy.*`）** | ✅ Phase 2 完成 | `strategy.ts`：市价入场 / 反手 / pyramiding / stop·limit 退出 / 手续费 / 滑点 / 保证金，69 条自检；口径见 §12.1 |
 | **权益曲线图** | ✅ 完成 | 折线 + 每根盈亏柱状 + 回撤填充 + 末端标签 + 统计；见 §14 |
 | **统计组件** | ✅ 完成 | 收益分布 / 交易环形图 / 季节性叠加线；见 §15 |
 | **绘图工具框架** | ✅ 框架完成 | `draw.ts`：9 种工具 + 命中/拖动/手柄/磁吸/撤销/持久化，39 条自检；**79 种全量不承诺** |
 | 左侧工具栏 UI | ✅ 已接入 | 沿用 `src/workspace/dom/sidebar.ts`，经 `drawBus` 接到各格 `DrawLayer` |
 | 顶栏 / 右侧栏 | ✅ 已接入 | 沿用 `dom/toolbar.ts` / `dom/rightbar.ts`（设计稿 1:1），经句柄与 store 双向同步；右侧面板目前只有自选表可用，其余是空态 |
-| **Bar Replay** | ⬜ | 便宜且价值高（~200 行）：截断序列 + 步进 + 自动播放 |
+| **Bar Replay** | ✅ 完成 | `replay.ts` 状态机 + `KChart.setReplayCount` 截断重算；只作用于当前格；最后一根显示完整 K 线（无逐笔数据，不造 forming 半根）；27 条自检 |
 | 告警面板 | ⬜ | ~150 行，价值低 |
 | **逐像素视觉对等** | ❌ 不做 | 需要参考截图逐帧比，我没有也不打算声称有 |
 | Pine **全兼容** | ❌ 不接 | 见 §12 开头，理由不是懒 |
 
-**下一步建议顺序**：Pine 撮合 `strategy.*`（权益图的输出端已经就绪，接上就能看到真实回测）
-→ Bar Replay（顶栏回放按钮已留位）→ 接入 DeepSeek harness。
+**下一步建议顺序**：接入 DeepSeek harness。
 
 ---
 
@@ -515,7 +543,10 @@ KChart 是「蜡烛 + 多通道」的骨架，这张图有三处根本不同：
 - 权益按**收盘价盯市**，所以每根都有盈亏，柱状才是连续的
 
 这正是 Pine 撮合（T3 Phase 2）将来要接的口：`strategy.*` 跑完吐同样的
-`{ points, trades, positions, netProfit, maxDrawdown, winRate }` 结构，上面这套渲染一行都不用改。
+`{ points, trades, positions, netProfit, maxDrawdown, winRate }` 结构（`PineEngine.strategyResult()`），上面这套渲染一行都不用改。
+
+> 修正：旧版 `simulateMaCross` 用的是**当根**收盘的均线、却按当根开盘价成交（偷看了一根的未来），
+> 与上面「下一根开盘」的口径不符。现已改为用上一根收盘的信号。用 `strategy.*` 重写同一策略做逐点比对时发现的。
 
 ### 关于参考图底部那条色带
 

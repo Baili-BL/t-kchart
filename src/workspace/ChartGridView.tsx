@@ -7,6 +7,8 @@ import { useChartStore } from '../store/chartStore';
 import { useAppStore } from '../store/appStore';
 import { registerGrid } from './gridRegistry';
 import { drawBus } from './drawBus';
+import { replayController, useReplayStore } from '../store/replayStore';
+import type { ReplayState } from '../engine/replay';
 
 /** 美股习惯：涨绿跌红（引擎默认是 A 股的涨红跌绿） */
 const CHART_COLORS = { upColor: '#089981', downColor: '#f23645' };
@@ -26,8 +28,7 @@ export function ChartGridView(): JSX.Element {
 
     const st0 = useChartStore.getState();
     const grid = new ChartGrid(host, {
-      rows: st0.layout.rows,
-      cols: st0.layout.cols,
+      layoutId: st0.layoutId,
       theme: useAppStore.getState().theme,
       timeframe: st0.timeframe,
       symbols: [st0.symbol],
@@ -91,7 +92,23 @@ export function ChartGridView(): JSX.Element {
       const b = c && c.bars.length ? c.bars[c.bars.length - 1] : null;
       useChartStore.getState().setLastPrice(b ? b.close : null);
     };
+    /* ---------- 回放：controller → 被回放那一格的 setReplayCount ---------- */
+    let replayTile = -1;
+    const applyReplay = (s: ReplayState): void => {
+      if (s.active) {
+        replayTile = useReplayStore.getState().tile;
+        grid.charts()[replayTile]?.setReplayCount(s.index + 1);
+      } else if (replayTile >= 0) {
+        grid.charts()[replayTile]?.setReplayCount(null);
+        replayTile = -1;
+      }
+      refreshLast();
+    };
+    const unReplay = replayController.subscribe(applyReplay);
+
     const onActive = (): void => {
+      // 回放只属于开始时的那一格；切到别的格 = 退出回放
+      if (replayController.state().active && grid.activeIndex() !== replayTile) replayController.stop();
       const cs = useChartStore.getState();
       cs.setActiveTile(grid.activeIndex());
       cs.setTimeframe(grid.activeTimeframe());
@@ -116,14 +133,21 @@ export function ChartGridView(): JSX.Element {
 
     /* ---------- store → 引擎 ---------- */
     const unsub = useChartStore.subscribe((s, prev) => {
+      // 换标的 / 周期 / 布局会换掉数据：旧的回放位置没有意义，**先退出再动图表**
+      if (
+        replayController.state().active &&
+        (s.symbol !== prev.symbol || s.timeframe !== prev.timeframe || s.layoutId !== prev.layoutId)
+      ) {
+        replayController.stop();
+      }
       if (s.sync !== prev.sync) {
         (Object.keys(s.sync) as (keyof typeof s.sync)[]).forEach((k) => {
           if (s.sync[k] !== prev.sync[k]) grid.setSync(k, s.sync[k]);
         });
       }
-      if (s.layout !== prev.layout) {
+      if (s.layoutId !== prev.layoutId) {
         const oldTotal = grid.layoutInfo().total;
-        grid.setLayout(s.layout.rows, s.layout.cols);
+        grid.setLayoutId(s.layoutId);
         const total = grid.layoutInfo().total;
         if (!s.sync.interval) for (let i = oldTotal; i < total; i++) grid.setTileTimeframe(i, SECONDARY_TF);
         applyBb();
@@ -147,6 +171,8 @@ export function ChartGridView(): JSX.Element {
     });
 
     return () => {
+      replayController.stop();
+      unReplay();
       unsub();
       unTheme();
       unbindDraw();

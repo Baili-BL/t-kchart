@@ -1,3 +1,4 @@
+import { LAYOUT_COUNTS, layoutsOfCount, uniformLayoutId } from '../engine/layouts';
 import type { ToolCall, ToolDefinition, ToolResult, ToolRuntime } from './types';
 
 /**
@@ -11,16 +12,26 @@ export interface ChartControls {
   setTimeframe(timeframe: string): void;
   /** 返回 false 表示数据不够长，已退化为 ALL */
   setRange(range: string): boolean;
+  /** 均匀 rows × cols 网格（调用方已确认存在这种布局） */
   setLayout(rows: number, cols: number): void;
+  /** 按布局目录 id 切换（如 `4-3`），调用方已确认 id 存在 */
+  setLayoutId(id: string): void;
   /** 切换主图样式，所有格一起变 */
   setChartStyle(style: ChartStyle): void;
   setIndicator(indicator: string, visible: boolean): void;
+  /** K 线回放控制；状态不对（比如没在回放就 play）时返回 ok=false 并说明原因 */
+  replay(action: ReplayActionName, value?: number): { ok: boolean; message: string };
   /** 运行 Pine 脚本并画到活动图上；失败时返回错误文本 */
   runPine(code: string): { ok: boolean; message: string };
   knownSymbols(): string[];
   knownTimeframes(): string[];
   knownRanges(): string[];
 }
+
+/** 回放动作与速度（Agent 层不依赖引擎，故在此重复声明；与 engine/replay.ts 保持一致，tests 里有对照） */
+export const REPLAY_ACTION_NAMES = ['start', 'stop', 'play', 'pause', 'step', 'back', 'speed'] as const;
+export type ReplayActionName = (typeof REPLAY_ACTION_NAMES)[number];
+export const REPLAY_SPEED_VALUES = [1, 2, 5, 10, 30];
 
 /** 主图样式（与引擎 ChartStyle 同构；Agent 层不依赖引擎，故在此重复声明） */
 export type ChartStyle = 'candles' | 'bars' | 'line' | 'area';
@@ -56,11 +67,17 @@ export const CHART_TOOL_DEFINITIONS: ToolDefinition[] = [
   },
   {
     name: 'set_layout',
-    description: '设置多图网格布局，行列各 1–4。',
+    description:
+      '设置多图布局。两种写法二选一：① rows + cols（均匀网格，各 1–4）；' +
+      '② count + variant（按图数选，count ∈ 1–10、12、14、16；同图数有多种排法，variant 从 1 起，默认 1）。',
     parameters: {
       type: 'object',
-      properties: { rows: { type: 'number' }, cols: { type: 'number' } },
-      required: ['rows', 'cols'],
+      properties: {
+        rows: { type: 'number' },
+        cols: { type: 'number' },
+        count: { type: 'number', description: '图的张数' },
+        variant: { type: 'number', description: '同张数里的第几种排法（从 1 起）' },
+      },
     },
   },
   {
@@ -70,6 +87,20 @@ export const CHART_TOOL_DEFINITIONS: ToolDefinition[] = [
       type: 'object',
       properties: { style: { type: 'string', enum: CHART_STYLE_KEYS } },
       required: ['style'],
+    },
+  },
+  {
+    name: 'replay',
+    description:
+      'K 线回放（Bar Replay）：start 进入（停在视口中间，只作用于活动图）/ stop 退出 / play 播放 / pause 暂停 / ' +
+      'step 前进 value 根（默认 1）/ back 后退 value 根（默认 1）/ speed 设置每秒几根（value ∈ 1,2,5,10,30）。',
+    parameters: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: [...REPLAY_ACTION_NAMES] },
+        value: { type: 'number', description: 'step / back 的根数（1–500），或 speed 的每秒根数' },
+      },
+      required: ['action'],
     },
   },
   {
@@ -135,12 +166,28 @@ export function createChartTools(ctl: ChartControls): ToolRuntime {
           return ok(enough ? `显示范围已设为 ${raw}` : `数据不足 ${raw}，已退化为 ALL`);
         }
         case 'set_layout': {
+          if (a.count !== undefined) {
+            const n = num(a.count);
+            if (n == null || !Number.isInteger(n) || !LAYOUT_COUNTS.includes(n)) {
+              return fail(`count 只能是 ${LAYOUT_COUNTS.join(' / ')} 之一`);
+            }
+            const list = layoutsOfCount(n);
+            const v = a.variant === undefined ? 1 : num(a.variant);
+            if (v == null || !Number.isInteger(v) || v < 1 || v > list.length) {
+              return fail(`${n} 图共有 ${list.length} 种排法，variant 取 1–${list.length}`);
+            }
+            ctl.setLayoutId(list[v - 1].id);
+            return ok(`布局已设为 ${n} 图第 ${v} 种（${list[v - 1].id}）`);
+          }
           const r = num(a.rows);
           const c = num(a.cols);
-          if (r == null || c == null) return fail('rows / cols 必须是数字');
+          if (r == null || c == null) return fail('请提供 rows + cols，或 count（+ variant）');
           if (r < 1 || r > 4 || c < 1 || c > 4) return fail('rows / cols 取值范围 1–4');
-          ctl.setLayout(Math.round(r), Math.round(c));
-          return ok(`布局已设为 ${Math.round(r)}×${Math.round(c)}`);
+          const rr = Math.round(r);
+          const cc = Math.round(c);
+          if (!uniformLayoutId(rr, cc)) return fail(`没有 ${rr}×${cc} 的均匀布局；可改用 count（+ variant）选非均匀排法`);
+          ctl.setLayout(rr, cc);
+          return ok(`布局已设为 ${rr}×${cc}`);
         }
         case 'set_chart_style': {
           const raw = str(a.style)?.toLowerCase();
@@ -149,6 +196,22 @@ export function createChartTools(ctl: ChartControls): ToolRuntime {
           if (!style) return fail(`未知样式 ${raw}，可选：${CHART_STYLE_KEYS.join(', ')}`);
           ctl.setChartStyle(style);
           return ok(`主图样式已切换为 ${style}`);
+        }
+        case 'replay': {
+          const action = REPLAY_ACTION_NAMES.find((k) => k === str(a.action)?.toLowerCase());
+          if (!action) return fail(`未知回放动作 ${String(a.action)}，可选：${REPLAY_ACTION_NAMES.join(', ')}`);
+          const value = a.value === undefined ? undefined : num(a.value);
+          if (a.value !== undefined && value === null) return fail('value 必须是数字');
+          if (action === 'speed') {
+            if (value == null || !REPLAY_SPEED_VALUES.includes(value)) {
+              return fail(`speed 的 value 必须是 ${REPLAY_SPEED_VALUES.join(' / ')} 之一（每秒几根）`);
+            }
+          }
+          if ((action === 'step' || action === 'back') && value != null && (value < 1 || value > 500)) {
+            return fail('step / back 的 value 取值范围 1–500');
+          }
+          const r = ctl.replay(action, value ?? undefined);
+          return r.ok ? ok(r.message) : fail(r.message);
         }
         case 'add_indicator': {
           const ind = str(a.indicator)?.toLowerCase();
