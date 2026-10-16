@@ -1,6 +1,6 @@
 # t-kchart · 三栏量化工作台（TypeScript）
 
-左侧菜单 + 中间 Agent 面板 + 右侧类 TradingView 图表区。图表核心与 Pine v5 子集解释器是**零依赖**的纯 TypeScript 引擎（`src/engine`），外壳是 Vite + React + TypeScript。
+左侧菜单 + 中间 Agent 面板 + 右侧专业图表软件风格的图表区。图表核心与 Pine v5 子集解释器是**零依赖**的纯 TypeScript 引擎（`src/engine`），外壳是 Vite + React + TypeScript。
 
 > **路线图见 [`TODO.md`](TODO.md)**。本 README 讲「现在是什么」，TODO 讲「接下来做什么、怎么算做完」。
 
@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | 左侧菜单 | `src/sidebar` | Quant / Trading（Strategies、Alerts）/ Research（Strategy Screener）/ Quant chats 会话列表 / AI credits / 用户卡，可折叠 |
 | Agent 面板 | `src/agent` | 欢迎页、输入框（Teach mode、模型选择、Tab 补全）、Try 快捷建议、流式消息、工具调用展示；宽度可拖动 |
-| 图表区 | `src/workspace` | 顶栏（TradingView 稿原组件：品种胶囊 / 周期 / 图表样式 / 指标 / 警报 / 回放 / 撤销重做 / 布局 / 保存块）、左侧绘图栏、多图联动网格、PaperTrade 模拟下单、底部范围条、右侧图标栏（TradingView 稿原组件）与自选表面板 |
+| 图表区 | `src/workspace` | 顶栏（设计稿原组件：品种胶囊 / 周期 / 图表样式 / 指标 / 警报 / 回放 / 撤销重做 / 布局 / 保存块）、左侧绘图栏、多图联动网格、PaperTrade 模拟下单、底部范围条、右侧图标栏（设计稿原组件）与自选表面板 |
 | 引擎 | `src/engine` | `chart` 单图 · `grid` 多图联动 · `draw` 绘图 · `pine` Pine 引擎 · `equity` 权益曲线 · `analytics` 统计组件 |
 
 ![Agent 驱动图表](docs/shot-agent.png)
@@ -39,7 +39,7 @@ src/
   agent/
     types.ts          AgentProvider / AgentMessage / ToolCall / AgentEvent 接口
     runner.ts         Agent 循环：流式输出 → 执行工具 → 结果回灌 → 直到无新调用（maxSteps 兜底）
-    tools.ts          图表工具集（set_symbol / set_timeframe / set_range / set_layout / add_indicator / run_pine）
+    tools.ts          图表工具集（set_symbol / set_timeframe / set_range / set_layout / set_chart_style / add_indicator / run_pine）
     registry.ts       模型下拉与 provider 选择（Auto：配了 harness 地址用 DeepSeek，否则 mock）
     providers/mock.ts       本地演示（关键字 → 工具调用）
     providers/deepseek.ts   DeepSeek harness 适配点（空壳）
@@ -50,7 +50,7 @@ src/
     DrawToolbar       包装 dom/sidebar.ts，经 drawBus 驱动各格 DrawLayer
     chartControls     Agent 工具的真实实现（ChartControls 接口）
     TopBar / RightRail  包装 dom/toolbar.ts / dom/rightbar.ts：store ⇄ 组件句柄（createToolbarHandle / createRightbarHandle）
-    dom/              TradingView 稿原生 DOM 组件（顶栏、绘图栏、右侧栏、策略报告面板）与图标
+    dom/              设计稿原生 DOM 组件（顶栏、绘图栏、右侧栏、策略报告面板）与图标
   engine/       chart grid draw pine equity analytics（ESM，零依赖）
   data/         mockBars（TSLA/AAPL/NVDA/MSFT/SPY，分钟/小时/日/周/月）
   store/        zustand：appStore / chartStore / chatStore
@@ -89,7 +89,7 @@ VITE_DEEPSEEK_MODEL=deepseek-chat
 | 类型 | `npm run typecheck` | `strict: true`，0 错误 |
 | 引擎（Node） | `npm test` | 绘图 39 + Pine 49 + 权益 24 + 统计 30 = 142（基线，只增不减） |
 | Agent / 工作区 / 数据 | `npm test` | 意图解析、工具校验、runner 循环（含报错/中断/死循环兜底）、模拟账户不变式、范围高亮、mock 数据不变式 |
-| 引擎（浏览器，需 canvas） | 开发模式下控制台 `await __app.runBrowserSelfTests()` | 图表 49 + 网格 6 + 权益 35 + 统计 46 |
+| 引擎（浏览器，需 canvas） | 开发模式下控制台 `await __app.runBrowserSelfTests()` | 图表 57 + 网格 6 + 权益 35 + 统计 46 |
 
 `__app` 只在 `npm run dev` 下挂到 `window`，生产包里没有。
 
@@ -113,11 +113,11 @@ VITE_DEEPSEEK_MODEL=deepseek-chat
 - **十字光标**：吸附到 bar 中心，双轴反色标签，图例显示**光标所在那根**的 OHLC + 涨跌幅
 - **滚轮缩放（光标锚定）+ 拖拽平移 + 双击适配**，视口夹紧（拖不到天边、缩不到 0.02px）
 - **MA5 / MA10 / MA20** 叠加线
-- **通道（Channel）** —— TradingView 里 BB / 肯特纳 / 唐奇安 的统一画法：
+- **通道（Channel）** —— 主流图表软件里 BB / 肯特纳 / 唐奇安 的统一画法：
   上下轨 + 中轨三条线 + **上下轨之间的半透明填充**。默认带一条 `BB 20 SMA close 2`。
   填充画在 K 线**后面**、三条线画在 K 线**上面**（顺序错了要么糊蜡烛、要么线被自己盖住）
 - **通道上的小圆圈**可切换三种规则：关 / 碰带 / 带宽极值
-- **指标图例按行堆叠**（跟 TradingView 一样）：主图 OHLC 一行、MA 一行、每条通道一行
+- **指标图例按行堆叠**（与主流图表软件一致）：主图 OHLC 一行、MA 一行、每条通道一行
   （名字 + 参数 + 上/中/下轨当前值 + 带宽 %）
 - **深/浅两套主题** —— 只换背景/网格/文字/光标，**不碰涨跌色**（涨跌是 A 股习惯，不该跟着主题走）
 - **多周期合成** `resample(bars, '1W' | '1M')` —— 周/月线由日线合成
@@ -130,8 +130,9 @@ VITE_DEEPSEEK_MODEL=deepseek-chat
 
 **多图网格（`grid.ts`）**
 
-- **Layout + Sync**：1×1 到 4×4 共 16 格，每格是**独立的 `TVChart` 实例**
+- **Layout + Sync**：1×1 到 4×4 共 16 格，每格是**独立的 `KChart` 实例**
   （各自有坐标轴、图例、指标、缩放）；联动项：十字光标 / 时间轴范围 / 标的 / 周期
+- **主图样式**：K 线 / 美国线 / 线形图（收盘价折线）/ 面积图，`KChart.setStyle()` 切换；线形与面积的价格轴只按收盘价取范围；`ChartGrid.setChartStyle()` 让所有格一起变
 - 联动**按时间对齐**（`viewTimes()` / `setViewTimes()` / `indexAtTime()` 二分），不按像素 —— 见 §10
 
 **Pine 引擎（`pine.ts`）—— T3 Phase 1，见 §12**
@@ -264,7 +265,7 @@ chart.viewSpan() / 86400000;   // 当前视口覆盖多少天
 
 1. **数据不够长。** 只有 3.5 年数据时点「5Y」，正确答案不是把图压成一条线，
    而是**退化成 ALL 并且如实返回 `false`** —— 调用方据此把按钮置灰。
-   `rangeAvailable()` 就是干这个的。TradingView 也是这么做的（灰掉的按钮点不动）。
+   `rangeAvailable()` 就是干这个的。参考实现也是这么做的（灰掉的按钮点不动）。
 2. **范围小于一根 bar。** 日线图上点「1D」会算出 1 根 bar，整屏一根蜡烛，很难看。
    所以有 `MIN_RANGE_BARS = 5` 兜底。
 3. **手动缩放后高亮要跟着走。** 底部哪个按钮亮着，是按**当前视口跨度**反推的
@@ -297,14 +298,14 @@ grid.eachTile((c) => c.setChannelVisible('bb', false));
 grid.charts()[0].debugInfo();
 ```
 
-**关键设计：每格是独立的 `TVChart` 实例，不是一个画布切几块。**
+**关键设计：每格是独立的 `KChart` 实例，不是一个画布切几块。**
 所以每格有自己的坐标轴、图例、缩放、指标、通道——这才叫「多个图表」。
 （同一张图上下叠副图是另一件事，见 §4。）
 
 **六个真会踩的坑：**
 
 1. **联动必须按时间对齐，不能按像素。** 两格周期不同（1D vs 1W）时，
-   同一个像素 `x` 指的根本不是同一时刻。所以 `TVChart` 暴露的是
+   同一个像素 `x` 指的根本不是同一时刻。所以 `KChart` 暴露的是
    `viewTimes()` / `setViewTimes(t0, t1)` 和 `setSyncIndex(idx)`，
    **不是** `getView()` / `setView()` 那种像素接口。用 `indexAtTime()` 二分换算。
 2. **网格轨道要用 `minmax(0, 1fr)`，不能用 `1fr`。** 用 `1fr` 时画布的固有尺寸
@@ -335,9 +336,9 @@ grid.charts()[0].debugInfo();
 同一个错误在十字光标联动那里踩过一次（见 §10），所以这次一开始就避开了。
 `timeToX()` / `xToTime()` 在相邻两根 bar 之间**线性插值**，否则放大到一根 bar 很宽时图形会一格一格地跳。
 
-**② 依赖 `DrawHost` 接口，不是 `TVChart` 类。**
+**② 依赖 `DrawHost` 接口，不是 `KChart` 类。**
 
-`TVChart` 结构化地满足这个接口，所以真图直接能用；测试里塞一个几十行的假图
+`KChart` 结构化地满足这个接口，所以真图直接能用；测试里塞一个几十行的假图
 （只有 `bars` / `plot` / `scale` 和几个变换函数）就能**在 Node 里跑完 39 条几何自检**，
 不需要浏览器。这是 `node run-tests.js` 能覆盖绘图层的原因。
 
@@ -349,19 +350,19 @@ grid.charts()[0].debugInfo();
 
 ### 和图表的事件契约
 
-绘图层通过 `TVChart.setHooks()` 挂进去。唯一的约定是：
+绘图层通过 `KChart.setHooks()` 挂进去。唯一的约定是：
 
 ```ts
-onDown(px, py, e): boolean   // 返回 true = 这次点击被图层接管，TVChart 不平移
+onDown(px, py, e): boolean   // 返回 true = 这次点击被图层接管，KChart 不平移
 ```
 
 **没有这条约定，一选绘图工具就没法拖动画布了** —— 两边都想吃 pointerdown。
-现在：选着工具 → 点击落点、接管；光标模式点到空白 → 返回 false、交给 TVChart 平移；
+现在：选着工具 → 点击落点、接管；光标模式点到空白 → 返回 false、交给 KChart 平移；
 光标模式点到已有图形 → 接管、开始拖动。
 
 ### 已知边界
 
-- **视觉是暂行版。** 左侧工具栏的图标/间距/配色是我照 TradingView 的样子做的 ——
+- **视觉是暂行版。** 左侧工具栏的图标/间距/配色是我照主流图表软件的样子做的 ——
   你给的 Magic Patterns 设计稿我打不开（`/imported/...` 是登录态页面，直出 HTTP 500），
   所以**没有**照设计稿实现。改的是皮，上面这套引擎不用动。
 - **顶栏和右侧面板还没做**（等设计稿，或按你说的"分次做"下一轮）。
@@ -434,11 +435,11 @@ ta.* 的递推公式（EMA/RMA 的 SMA 播种、RSI、ATR、BOLL、MACD）、元
 控制流、na 传播、以及「未实现的东西必须抛错」。
 
 **不能验证的**：`ta.ema` 的**播种方式**（我用 SMA 播种 + `alpha=2/(len+1)`）是按
-TradingView 文档实现的，但**没有对着真实 TV 逐值核过**。你的 `PINE-对齐清单.md` 里那套
+公开文档实现的，但**没有对着参考实现逐值核过**。你的 `PINE-对齐清单.md` 里那套
 校准方法是「拿另一个独立实现跑同一个脚本，逐笔比对成交与净利」——
 那需要一个能跑成熟 Pine 引擎的环境，我没做。
 
-> 换句话说：**引擎内部自洽且公式对文档**，但**不等于和 TradingView 数值一致**。
+> 换句话说：**引擎内部自洽且公式对文档**，但**不等于和参考实现数值一致**。
 > 这个差别必须说清楚，否则回测出来的数会给你假的信心。
 
 ---
@@ -455,7 +456,7 @@ TradingView 文档实现的，但**没有对着真实 TV 逐值核过**。你的
 | **统计组件** | ✅ 完成 | 收益分布 / 交易环形图 / 季节性叠加线；见 §15 |
 | **绘图工具框架** | ✅ 框架完成 | `draw.ts`：9 种工具 + 命中/拖动/手柄/磁吸/撤销/持久化，39 条自检；**79 种全量不承诺** |
 | 左侧工具栏 UI | ✅ 已接入 | 沿用 `src/workspace/dom/sidebar.ts`，经 `drawBus` 接到各格 `DrawLayer` |
-| 顶栏 / 右侧栏 | ✅ 已接入 | 沿用 `dom/toolbar.ts` / `dom/rightbar.ts`（TradingView 稿 1:1），经句柄与 store 双向同步；右侧面板目前只有自选表可用，其余是空态 |
+| 顶栏 / 右侧栏 | ✅ 已接入 | 沿用 `dom/toolbar.ts` / `dom/rightbar.ts`（设计稿 1:1），经句柄与 store 双向同步；右侧面板目前只有自选表可用，其余是空态 |
 | **Bar Replay** | ⬜ | 便宜且价值高（~200 行）：截断序列 + 步进 + 自动播放 |
 | 告警面板 | ⬜ | ~150 行，价值低 |
 | **逐像素视觉对等** | ❌ 不做 | 需要参考截图逐帧比，我没有也不打算声称有 |
@@ -468,11 +469,11 @@ TradingView 文档实现的，但**没有对着真实 TV 逐值核过**。你的
 
 ## 引擎 §14 权益曲线图（`equity.ts`）
 
-页面是 `equity.html`。就是 TradingView Strategy Tester 那张图：折线权益曲线 + 每根盈亏柱状。
+页面是 `equity.html`。就是 策略测试器那张图：折线权益曲线 + 每根盈亏柱状。
 
-### 为什么另起一个组件，不塞进 TVChart
+### 为什么另起一个组件，不塞进 KChart
 
-TVChart 是「蜡烛 + 多通道」的骨架，这张图有三处根本不同：
+KChart 是「蜡烛 + 多通道」的骨架，这张图有三处根本不同：
 
 1. 没有蜡烛，是**折线 + 柱状**两层序列
 2. **数值轴必须包含 0** —— 柱状从 0 轴上下生长，这是硬约束，不是自动缩放的副产物。
@@ -480,7 +481,7 @@ TVChart 是「蜡烛 + 多通道」的骨架，这张图有三处根本不同：
 3. 折线和柱状是**两个量纲**叠在一个轴上（累计权益 vs 单根盈亏），
    轴范围要同时装下两者的极值 —— 只看权益的话，某根插一根大阴线、柱子探到权益范围之外就被切掉了
 
-硬塞进 TVChart 会把它变成一坨 `if`。共用的只有刻度/时间格式那几个纯函数。
+硬塞进 KChart 会把它变成一坨 `if`。共用的只有刻度/时间格式那几个纯函数。
 
 ### 三个真踩过的坑
 
@@ -501,7 +502,7 @@ TVChart 是「蜡烛 + 多通道」的骨架，这张图有三处根本不同：
 ### 一个诚实的局限
 
 权益曲线的量程常常远大于单根盈亏（例：900 根日线上权益在 0~216,000 波动，单根盈亏只有 ±2,000）。
-**叠在一个轴上时柱状会被压成一条线，几乎看不见。** TradingView 也是这个行为。
+**叠在一个轴上时柱状会被压成一条线，几乎看不见。** 参考实现也是这个行为。
 我没有给柱状开独立坐标轴 —— 那会让人误读成两个可比量。
 真要解决得做「柱状归一化」或拆副图，那是另一个决定。
 

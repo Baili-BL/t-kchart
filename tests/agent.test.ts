@@ -19,6 +19,7 @@ function fakeControls(): ChartControls & { log: string[] } {
       return r !== '5Y';
     },
     setLayout: (r, c) => void log.push(`layout:${r}x${c}`),
+    setChartStyle: (s) => void log.push('style:' + s),
     setIndicator: (i, v) => void log.push(`ind:${i}:${v}`),
     runPine: (code) => (code.includes('bad') ? { ok: false, message: 'parse error' } : { ok: true, message: 'ok' }),
     knownSymbols: () => ['TSLA', 'NVDA'],
@@ -73,6 +74,15 @@ describe('mock provider · 意图 → 工具调用', () => {
     expect(planToolCalls('关闭布林带')[0]).toMatchObject({ name: 'add_indicator', arguments: { visible: false } });
   });
 
+  it('样式关键词 → set_chart_style（面积/线形/美国线/K线）', () => {
+    const style = (t: string): unknown => planToolCalls(t).find((c) => c.name === 'set_chart_style')?.arguments.style;
+    expect(style('切成面积图')).toBe('area');
+    expect(style('换成线形图')).toBe('line');
+    expect(style('用美国线')).toBe('bars');
+    expect(style('改回K线图')).toBe('candles');
+    expect(style('切到 NVDA')).toBeUndefined();
+  });
+
   it('无关输入不产生任何调用', () => {
     expect(planToolCalls('今天天气怎么样')).toEqual([]);
   });
@@ -94,6 +104,8 @@ describe('工具运行时', () => {
     expect((await t.execute(call('set_layout', { rows: 'x', cols: 1 }))).ok).toBe(false);
     expect((await t.execute(call('set_timeframe', { timeframe: '7m' }))).ok).toBe(false);
     expect((await t.execute(call('add_indicator', { indicator: 'rsi' }))).ok).toBe(false);
+    expect((await t.execute(call('set_chart_style', { style: 'renko' }))).ok).toBe(false);
+    expect((await t.execute(call('set_chart_style', {}))).ok).toBe(false);
     expect((await t.execute(call('不存在的工具', {}))).ok).toBe(false);
     expect(ctl.log).toEqual([]);
   });
@@ -104,6 +116,13 @@ describe('工具运行时', () => {
     await t.execute(call('set_symbol', { symbol: ' nvda ' }));
     await t.execute(call('set_timeframe', { timeframe: '1H' }));
     expect(ctl.log).toEqual(['symbol:NVDA', 'tf:1h']);
+  });
+
+  it('set_chart_style 规范化大小写后交给图表', async () => {
+    const ctl = fakeControls();
+    const r = await createChartTools(ctl).execute(call('set_chart_style', { style: ' Area ' }));
+    expect(r.ok).toBe(true);
+    expect(ctl.log).toEqual(['style:area']);
   });
 
   it('数据不够长时如实说明已退化为 ALL', async () => {

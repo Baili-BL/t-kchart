@@ -1,5 +1,5 @@
-// tv-sidebar —— TradingView 图表页左侧纵向绘图工具栏
-// 依据 magicpatterns 导入稿（cn.tradingview.com）1:1 还原：
+// kc-sidebar —— 图表页左侧纵向绘图工具栏
+// 依据设计稿 1:1 还原：
 // 宽 52px、白底、行高 38px、图标 28×28；悬停/选中为 34×34 圆角药丸
 // （悬停 rgb(242,242,242)，选中 rgb(235,235,235)）；带小箭头的按钮悬停时
 // 右侧浮现 11px 宽箭头区（borderRadius 4px 0 0 4px），点击弹出子菜单；
@@ -22,76 +22,76 @@ function el<K extends keyof HTMLElementTagNameMap>(
 
 /* --------------------------------------------------------------- 样式注入 */
 const CSS = `
-.tv-sidebar {
+.kc-sidebar {
   display: flex; flex-direction: column; flex: 0 0 auto; width: 52px;
   background: rgb(235,235,235); color: rgb(15,15,15); user-select: none; position: relative; z-index: 100;
   font: 400 14px/normal -apple-system, "system-ui", "Trebuchet MS", Roboto, Ubuntu, sans-serif;
   font-feature-settings: "lnum","tnum";
   overflow-y: auto; overflow-x: hidden; scrollbar-width: none;
 }
-.tv-sidebar::-webkit-scrollbar { display: none; }
-.tv-sb-section { background: #fff; padding: 6px 0; position: relative; }
-.tv-sb-div { height: 1px; background: rgb(235,235,235); margin: 0 8px; }
-.tv-sb-section + .tv-sb-div + .tv-sb-section { padding-bottom: 6px; }
+.kc-sidebar::-webkit-scrollbar { display: none; }
+.kc-sb-section { background: #fff; padding: 6px 0; position: relative; }
+.kc-sb-div { height: 1px; background: rgb(235,235,235); margin: 0 8px; }
+.kc-sb-section + .kc-sb-div + .kc-sb-section { padding-bottom: 6px; }
 /* —— 工具行：52×38，主按钮 + 悬停浮现的箭头区 —— */
-.tv-sb-tool { position: relative; width: 52px; }
-.tv-sb-btn {
+.kc-sb-tool { position: relative; width: 52px; }
+.kc-sb-btn {
   position: relative; z-index: 0; display: block; width: 52px; height: 38px;
   border: 0; background: transparent; padding: 0; cursor: pointer;
   transition: background-color .06s ease, opacity .06s ease, color .06s ease;
 }
-.tv-sb-btn > svg { position: absolute; left: 12px; top: 5px; }
-.tv-sb-btn .pill {
+.kc-sb-btn > svg { position: absolute; left: 12px; top: 5px; }
+.kc-sb-btn .pill {
   position: absolute; z-index: -1; left: 9px; right: 9px; top: 2px; bottom: 2px;
   width: 34px; height: 34px; border-radius: 6px; background: transparent;
 }
-.tv-sb-btn:hover .pill { background: rgb(242,242,242); }
-.tv-sb-btn.tv-sel .pill { background: rgb(235,235,235); }
-.tv-sb-btn.tv-on .pill { background: rgb(231,240,255); }
+.kc-sb-btn:hover .pill { background: rgb(242,242,242); }
+.kc-sb-btn.kc-sel .pill { background: rgb(235,235,235); }
+.kc-sb-btn.kc-on .pill { background: rgb(231,240,255); }
 /* —— 小箭头：默认隐藏，悬停浮现 —— */
-.tv-sb-caret {
+.kc-sb-caret {
   position: absolute; right: 0; top: 2px; width: 11px; height: 34px;
   border: 0; padding: 0; background: transparent; cursor: pointer;
   border-radius: 4px 0 0 4px; opacity: 0; overflow: hidden;
   transition: opacity .1s ease;
 }
-.tv-sb-tool:hover .tv-sb-caret { opacity: 1; }
-.tv-sb-caret > svg { position: absolute; left: 3px; top: 13px; width: 4px; height: 7px; fill: rgb(15,15,15); transition: transform .5s cubic-bezier(.175,.885,.32,1.275); }
-.tv-sb-caret:hover > svg { transform: scale(1.25); }
-.tv-sb-tool.open .tv-sb-caret > svg { transform: rotate(180deg); }
+.kc-sb-tool:hover .kc-sb-caret { opacity: 1; }
+.kc-sb-caret > svg { position: absolute; left: 3px; top: 13px; width: 4px; height: 7px; fill: rgb(15,15,15); transition: transform .5s cubic-bezier(.175,.885,.32,1.275); }
+.kc-sb-caret:hover > svg { transform: scale(1.25); }
+.kc-sb-tool.open .kc-sb-caret > svg { transform: rotate(180deg); }
 /* —— 子菜单：白卡阴影，右侧弹出 —— */
-.tv-sb-menu {
+.kc-sb-menu {
   position: absolute; left: 52px; top: 0; min-width: 220px; padding: 6px 0; margin: 0;
   list-style: none; background: #fff; border-radius: 6px;
   box-shadow: 0 4px 10px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.04);
   font-size: 13px; z-index: 120; display: none;
 }
-.tv-sb-menu.open { display: block; }
-.tv-sb-menu li {
+.kc-sb-menu.open { display: block; }
+.kc-sb-menu li {
   display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; cursor: pointer;
   transition: background-color .06s ease; white-space: nowrap;
 }
-.tv-sb-menu li:hover { background: rgb(242,242,242); }
-.tv-sb-menu li > svg { flex: 0 0 auto; }
-.tv-sb-menu li.sel { color: rgb(41,98,255); }
+.kc-sb-menu li:hover { background: rgb(242,242,242); }
+.kc-sb-menu li > svg { flex: 0 0 auto; }
+.kc-sb-menu li.sel { color: rgb(41,98,255); }
 `;
 
 function injectStyle(): void {
-  if (document.getElementById('tv-sidebar-css')) return;
+  if (document.getElementById('kc-sidebar-css')) return;
   const s = document.createElement('style');
-  s.id = 'tv-sidebar-css';
+  s.id = 'kc-sidebar-css';
   s.textContent = CSS;
   document.head.appendChild(s);
 }
 
 /* ------------------------------------------------------------- 子菜单数据 */
 // 主图标 / 箭头图标 / 悬停标题 / 子菜单项（标签 + 图标；未捕获到原稿子菜单内容，
-// 按 TradingView 真实工具组给出常用项）
+// 按常见图表软件的工具分组给出常用项）
 interface ToolDef { icon: string; caret?: string; label: string; items?: Array<[string, string]> }
 
 // 分段与原稿分隔线位置一致：十字线 | 趋势/斐波 | 形态/仓位/笔刷/文字 | 图标 |
 // 测量/放大 | 磁铁/继续/锁定/隐藏 | 移除。
-// 子菜单内容原稿未捕获（均为收起态），按 TradingView 真实工具组给出常用项。
+// 子菜单内容原稿未捕获（均为收起态），按常见图表软件的工具分组给出常用项。
 interface ToolDef { icon: string; caret?: string; label: string; items?: Array<[string, string]> }
 type Section = { pad?: string; tools: ToolDef[] };
 
@@ -136,7 +136,7 @@ export interface SidebarCallbacks {
 export function createSidebar(mount: HTMLElement, cb: SidebarCallbacks = {}): HTMLElement {
   injectStyle();
 
-  const root = el('div', 'tv-sidebar');
+  const root = el('div', 'kc-sidebar');
   root.setAttribute('role', 'toolbar');
   root.setAttribute('aria-orientation', 'vertical');
   root.setAttribute('aria-label', '左侧绘图工具栏');
@@ -148,29 +148,29 @@ export function createSidebar(mount: HTMLElement, cb: SidebarCallbacks = {}): HT
 
   let selected: HTMLButtonElement | null = null;
   const pick = (btn: HTMLButtonElement, label: string): void => {
-    selected?.classList.remove('tv-sel');
-    btn.classList.add('tv-sel');
+    selected?.classList.remove('kc-sel');
+    btn.classList.add('kc-sel');
     selected = btn;
     cb.onTool?.(label);
   };
 
   for (const section of SECTIONS) {
-    const sec = el('div', 'tv-sb-section');
+    const sec = el('div', 'kc-sb-section');
     if (section.pad) sec.style.padding = section.pad;
     for (const t of section.tools) {
-      const cell = el('div', 'tv-sb-tool');
-      const btn = el('button', 'tv-sb-btn') as HTMLButtonElement;
+      const cell = el('div', 'kc-sb-tool');
+      const btn = el('button', 'kc-sb-btn') as HTMLButtonElement;
       btn.type = 'button';
       btn.tabIndex = -1;
       btn.setAttribute('aria-label', t.label);
       btn.title = t.label;
       btn.innerHTML = `<span class="pill"></span>${t.icon}`;
       if (t.caret) {
-        const caret = el('button', 'tv-sb-caret') as HTMLButtonElement;
+        const caret = el('button', 'kc-sb-caret') as HTMLButtonElement;
         // 主按钮：工具类 → 选中；开关类 → 直接切换
         btn.addEventListener('click', () => {
           if (['锁定绘图和指标', '隐藏所有图形', '移除对象'].includes(t.label)) {
-            const on = btn.classList.toggle('tv-on');
+            const on = btn.classList.toggle('kc-on');
             cb.onToggle?.(t.label, on);
           } else {
             pick(btn, t.label);
@@ -180,7 +180,7 @@ export function createSidebar(mount: HTMLElement, cb: SidebarCallbacks = {}): HT
         caret.tabIndex = -1;
         caret.setAttribute('aria-label', t.label + '（子菜单）');
         caret.innerHTML = t.caret;
-        const menu = el('ul', 'tv-sb-menu');
+        const menu = el('ul', 'kc-sb-menu');
         for (const [label, icon] of t.items ?? []) {
           const li = el('li');
           li.innerHTML = icon + `<span>${label}</span>`;
@@ -205,7 +205,7 @@ export function createSidebar(mount: HTMLElement, cb: SidebarCallbacks = {}): HT
       } else {
         btn.addEventListener('click', () => {
           if (t.label === '继续绘图') {
-            const on = btn.classList.toggle('tv-on');
+            const on = btn.classList.toggle('kc-on');
             cb.onToggle?.(t.label, on);
           } else {
             pick(btn, t.label);
@@ -216,7 +216,7 @@ export function createSidebar(mount: HTMLElement, cb: SidebarCallbacks = {}): HT
       sec.appendChild(cell);
     }
     root.appendChild(sec);
-    root.appendChild(el('div', 'tv-sb-div'));
+    root.appendChild(el('div', 'kc-sb-div'));
   }
 
   document.addEventListener('click', () => closeMenus());
@@ -224,8 +224,8 @@ export function createSidebar(mount: HTMLElement, cb: SidebarCallbacks = {}): HT
 
   mount.appendChild(root);
   // 默认选中第一个工具（十字线），对应原稿 #ebebeb 选中药丸
-  const first = root.querySelector('.tv-sb-btn') as HTMLButtonElement;
-  first.classList.add('tv-sel');
+  const first = root.querySelector('.kc-sb-btn') as HTMLButtonElement;
+  first.classList.add('kc-sel');
   selected = first;
   return root;
 }

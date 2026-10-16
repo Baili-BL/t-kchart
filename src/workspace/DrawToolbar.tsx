@@ -5,7 +5,7 @@ import { drawBus, isMagnetLabel, toolKeyForLabel } from './drawBus';
 
 /**
  * 左侧绘图工具栏。
- * 视觉与子菜单沿用 dom/sidebar.ts（TradingView 稿 1:1 还原），这里只负责把它接到 drawBus。
+ * 视觉与子菜单沿用 dom/sidebar.ts（设计稿 1:1 还原），这里只负责把它接到 drawBus。
  */
 export function DrawToolbar(): JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null);

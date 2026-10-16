@@ -4,7 +4,7 @@ import { Icon } from '../ui/icons';
 import { useToast } from '../ui/toast';
 import { createToolbarHandle } from './dom/toolbar';
 import type { ToolbarHandle } from './dom/toolbar';
-import { LAYOUT_PRESETS, useChartStore } from '../store/chartStore';
+import { LAYOUT_PRESETS, STYLE_LABELS, styleFromLabel, useChartStore } from '../store/chartStore';
 import type { SyncState } from '../store/chartStore';
 import { MOCK_SYMBOLS } from '../data/mockBars';
 import { drawBus } from './drawBus';
@@ -156,7 +156,7 @@ function Float({ kind, onClose, children }: { kind: FloatKind; onClose: () => vo
 }
 
 /**
- * 顶栏：视觉与交互沿用 dom/toolbar.ts（TradingView 稿 1:1 还原）。
+ * 顶栏：视觉与交互沿用 dom/toolbar.ts（设计稿 1:1 还原）。
  * 工具栏只是呈现层——状态都在 chartStore，这里订阅 store 把值推给它，
  * 它的按钮事件再写回 store（与 Agent 工具走同一条路径）。
  */
@@ -177,10 +177,8 @@ export function TopBar(): JSX.Element {
       onDataType: () => toast('数据类型切换尚未实现（当前为演示数据）'),
       onInterval: (_label, code) => st().setTimeframe(code),
       onStyle: (label) => {
-        if (label !== 'K线图') {
-          toast(`「${label}」尚未实现，引擎目前只有蜡烛图`);
-          tbRef.current?.setStyle('K线图');
-        }
+        const style = styleFromLabel(label);
+        if (style) st().setChartStyle(style);
       },
       onIndicators: () => {
         const on = !st().bbVisible;
@@ -210,6 +208,7 @@ export function TopBar(): JSX.Element {
       tb.setInterval(s.timeframe);
       tb.setLayoutName(s.layoutName);
       tb.setIndicatorsOn(s.bbVisible);
+      tb.setStyle(STYLE_LABELS[s.chartStyle]);
     };
     push(st());
     const unsub = useChartStore.subscribe(push);

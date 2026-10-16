@@ -50,11 +50,11 @@ Pine 编辑器、权益曲线、统计组件目前**没有对应的 UI 入口**�
 ```
 npm run typecheck                          0 错误（strict）
 npm test (vitest)                          引擎 142 PASS（绘图 39 + Pine 49 + 权益 24 + 统计 30）
-                                           + Agent 19 + 工作区 13 + 数据 13 = 共 49 个用例
+                                           + Agent 21 + 工作区 15 + 数据 13 = 共 53 个用例
 浏览器侧（dev 控制台 __app.runBrowserSelfTests()）
-                                           图表 49（改造前 48，新增 1 条 setRange 回归）+ 网格 6
+                                           图表 57（改造前 48，新增 setRange 回归 1 条 + 图表样式 8 条）+ 网格 6
                                            + 权益 35 + 统计 46
-E2E（puppeteer 驱动 headless Chrome，未入库）  27 PASS / 0 FAIL
+E2E（puppeteer 驱动 headless Chrome，未入库）  51 PASS / 0 FAIL
 ```
 
 **任何改动之后这套数字必须只增不减。** 加功能要加断言，改逻辑不能让已有断言变红。
@@ -126,10 +126,10 @@ E2E（puppeteer 驱动 headless Chrome，未入库）  27 PASS / 0 FAIL
 
 #### 2.5 顶栏 / 右侧面板 / 左侧工具栏
 
-- 状态：✅ 已接入。顶栏、右侧栏、左侧绘图栏都是 TradingView 稿的原 DOM 组件（`src/workspace/dom/`），React 只做外壳与 store 同步。
+- 状态：✅ 已接入。顶栏、右侧栏、左侧绘图栏都是 设计稿的原 DOM 组件（`src/workspace/dom/`），React 只做外壳与 store 同步。
   窄屏时顶栏按容器宽度逐级收起次要按钮（`@container`），避免挤出右侧面板。
 - 遗留：
-  1. 顶栏「图表样式」只有 K 线图可用 —— 引擎目前只有蜡烛图，美国线/线形图/面积图选了会 toast 并回退
+  1. ~~顶栏「图表样式」只有 K 线图可用~~ —— 已完成：K 线 / 美国线 / 线形图 / 面积图四种样式都在自有引擎里实现（`KChart.setStyle`、`ChartGrid.setChartStyle`），顶栏菜单与 Agent 工具 `set_chart_style` 走同一个 store 字段；Heikin Ashi、空心蜡烛、阶梯线等其余样式仍未做
   2. 顶栏「回放」「保存」「警报」「比较」「快照」「设置」是占位提示，分别对应 2.2、2.9 与未排期项；撤销/重做按钮目前恒可点（未读取 DrawLayer 的栈深度）
   3. 左侧绘图栏有很多菜单项（形态、仓位、笔刷、图标…）引擎没有对应工具，点击会 toast「暂未实现」，见 2.8
   4. 右侧图标栏（`dom/rightbar.ts` 原稿）：只有「自选表」面板可用（点一行切换标的）；警报 / 对象树 / Pine Editor / 日历等点开是空态；「AI Copilot」展开左侧 Agent，「筛选器」跳转 Strategy Screener
@@ -291,7 +291,7 @@ Rust 侧用 `Result<T, PineError>` + 明确的错误枚举，**不要用 `unwrap
   1. `cargo test` 全绿
   2. TS 版 **49 条 Pine 断言**在 Rust 侧逐条通过
   3. 同一批脚本两边输出逐值一致（容差 1e-9）
-  4. **`ta.ema` 的 SMA 播种方式仍未对真实 TradingView 核过** —— 这条限制照搬，别假装解决了
+  4. **`ta.ema` 的 SMA 播种方式仍未对参考实现核过** —— 这条限制照搬，别假装解决了
 - 成本：2~3 周
 - 备注：这是 Rust 收益最大、风险最低的一块。**如果只搬一块，搬这块。**
   远期优化：把 AST 解释改成字节码/闭包列表，1M bars 时才需要

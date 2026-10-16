@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { ChartGrid } from '../engine/grid';
-import type { TVChart } from '../engine/chart';
+import type { KChart } from '../engine/chart';
 import { DrawLayer } from '../engine/draw';
 import { mockDataSource } from '../data/mockBars';
 import { useChartStore } from '../store/chartStore';
@@ -39,7 +39,7 @@ export function ChartGridView(): JSX.Element {
     registerGrid(grid);
 
     /* ---------- 绘图层：每格一个，按需创建 ---------- */
-    const layers = new Map<TVChart, DrawLayer>();
+    const layers = new Map<KChart, DrawLayer>();
     let keyed: DrawLayer | null = null;
 
     const ensureLayers = (): void => {
@@ -110,6 +110,7 @@ export function ChartGridView(): JSX.Element {
       for (let i = 1; i < grid.layoutInfo().total; i++) grid.setTileTimeframe(i, SECONDARY_TF);
     }
     applyBb();
+    grid.setChartStyle(st0.chartStyle);
     ensureLayers();
     onActive();
 
@@ -138,6 +139,7 @@ export function ChartGridView(): JSX.Element {
         refreshLast();
       }
       if (s.bbVisible !== prev.bbVisible) applyBb();
+      if (s.chartStyle !== prev.chartStyle) grid.setChartStyle(s.chartStyle);
     });
 
     const unTheme = useAppStore.subscribe((s, prev) => {

@@ -1,5 +1,5 @@
-// tv-bottom —— TradingView 底部区域（策略报告工具条 + 概览面板）
-// 按 cn.tradingview.com 策略报告概览页 1:1 还原：
+// kc-bottom —— 底部区域（策略报告工具条 + 概览面板）
+// 按策略报告概览页设计稿 1:1 还原：
 // 工具条：左侧策略标签白卡片（MACD strategy）、右侧最小化/最大化；
 // 面板：关键统计四联大数字 → 表现组合图（每笔盈亏柱 + 累计损益折线，
 // 悬停深色 tooltip、右侧价格轴、终点红色徽标）→ 表现分析胶囊标签。
@@ -34,126 +34,126 @@ function fmt(n: number): string {
 
 /* --------------------------------------------------------------- 样式注入 */
 const CSS = `
-.tv-bottom { display: flex; flex-direction: column; flex: 0 0 auto; background: rgb(235,235,235);
+.kc-bottom { display: flex; flex-direction: column; flex: 0 0 auto; background: rgb(235,235,235);
   font: 400 14px/normal -apple-system, "system-ui", "Trebuchet MS", Roboto, Ubuntu, sans-serif;
   font-feature-settings: "lnum","tnum"; color: rgb(15,15,15); }
 /* —— 工具条 38px —— */
-.tv-bt-bar {
+.kc-bt-bar {
   display: flex; align-items: center; height: 38px; flex: 0 0 auto;
   background: rgb(249,249,249); border-top: 1px solid rgb(235,235,235);
   user-select: none; position: relative; z-index: 100;
 }
 /* 策略标签白卡片 */
-.tv-bt-strat {
+.kc-bt-strat {
   display: flex; align-items: center; gap: 7px; height: 30px; margin-left: 6px; padding: 0 6px 0 10px;
   background: #fff; border: 0; border-radius: 6px; cursor: pointer; color: rgb(15,15,15);
   font: 600 13px/normal -apple-system, "system-ui", sans-serif;
   transition: background-color .06s ease;
 }
-.tv-bt-strat:hover { background: rgb(242,242,242); }
-.tv-bt-strat .cw { display: flex; color: rgb(120,123,134); }
-.tv-bt-btn {
+.kc-bt-strat:hover { background: rgb(242,242,242); }
+.kc-bt-strat .cw { display: flex; color: rgb(120,123,134); }
+.kc-bt-btn {
   position: relative; z-index: 0; display: flex; align-items: center; justify-content: center;
   width: 38px; height: 38px; margin: 0; padding: 0; flex: 0 0 auto;
   border: 0; background: transparent; cursor: pointer; color: rgb(15,15,15);
   transition: background-color .06s ease;
 }
-.tv-bt-btn .pill {
+.kc-bt-btn .pill {
   position: absolute; z-index: -1; left: 2px; top: 2px; width: 34px; height: 34px;
   border-radius: 6px; background: transparent;
 }
-.tv-bt-btn:hover .pill { background: rgb(235,235,235); }
-.tv-bt-btn.tv-on .pill { background: rgb(235,235,235); }
-.tv-bt-btn.tv-on { color: rgb(41,98,255); }
-.tv-bt-spacer { flex: 1 1 100%; min-width: 0; }
+.kc-bt-btn:hover .pill { background: rgb(235,235,235); }
+.kc-bt-btn.kc-on .pill { background: rgb(235,235,235); }
+.kc-bt-btn.kc-on { color: rgb(41,98,255); }
+.kc-bt-spacer { flex: 1 1 100%; min-width: 0; }
 /* —— 面板 —— */
-.tv-bt-panel {
+.kc-bt-panel {
   background: #fff; height: 300px; display: flex; flex-direction: column;
   border-top: 1px solid rgb(235,235,235); overflow: hidden; transition: height .2s ease;
 }
-.tv-bt-panel.collapsed { height: 0; border-top-width: 0; }
-.tv-bt-body { flex: 1 1 auto; overflow-y: auto; padding: 10px 28px 16px; }
-.tv-bt-h2 { font: 600 24px/32px -apple-system, "system-ui", sans-serif; margin: 4px 0 14px; }
+.kc-bt-panel.collapsed { height: 0; border-top-width: 0; }
+.kc-bt-body { flex: 1 1 auto; overflow-y: auto; padding: 10px 28px 16px; }
+.kc-bt-h2 { font: 600 24px/32px -apple-system, "system-ui", sans-serif; margin: 4px 0 14px; }
 /* 关键统计四联（列宽比例对齐原稿：29%/27%/23%/21%） */
-.tv-bt-stats { display: grid; grid-template-columns: 29% 27% 23% minmax(0, 1fr); gap: 0; margin-bottom: 26px; }
-.tv-bt-stat .k { font: 400 13px/18px -apple-system, "system-ui", sans-serif; color: rgb(120,123,134); }
-.tv-bt-stat .vrow { display: flex; align-items: baseline; gap: 10px; margin-top: 2px; }
-.tv-bt-stat .v { font: 600 22px/30px -apple-system, "system-ui", sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.tv-bt-stat .s { font: 600 17px/24px -apple-system, "system-ui", sans-serif; color: rgb(15,15,15); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.tv-bt-stat .v.down, .tv-bt-stat .s.down { color: rgb(242,54,69); }
+.kc-bt-stats { display: grid; grid-template-columns: 29% 27% 23% minmax(0, 1fr); gap: 0; margin-bottom: 26px; }
+.kc-bt-stat .k { font: 400 13px/18px -apple-system, "system-ui", sans-serif; color: rgb(120,123,134); }
+.kc-bt-stat .vrow { display: flex; align-items: baseline; gap: 10px; margin-top: 2px; }
+.kc-bt-stat .v { font: 600 22px/30px -apple-system, "system-ui", sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.kc-bt-stat .s { font: 600 17px/24px -apple-system, "system-ui", sans-serif; color: rgb(15,15,15); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.kc-bt-stat .v.down, .kc-bt-stat .s.down { color: rgb(242,54,69); }
 /* 小节标题 */
-.tv-bt-sechead { display: flex; align-items: center; gap: 6px; margin: 6px 0 4px; }
-.tv-bt-sechead .tt { font: 600 20px/28px -apple-system, "system-ui", sans-serif; }
-.tv-bt-sechead .help { display: flex; color: rgb(120,123,134); cursor: pointer; }
-.tv-bt-sechead .sp { flex: 1 1 auto; }
-.tv-bt-mini {
+.kc-bt-sechead { display: flex; align-items: center; gap: 6px; margin: 6px 0 4px; }
+.kc-bt-sechead .tt { font: 600 20px/28px -apple-system, "system-ui", sans-serif; }
+.kc-bt-sechead .help { display: flex; color: rgb(120,123,134); cursor: pointer; }
+.kc-bt-sechead .sp { flex: 1 1 auto; }
+.kc-bt-mini {
   display: flex; align-items: center; justify-content: center; width: 28px; height: 28px;
   border: 0; border-radius: 6px; background: transparent; cursor: pointer; color: rgb(15,15,15);
   transition: background-color .06s ease;
 }
-.tv-bt-mini:hover { background: rgb(242,242,242); }
+.kc-bt-mini:hover { background: rgb(242,242,242); }
 /* 图表区 */
-.tv-bt-chart { position: relative; }
-.tv-bt-legend { position: absolute; z-index: 3; left: 2px; top: 0; font: 400 12px/18px -apple-system, sans-serif; color: rgb(15,15,15); pointer-events: none; }
-.tv-bt-legend .row { display: flex; align-items: center; gap: 4px; pointer-events: auto; }
-.tv-bt-legend .row .eye { display: flex; border: 0; background: transparent; padding: 2px; cursor: pointer; color: rgb(120,123,134); border-radius: 4px; }
-.tv-bt-legend .row .eye:hover { background: rgb(242,242,242); color: rgb(15,15,15); }
-.tv-bt-legend .row .eye.off { color: rgb(180,183,190); cursor: default; }
-.tv-bt-legend .row .eye.off:hover { background: transparent; color: rgb(180,183,190); }
-.tv-bt-legend .sub { color: rgb(120,123,134); margin-top: 2px; }
-.tv-bt-legend .exp {
+.kc-bt-chart { position: relative; }
+.kc-bt-legend { position: absolute; z-index: 3; left: 2px; top: 0; font: 400 12px/18px -apple-system, sans-serif; color: rgb(15,15,15); pointer-events: none; }
+.kc-bt-legend .row { display: flex; align-items: center; gap: 4px; pointer-events: auto; }
+.kc-bt-legend .row .eye { display: flex; border: 0; background: transparent; padding: 2px; cursor: pointer; color: rgb(120,123,134); border-radius: 4px; }
+.kc-bt-legend .row .eye:hover { background: rgb(242,242,242); color: rgb(15,15,15); }
+.kc-bt-legend .row .eye.off { color: rgb(180,183,190); cursor: default; }
+.kc-bt-legend .row .eye.off:hover { background: transparent; color: rgb(180,183,190); }
+.kc-bt-legend .sub { color: rgb(120,123,134); margin-top: 2px; }
+.kc-bt-legend .exp {
   margin-top: 6px; display: flex; align-items: center; justify-content: center;
   width: 24px; height: 18px; border: 1px solid rgb(210,212,220); border-radius: 4px;
   background: #fff; cursor: pointer; color: rgb(15,15,15); pointer-events: auto; padding: 0;
 }
-.tv-bt-legend .exp svg { transition: transform .2s ease; }
-.tv-bt-legend .exp.on svg { transform: rotate(180deg); }
-.tv-bt-xaxis { position: relative; height: 22px; font: 400 12px/22px -apple-system, sans-serif; color: rgb(15,15,15); }
-.tv-bt-xaxis span { position: absolute; top: 0; white-space: nowrap; }
-.tv-bt-xaxis span.y { font-weight: 600; }
-.tv-bt-strip { display: flex; gap: 1px; height: 4px; margin-top: 2px; }
-.tv-bt-strip i { flex: 1 1 0; border-radius: 1px; }
+.kc-bt-legend .exp svg { transition: transform .2s ease; }
+.kc-bt-legend .exp.on svg { transform: rotate(180deg); }
+.kc-bt-xaxis { position: relative; height: 22px; font: 400 12px/22px -apple-system, sans-serif; color: rgb(15,15,15); }
+.kc-bt-xaxis span { position: absolute; top: 0; white-space: nowrap; }
+.kc-bt-xaxis span.y { font-weight: 600; }
+.kc-bt-strip { display: flex; gap: 1px; height: 4px; margin-top: 2px; }
+.kc-bt-strip i { flex: 1 1 0; border-radius: 1px; }
 /* 深色 tooltip */
-.tv-bt-tip {
+.kc-bt-tip {
   position: absolute; z-index: 5; pointer-events: none; display: none;
   background: rgba(30,30,30,.96); color: #fff; border-radius: 6px; padding: 8px 12px 7px;
   font: 400 12px/20px -apple-system, sans-serif; box-shadow: 0 2px 8px rgba(0,0,0,.25);
   white-space: nowrap;
 }
-.tv-bt-tip .ti { color: rgba(255,255,255,.75); }
-.tv-bt-tip .tr { display: flex; align-items: center; gap: 6px; }
-.tv-bt-tip .tr i { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
-.tv-bt-tip .tr b { font-weight: 600; font-variant-numeric: tabular-nums; }
-.tv-bt-tip .td { color: rgba(255,255,255,.6); margin-top: 2px; }
-.tv-bt-tip .th { color: rgba(255,255,255,.45); font-size: 11px; }
+.kc-bt-tip .ti { color: rgba(255,255,255,.75); }
+.kc-bt-tip .tr { display: flex; align-items: center; gap: 6px; }
+.kc-bt-tip .tr i { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+.kc-bt-tip .tr b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.kc-bt-tip .td { color: rgba(255,255,255,.6); margin-top: 2px; }
+.kc-bt-tip .th { color: rgba(255,255,255,.45); font-size: 11px; }
 /* 表现分析胶囊 */
-.tv-bt-pills { display: flex; gap: 8px; margin: 10px 0 16px; flex-wrap: wrap; }
-.tv-bt-pill {
+.kc-bt-pills { display: flex; gap: 8px; margin: 10px 0 16px; flex-wrap: wrap; }
+.kc-bt-pill {
   height: 28px; padding: 0 14px; border: 0; border-radius: 14px; cursor: pointer;
   background: rgb(240,242,245); color: rgb(15,15,15);
   font: 500 13px/28px -apple-system, "system-ui", sans-serif;
   transition: background-color .06s ease;
 }
-.tv-bt-pill:hover { background: rgb(232,235,240); }
-.tv-bt-pill.on { background: rgb(15,15,15); color: #fff; }
+.kc-bt-pill:hover { background: rgb(232,235,240); }
+.kc-bt-pill.on { background: rgb(15,15,15); color: #fff; }
 /* 明细指标行 */
-.tv-bt-dgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px 24px; }
-.tv-bt-dgrid .k { font: 400 12px/16px -apple-system, sans-serif; color: rgb(120,123,134); }
-.tv-bt-dgrid .v { font: 600 15px/22px -apple-system, sans-serif; margin-top: 2px; font-variant-numeric: tabular-nums; }
-.tv-bt-dgrid .v.up { color: rgb(38,166,154); }
-.tv-bt-dgrid .v.down { color: rgb(242,54,69); }
-.tv-bt-foot {
+.kc-bt-dgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px 24px; }
+.kc-bt-dgrid .k { font: 400 12px/16px -apple-system, sans-serif; color: rgb(120,123,134); }
+.kc-bt-dgrid .v { font: 600 15px/22px -apple-system, sans-serif; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.kc-bt-dgrid .v.up { color: rgb(38,166,154); }
+.kc-bt-dgrid .v.down { color: rgb(242,54,69); }
+.kc-bt-foot {
   display: flex; align-items: center; gap: 8px; padding: 6px 16px;
   border-top: 1px solid rgb(235,235,235); color: rgb(120,123,134);
   font: 400 12px/16px -apple-system, sans-serif; flex: 0 0 auto;
 }
-.tv-bt-foot svg { color: rgb(41,98,255); }
+.kc-bt-foot svg { color: rgb(41,98,255); }
 `;
 
 function injectStyle(): void {
-  if (document.getElementById('tv-bottom-css')) return;
+  if (document.getElementById('kc-bottom-css')) return;
   const s = document.createElement('style');
-  s.id = 'tv-bottom-css';
+  s.id = 'kc-bottom-css';
   s.textContent = CSS;
   document.head.appendChild(s);
 }
@@ -226,27 +226,27 @@ export function createBottom(mount: HTMLElement, cb: BottomCallbacks = {}, opts:
   injectStyle();
   const name = opts.strategyName ?? 'MACD strategy';
 
-  const root = el('div', 'tv-bottom');
+  const root = el('div', 'kc-bottom');
 
   /* ================= 工具条 ================= */
-  const bar = el('div', 'tv-bt-bar');
+  const bar = el('div', 'kc-bt-bar');
   bar.setAttribute('role', 'toolbar');
   bar.setAttribute('aria-label', '策略报告工具条');
 
-  const panel = el('div', 'tv-bt-panel');
-  const strat = el('button', 'tv-bt-strat') as HTMLButtonElement;
+  const panel = el('div', 'kc-bt-panel');
+  const strat = el('button', 'kc-bt-strat') as HTMLButtonElement;
   strat.type = 'button';
   strat.title = name;
   strat.setAttribute('aria-label', `策略 ${name}`);
   strat.innerHTML = `${INDICATORS}<span class="nm">${name}</span><span class="cw">${CARET_INDICATORS}</span>`;
   strat.addEventListener('click', () => cb.onStrategy?.());
 
-  const minBtn = el('button', 'tv-bt-btn') as HTMLButtonElement;
+  const minBtn = el('button', 'kc-bt-btn') as HTMLButtonElement;
   minBtn.type = 'button';
   minBtn.title = '最小化面板';
   minBtn.setAttribute('aria-label', '最小化面板');
   minBtn.innerHTML = `<span class="pill"></span>${PANEL_COLLAPSE}`;
-  const maxBtn = el('button', 'tv-bt-btn') as HTMLButtonElement;
+  const maxBtn = el('button', 'kc-bt-btn') as HTMLButtonElement;
   maxBtn.type = 'button';
   maxBtn.title = '最大化面板';
   maxBtn.setAttribute('aria-label', '最大化面板');
@@ -255,19 +255,19 @@ export function createBottom(mount: HTMLElement, cb: BottomCallbacks = {}, opts:
 
   const collapse = (collapsed: boolean): void => {
     panel.classList.toggle('collapsed', collapsed);
-    minBtn.classList.toggle('tv-on', collapsed);
+    minBtn.classList.toggle('kc-on', collapsed);
     cb.onCollapse?.(collapsed);
   };
   minBtn.addEventListener('click', () => collapse(!panel.classList.contains('collapsed')));
 
-  bar.append(strat, el('div', 'tv-bt-spacer'), minBtn, maxBtn);
+  bar.append(strat, el('div', 'kc-bt-spacer'), minBtn, maxBtn);
 
   /* ================= 面板 ================= */
-  const body = el('div', 'tv-bt-body');
+  const body = el('div', 'kc-bt-body');
 
   /* —— 关键统计 —— */
-  body.appendChild(el('div', 'tv-bt-h2', '关键统计'));
-  const stats = el('div', 'tv-bt-stats');
+  body.appendChild(el('div', 'kc-bt-h2', '关键统计'));
+  const stats = el('div', 'kc-bt-stats');
   const statDefs: Array<[string, string, string | null, string | null]> = [
     ['总损益', `-${fmt(Math.abs(CUM[N - 1]))} USD`, `${(CUM[N - 1] / 1000).toFixed(2)}%`, 'down'],
     ['最大回撤', '69,312.24 USD', '69.31%', null],
@@ -275,7 +275,7 @@ export function createBottom(mount: HTMLElement, cb: BottomCallbacks = {}, opts:
     ['盈利因子', '0.207', null, null],
   ];
   for (const [k, v, s, dir] of statDefs) {
-    const m = el('div', 'tv-bt-stat');
+    const m = el('div', 'kc-bt-stat');
     m.innerHTML = `<div class="k">${k}</div><div class="vrow"><span class="v${dir ? ' ' + dir : ''}">${v}</span>`
       + (s ? `<span class="s${dir ? ' ' + dir : ''}">${s}</span>` : '') + '</div>';
     stats.appendChild(m);
@@ -283,10 +283,10 @@ export function createBottom(mount: HTMLElement, cb: BottomCallbacks = {}, opts:
   body.appendChild(stats);
 
   /* —— 表现（组合图） —— */
-  const secHead = el('div', 'tv-bt-sechead');
+  const secHead = el('div', 'kc-bt-sechead');
   secHead.innerHTML = `<span class="tt">表现</span><span class="help" title="了解报告指标">${HELP}</span><span class="sp"></span>`;
   const mkTool = (icon: string, label: string): HTMLButtonElement => {
-    const b = el('button', 'tv-bt-mini') as HTMLButtonElement;
+    const b = el('button', 'kc-bt-mini') as HTMLButtonElement;
     b.type = 'button';
     b.title = label;
     b.setAttribute('aria-label', label);
@@ -301,12 +301,12 @@ export function createBottom(mount: HTMLElement, cb: BottomCallbacks = {}, opts:
   const chartCol = el('div');
   chartCol.style.display = 'flex';
   chartCol.style.flexDirection = 'column';
-  const chartWrap = el('div', 'tv-bt-chart');
+  const chartWrap = el('div', 'kc-bt-chart');
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   chartWrap.appendChild(svg);
 
   // 图例（左上）
-  const legend = el('div', 'tv-bt-legend');
+  const legend = el('div', 'kc-bt-legend');
   const eyeBtn = el('button', 'eye') as HTMLButtonElement;
   eyeBtn.type = 'button';
   eyeBtn.title = '隐藏累计损益';
@@ -324,12 +324,12 @@ export function createBottom(mount: HTMLElement, cb: BottomCallbacks = {}, opts:
   chartWrap.appendChild(legend);
 
   // 深色 tooltip
-  const tip = el('div', 'tv-bt-tip');
+  const tip = el('div', 'kc-bt-tip');
   chartWrap.appendChild(tip);
 
   // X 轴 + 底部盈亏条
-  const xaxis = el('div', 'tv-bt-xaxis');
-  const strip = el('div', 'tv-bt-strip');
+  const xaxis = el('div', 'kc-bt-xaxis');
+  const strip = el('div', 'kc-bt-strip');
   for (const [d] of TRADES) {
     const seg = document.createElement('i');
     seg.style.background = d > 0 ? TEAL : RED;
@@ -473,25 +473,25 @@ export function createBottom(mount: HTMLElement, cb: BottomCallbacks = {}, opts:
   }
 
   /* —— 表现分析 —— */
-  const sec2 = el('div', 'tv-bt-sechead');
+  const sec2 = el('div', 'kc-bt-sechead');
   sec2.innerHTML = `<span class="tt">表现分析</span>`;
   body.appendChild(sec2);
 
-  const pills = el('div', 'tv-bt-pills');
+  const pills = el('div', 'kc-bt-pills');
   const PILL_DEFS = ['明细', '期刊', '基准', '保证金使用', '增长与衰退'];
   PILL_DEFS.forEach((p, i) => {
-    const b = el('button', i === 0 ? 'tv-bt-pill on' : 'tv-bt-pill') as HTMLButtonElement;
+    const b = el('button', i === 0 ? 'kc-bt-pill on' : 'kc-bt-pill') as HTMLButtonElement;
     b.type = 'button';
     b.textContent = p;
     b.addEventListener('click', () => {
-      pills.querySelectorAll('.tv-bt-pill').forEach(x => x.classList.remove('on'));
+      pills.querySelectorAll('.kc-bt-pill').forEach(x => x.classList.remove('on'));
       b.classList.add('on');
     });
     pills.appendChild(b);
   });
   body.appendChild(pills);
 
-  const dgrid = el('div', 'tv-bt-dgrid');
+  const dgrid = el('div', 'kc-bt-dgrid');
   const detailDefs: Array<[string, string, string | null]> = [
     ['毛利润', `${fmt(GROSS_WIN)} USD`, 'up'],
     ['毛损', `${fmt(GROSS_LOSS)} USD`, 'down'],
@@ -505,7 +505,7 @@ export function createBottom(mount: HTMLElement, cb: BottomCallbacks = {}, opts:
   }
   body.appendChild(dgrid);
 
-  const foot = el('div', 'tv-bt-foot');
+  const foot = el('div', 'kc-bt-foot');
   foot.innerHTML = `${UPGRADE}<span>升级即可完全访问策略报告数据</span>`;
 
   panel.append(body, foot);

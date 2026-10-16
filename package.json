@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "三栏应用：左侧菜单 + Agent 面板 + TradingView 风格图表区（TypeScript）",
+  "description": "三栏应用：左侧菜单 + Agent 面板 + 专业图表软件风格的图表区（TypeScript）",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",

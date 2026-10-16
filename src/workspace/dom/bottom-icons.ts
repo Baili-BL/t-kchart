@@ -1,5 +1,5 @@
-// TradingView 底部工具条 + 策略报告面板图标
-// 提取自 magicpatterns 导入的 cn.tradingview.com 设计稿
+// 底部工具条 + 策略报告面板图标
+// 提取自设计稿
 
 export const PANEL_COLLAPSE = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"28\" height=\"28\" fill=\"none\"><path fill=\"currentColor\" d=\"M7 20h14v1H7z\"></path></svg>";
 

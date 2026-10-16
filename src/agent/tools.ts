@@ -12,6 +12,8 @@ export interface ChartControls {
   /** 返回 false 表示数据不够长，已退化为 ALL */
   setRange(range: string): boolean;
   setLayout(rows: number, cols: number): void;
+  /** 切换主图样式，所有格一起变 */
+  setChartStyle(style: ChartStyle): void;
   setIndicator(indicator: string, visible: boolean): void;
   /** 运行 Pine 脚本并画到活动图上；失败时返回错误文本 */
   runPine(code: string): { ok: boolean; message: string };
@@ -19,6 +21,10 @@ export interface ChartControls {
   knownTimeframes(): string[];
   knownRanges(): string[];
 }
+
+/** 主图样式（与引擎 ChartStyle 同构；Agent 层不依赖引擎，故在此重复声明） */
+export type ChartStyle = 'candles' | 'bars' | 'line' | 'area';
+export const CHART_STYLE_KEYS: ChartStyle[] = ['candles', 'bars', 'line', 'area'];
 
 export const CHART_TOOL_DEFINITIONS: ToolDefinition[] = [
   {
@@ -55,6 +61,15 @@ export const CHART_TOOL_DEFINITIONS: ToolDefinition[] = [
       type: 'object',
       properties: { rows: { type: 'number' }, cols: { type: 'number' } },
       required: ['rows', 'cols'],
+    },
+  },
+  {
+    name: 'set_chart_style',
+    description: '切换主图样式：candles K线 / bars 美国线 / line 收盘价折线 / area 面积图。',
+    parameters: {
+      type: 'object',
+      properties: { style: { type: 'string', enum: CHART_STYLE_KEYS } },
+      required: ['style'],
     },
   },
   {
@@ -126,6 +141,14 @@ export function createChartTools(ctl: ChartControls): ToolRuntime {
           if (r < 1 || r > 4 || c < 1 || c > 4) return fail('rows / cols 取值范围 1–4');
           ctl.setLayout(Math.round(r), Math.round(c));
           return ok(`布局已设为 ${Math.round(r)}×${Math.round(c)}`);
+        }
+        case 'set_chart_style': {
+          const raw = str(a.style)?.toLowerCase();
+          if (!raw) return fail('缺少参数 style');
+          const style = CHART_STYLE_KEYS.find((k) => k === raw);
+          if (!style) return fail(`未知样式 ${raw}，可选：${CHART_STYLE_KEYS.join(', ')}`);
+          ctl.setChartStyle(style);
+          return ok(`主图样式已切换为 ${style}`);
         }
         case 'add_indicator': {
           const ind = str(a.indicator)?.toLowerCase();
