@@ -702,6 +702,35 @@ export class KChart {
     this.invalidate();
   }
 
+  /**
+   * 当前绘图区最多能同时显示多少根（barW 有 1px 下限，所以 = 绘图区像素宽）。
+   * 小格子（比如 4×4 布局）里这个数可能只有一两百。
+   */
+  maxVisibleBars(): number {
+    return Math.max(1, Math.floor(this.plot.w / 1));
+  }
+
+  /**
+   * 让 [t0, t1] 可见，**装不下时靠右对齐 t1**（保证最新一端在屏幕里）。返回 false 表示装不下、被截成了右侧一段。
+   *
+   * 为什么不直接用 setViewTimes：它以 t0 为左边缘往右铺，目标区间比视口宽时（barW 已经压到 1px 下限），
+   * 会**静默只显示左侧一段**，t1 在屏幕外 —— 点「1M」却看到最老的那一截。
+   * 这里的做法与 setRange 的夹紧哲学一致：宁可丢掉最老的一段，也要让最新的一根可见。
+   * 不触发视图回调，由调用方决定是否广播。
+   */
+  revealSpan(t0: number, t1: number): boolean {
+    const n = this.bars.length;
+    if (!n || !(t1 > t0)) return false;
+    this.setViewTimes(t0, t1);
+    const b = this.indexAtTime(t1);
+    const vis = Math.floor(this.plot.w / this.view.barW);
+    if (this.view.from + vis >= b) return true;
+    this.view.from = b + 1 - this.plot.w / this.view.barW;
+    this.clampView();
+    this.invalidate();
+    return false;
+  }
+
   /** 外部指定十字光标（多图联动）。传 null 清除。 */
   setSyncIndex(i: number | null): void {
     const v = i == null ? null : clamp(i, 0, Math.max(0, this.bars.length - 1));
@@ -765,11 +794,8 @@ export class KChart {
       return false;
     }
     if (n - i0 < MIN_RANGE_BARS) i0 = Math.max(0, n - MIN_RANGE_BARS);
-    this.setViewTimes(this.bars[i0].time, this.bars[n - 1].time);
-    // barW 有 1px 下限：整段范围装不下时，setViewTimes 会从范围起点往右铺，
-    // 用户点「1M」却看到最老的那一段、最新一根在屏幕外。改成靠右对齐，保证最新一根可见（README §7⑦）。
-    const vis = Math.floor(this.plot.w / this.view.barW);
-    if (this.view.from + vis < n - 1) this.showLast(vis);
+    // 整段范围装不下时 revealSpan 会靠右对齐，保证最新一根可见（README §7⑦）
+    this.revealSpan(this.bars[i0].time, this.bars[n - 1].time);
     this.notifyView();
     return true;
   }
@@ -1814,6 +1840,30 @@ export function selfTest(chart: KChart): TestResult {
   t('setViewTimes 装得下时右边缘也覆盖请求终点',
     !!vt2 && (!canFitVt || vt2[1] >= tgt1 - 86400000),
     'canFit=' + canFitVt + ' plotW=' + chart.plot.w.toFixed(0));
+
+  // 【回归】目标区间比视口宽：setViewTimes 会静默只显示左侧一段；revealSpan 必须让右端（最新）可见
+  {
+    const cap = chart.maxVisibleBars();
+    t('maxVisibleBars 等于绘图区像素宽（barW 下限 1px）', cap === Math.max(1, Math.floor(chart.plot.w)), String(cap));
+    const wideA = Math.max(0, bars.length - 1 - (cap + 50));
+    if (wideA > 0) {
+      const t0 = bars[wideA].time;
+      const t1 = bars[bars.length - 1].time;
+      chart.setViewTimes(t0, t1);
+      const left = chart.viewTimes();
+      t('（前提）比视口宽的区间用 setViewTimes 确实只显示左侧一段，右端被甩在屏幕外',
+        !!left && left[1] < t1, left ? String(left[1]) + ' < ' + String(t1) : 'null');
+      const fits = chart.revealSpan(t0, t1);
+      const right = chart.viewTimes();
+      t('revealSpan：装不下时返回 false，且靠右对齐、最新一根可见',
+        !fits && !!right && right[1] === t1, right ? String(right[1]) + ' vs ' + String(t1) : 'null');
+    } else {
+      t('revealSpan：数据不够长，跳过「装不下」场景', true);
+    }
+    const mid0 = bars[100].time;
+    const mid1 = bars[100 + Math.min(40, cap - 5)].time;
+    t('revealSpan：装得下时返回 true，左端对齐起点', chart.revealSpan(mid0, mid1) && (chart.viewTimes() as [number, number])[0] <= mid0 + 86400000);
+  }
 
   chart.setSyncIndex(123);
   t('setSyncIndex 后 crosshairIndex 返回它', chart.crosshairIndex() === 123);

@@ -49,12 +49,12 @@ Pine 编辑器、权益曲线、统计组件目前**没有对应的 UI 入口**�
 
 ```
 npm run typecheck                          0 错误（strict）
-npm test (vitest)                          引擎 208 PASS（绘图 39 + Pine 49 + Pine 撮合 66 + 权益 24 + 统计 30）
+npm test (vitest)                          引擎 217 PASS（绘图 39 + Pine 49 + Pine 撮合 69 + 权益 26 + 统计 34）
                                            + Agent 21 + 工作区 15 + 数据 13 = 共 54 个用例
 浏览器侧（dev 控制台 __app.runBrowserSelfTests()）
-                                           图表 57（改造前 48，新增 setRange 回归 1 条 + 图表样式 8 条）+ 网格 6
-                                           + 权益 35 + 统计 46
-E2E（puppeteer 驱动 headless Chrome，未入库）  51 PASS / 0 FAIL
+                                           图表 61（改造前 48，新增 setRange 回归 1 条 + 图表样式 8 条 + revealSpan 4 条）+ 网格 6
+                                           + 权益 37 + 统计 50
+E2E（puppeteer 驱动 headless Chrome，未入库）  53 PASS / 0 FAIL
 ```
 
 **任何改动之后这套数字必须只增不减。** 加功能要加断言，改逻辑不能让已有断言变红。

@@ -195,10 +195,36 @@ export interface Histogram {
   maxCount: number;
 }
 
+/** 第 i 条箱边界（0..n）。i==n 精确等于 hi，免得累加误差让最后一箱的右边界漂移。 */
+export function binEdge(lo: number, hi: number, n: number, i: number): number {
+  return i >= n ? hi : lo + i * ((hi - lo) / n);
+}
+
+/**
+ * 值 v 落在第几个箱；区间外 / 非有限 / 参数不合法返回 -1。
+ *
+ * ⚠️ **分箱和命中判定必须都走这一个函数。**
+ * 只用 `Math.floor((v - lo) / w)` 在浮点边界上会和「`from <= v < to`」（from 是 `lo + i*w` 算出来的）
+ * 分歧：例如 lo=-0.1、hi=0.6、7 箱，第 4 条边 `lo + 4*w` = 0.29999999999999993，
+ * 这个值恰好等于边界，floor 却把它算进第 3 箱（3 vs 4 差一箱）。
+ * 所以先 floor 估一个下标，再**对着真实存下来的边界**往两边校正，保证 `bins[k].from <= v < bins[k].to`
+ * （最后一箱右闭）永远成立。
+ */
+export function binIndexOf(v: number, lo: number, hi: number, n: number): number {
+  if (!isFinite(v) || !isFinite(lo) || !isFinite(hi) || !(n >= 1) || !(hi > lo)) return -1;
+  if (v < lo || v > hi) return -1;
+  let k = Math.floor((v - lo) / ((hi - lo) / n));
+  if (k >= n) k = n - 1;
+  if (k < 0) k = 0;
+  while (k < n - 1 && v >= binEdge(lo, hi, n, k + 1)) k++;
+  while (k > 0 && v < binEdge(lo, hi, n, k)) k--;
+  return k;
+}
+
 /**
  * 等宽分箱。
  * 边界规则：**左闭右开，最后一个箱右闭** —— 否则等于最大值的样本会掉到所有箱外面。
- * 这是直方图最经典的 off-by-one。
+ * 这是直方图最经典的 off-by-one。归箱统一用 `binIndexOf`。
  */
 export function histogram(values: number[], binCount: number, lo?: number, hi?: number): Histogram {
   const n = Math.max(1, Math.round(binCount));
@@ -210,15 +236,11 @@ export function histogram(values: number[], binCount: number, lo?: number, hi?: 
     b = vals.length ? Math.max.apply(null, vals) : 1;
   }
   if (!(b > a)) { b = a + 1; }
-  const w = (b - a) / n;
   const bins: HistBin[] = [];
-  for (let i = 0; i < n; i++) bins.push({ from: a + i * w, to: a + (i + 1) * w, count: 0 });
+  for (let i = 0; i < n; i++) bins.push({ from: binEdge(a, b, n, i), to: binEdge(a, b, n, i + 1), count: 0 });
   for (const v of vals) {
-    if (v < a || v > b) continue;
-    let k = Math.floor((v - a) / w);
-    if (k >= n) k = n - 1;      // 右闭
-    if (k < 0) k = 0;
-    bins[k].count++;
+    const k = binIndexOf(v, a, b, n);
+    if (k >= 0) bins[k].count++;
   }
   let mx = 0;
   for (const x of bins) if (x.count > mx) mx = x.count;
@@ -483,11 +505,9 @@ export class ReturnsChart {
     const v = this.vOf(px);
     const n = this.hist.bins.length;
     if (!n) return null;
-    const w = (this.hist.hi - this.hist.lo) / n;
-    let k = Math.floor((v - this.hist.lo) / w);
-    if (k >= n) k = n - 1;
-    if (k < 0) k = 0;
-    return k;
+    // 鼠标在绘图区内，但可能比数据范围略宽：先夹进 [lo, hi] 再走和分箱同一套 binIndexOf
+    const k = binIndexOf(Math.min(this.hist.hi, Math.max(this.hist.lo, v)), this.hist.lo, this.hist.hi, n);
+    return k < 0 ? null : k;
   }
 
   resize(): void {
@@ -1358,6 +1378,38 @@ export function analyticsSelfTest(): AnalyticsTestResult {
   t('histogram：空输入不炸且 maxCount 为 0', h4.total === 0 && h4.maxCount === 0 && h4.bins.length === 5);
   t('histogram：退化区间（lo==hi）不会除零',
     isFinite(histogram([1, 1], 3, 1, 1).bins[0].to));
+
+  // 【回归】浮点边界：floor 算术与「from <= v < to」会分歧（差一箱）。分箱必须和边界同一套口径。
+  {
+    let naiveDiffers = 0;
+    let bad = '';
+    for (const n of [3, 5, 7, 10, 12]) {
+      for (const lo of [-0.3, -0.1, 0, 0.1]) {
+        const hi = lo + 0.7;
+        for (let i = 0; i <= n; i++) {
+          const v = binEdge(lo, hi, n, i);
+          const want = Math.min(i, n - 1);
+          if (Math.floor((v - lo) / ((hi - lo) / n)) !== want && i < n && i > 0) naiveDiffers++;
+          if (binIndexOf(v, lo, hi, n) !== want) bad = bad || `n=${n} lo=${lo} edge=${i} → ${binIndexOf(v, lo, hi, n)}`;
+          const k = binIndexOf(v, lo, hi, n);
+          const hb = histogram([v], n, lo, hi).bins;
+          if (hb[k] === undefined || hb[k].count !== 1) bad = bad || `histogram 与 binIndexOf 不一致 n=${n} lo=${lo} i=${i}`;
+          if (hb[k] && !(hb[k].from <= v && (v < hb[k].to || (k === n - 1 && v <= hb[k].to)))) bad = bad || `v 不在所属箱的边界内 n=${n} lo=${lo} i=${i}`;
+        }
+      }
+    }
+    t('binIndexOf：恰好落在边界上的值，与 bins[k].from <= v < to 口径一致（含末箱右闭）', bad === '', bad);
+    t('（前提）朴素 floor 算术在这些边界上确实会分歧，否则上一条等于没测', naiveDiffers > 0, 'floor 分歧 ' + naiveDiffers + ' 处');
+  }
+  t('binIndexOf：区间外 / NaN / 非法参数返回 -1',
+    binIndexOf(2, 0, 1, 4) === -1 && binIndexOf(-1, 0, 1, 4) === -1 && binIndexOf(NaN, 0, 1, 4) === -1 &&
+      binIndexOf(0.5, 1, 1, 4) === -1 && binIndexOf(0.5, 0, 1, 0) === -1);
+  t('histogram：计数总和 == 样本数（落在区间内的都进了某一箱，没有重复也没有遗漏）', (() => {
+    const vals: number[] = [];
+    for (let i = 0; i <= 70; i++) vals.push(-0.1 + i * 0.01);
+    const h = histogram(vals, 7);   // 自动取 [min, max]，样本全在区间内
+    return h.bins.reduce((s, b) => s + b.count, 0) === vals.length;
+  })());
 
   /* ---------------- 盈亏统计 ---------------- */
   const wl = avgWinLoss([0.05, 0.03, -0.02, -0.04, -0.06, 0, 1e-12]);

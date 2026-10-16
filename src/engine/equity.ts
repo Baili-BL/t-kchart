@@ -163,8 +163,19 @@ export interface BacktestResult extends EquitySeries {
   maxDrawdown: number;
   /** 末值 */
   netProfit: number;
-  /** 持仓区间，用来画底部色条 */
-  positions: { from: number; to: number; long: boolean }[];
+  /**
+   * 持仓区间，用来画底部色条。
+   * ⚠️ 收尾还没平的那一段带 `open: true`，**它不是一笔成交**：
+   * `trades` / `tradeReturns` / `tradeCount` 只对应 `!open` 的区间。
+   * 把 positions 当成交列表去映射收益率（缺的补 0）会多出一笔 ret=0 的幽灵交易，
+   * 让直方图各箱对不上总数。要成交列表请用 `closedPositions()`。
+   */
+  positions: { from: number; to: number; long: boolean; open?: boolean }[];
+}
+
+/** 只保留已平仓的区间，与 trades / tradeReturns 一一对应 */
+export function closedPositions<T extends { open?: boolean }>(positions: T[]): T[] {
+  return positions.filter((p) => !p.open);
 }
 
 /**
@@ -188,7 +199,7 @@ export function simulateMaCross(bars: Bar[], fastLen: number, slowLen: number, s
   let cash = start;
   let qty = 0;
   const points: EquityPoint[] = [];
-  const positions: { from: number; to: number; long: boolean }[] = [];
+  const positions: { from: number; to: number; long: boolean; open?: boolean }[] = [];
   const tradePnls: number[] = [];
   const tradeReturns: number[] = [];
   let openIdx = -1;
@@ -239,7 +250,7 @@ export function simulateMaCross(bars: Bar[], fastLen: number, slowLen: number, s
   }
 
   // 收尾没平仓的也算一段持仓
-  if (openIdx >= 0 && n > 0) positions.push({ from: bars[openIdx].time, to: bars[n - 1].time, long: true });
+  if (openIdx >= 0 && n > 0) positions.push({ from: bars[openIdx].time, to: bars[n - 1].time, long: true, open: true });
 
   let wins = 0;
   for (const p of tradePnls) if (p > 0) wins++;
@@ -1174,8 +1185,24 @@ export function equitySelfTest(bars?: Bar[]): EquityTestResult {
   t('回测：最大回撤 >= 0', bt.maxDrawdown >= 0, bt.maxDrawdown.toFixed(2));
   t('回测：winRate 落在 [0,1]', bt.winRate >= 0 && bt.winRate <= 1, bt.winRate.toFixed(3));
   t('回测：有平仓交易（不然说明信号逻辑没跑起来）', bt.tradeCount > 0, String(bt.tradeCount));
-  t('回测：笔数 == 持仓区间数', bt.tradeCount === bt.positions.length,
-    bt.tradeCount + ' vs ' + bt.positions.length);
+  t('回测：笔数 == 已平仓的持仓区间数 == 逐笔收益率个数', bt.tradeCount === closedPositions(bt.positions).length &&
+    bt.tradeCount === bt.tradeReturns.length, bt.tradeCount + ' vs ' + closedPositions(bt.positions).length);
+  // 【回归】收尾持仓：positions 会比成交多一段（带 open 标记），不能被当成一笔成交
+  {
+    const up: Bar[] = [];
+    let px = 100;
+    for (let i = 0; i < 80; i++) {
+      const c = i < 25 ? 100 : 100 + (i - 24) * 1.5;
+      up.push({ time: Date.UTC(2020, 0, 2) + i * 86400000, open: px, high: Math.max(px, c) + 0.5, low: Math.min(px, c) - 0.5, close: c, volume: 100 });
+      px = c;
+    }
+    const r = simulateMaCross(up, 5, 20, 100000);
+    t('回测：末段仍持仓时 positions 比成交多一段，且多出的那段标了 open',
+      r.tradeCount === 0 && r.positions.length === 1 && r.positions[0].open === true && r.tradeReturns.length === 0,
+      `trades=${r.tradeCount} positions=${r.positions.length}`);
+    t('回测：closedPositions 与 tradeReturns 一一对应（不产生 ret=0 的幽灵交易）',
+      closedPositions(r.positions).length === r.tradeReturns.length);
+  }
   // 这条是真断言：逐笔收益率**连乘**必须等于「末权益 / 初始资金」。
   // 它同时验证了收益率的分母（建仓权益而不是初始资金）和复利一致性。
   t('回测：Π(1+逐笔收益率) == 末权益 / 初始资金', (() => {

@@ -268,7 +268,8 @@ export class ChartGrid {
       try {
         for (let k = 0; k < this.tiles.length; k++) {
           if (k === ix) continue;
-          this.tiles[k].chart.setViewTimes(t0, t1);
+          // 目标区间比这一格的视口宽时靠右对齐，而不是静默只显示左侧一段
+          this.tiles[k].chart.revealSpan(t0, t1);
         }
       } finally {
         this.busyGuard = false;

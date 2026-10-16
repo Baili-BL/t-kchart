@@ -133,7 +133,8 @@ export interface StrategyResult {
   winRate: number;
   maxDrawdown: number;
   netProfit: number;
-  positions: { from: number; to: number; long: boolean }[];
+  /** 收尾未平的持仓带 `open: true`，不是成交；与 equity.ts 的 BacktestResult 同口径 */
+  positions: { from: number; to: number; long: boolean; open?: boolean }[];
 
   initialCapital: number;
   finalEquity: number;
@@ -391,7 +392,7 @@ export class StrategyBroker {
     const cfg = this.cfg;
     const trades: number[] = [];
     const tradeReturns: number[] = [];
-    const positions: { from: number; to: number; long: boolean }[] = [];
+    const positions: { from: number; to: number; long: boolean; open?: boolean }[] = [];
     let grossProfit = 0;
     let grossLoss = 0;
     let wins = 0;
@@ -411,7 +412,7 @@ export class StrategyBroker {
     }
     // 还没平的持仓也算一段（和 simulateMaCross 一致），但不计入成交笔数
     const lastTime = this.points.length ? this.points[this.points.length - 1].time : 0;
-    for (const l of this.lots) positions.push({ from: l.time, to: lastTime, long: l.dir === 'long' });
+    for (const l of this.lots) positions.push({ from: l.time, to: lastTime, long: l.dir === 'long', open: true });
     positions.sort((a, b) => a.from - b.from || a.to - b.to);
 
     const finalEquity = this.points.length ? this.points[this.points.length - 1].equity : cfg.initialCapital;

@@ -13,7 +13,8 @@
 
 import type { Bar } from './chart';
 import { log } from './chart';
-import { simulateMaCross } from './equity';
+import { closedPositions, simulateMaCross } from './equity';
+import { histogram } from './analytics';
 import { PineEngine, pineTestBars } from './pine';
 import { StrategyBroker, STRATEGY_DEFAULTS, sharpe, strategyConfigFromDecl } from './strategy';
 import type { StrategyConfig, StrategyResult } from './strategy';
@@ -278,6 +279,17 @@ export function strategySelfTest(): StrategyTestResult {
     `${pr.netProfit} vs ${ref.netProfit}`);
   t('演示策略：持仓区间一致', pr.positions.length === ref.positions.length &&
     pr.positions.every((p, i) => p.from === ref.positions[i].from && p.to === ref.positions[i].to));
+
+  // 【回归】收尾持仓不是成交：positions 多一段（open），不能让直方图总数多出 ret=0 的幽灵交易
+  const openEnd = runBroker(UP, { defaultQtyValue: 10 }, (i, br) => { if (i === 0) br.placeEntry('A', 'long', null); }).res;
+  t('收尾未平：positions 有 1 段且标 open，成交 0 笔、逐笔收益率 0 个',
+    openEnd.tradeCount === 0 && openEnd.positions.length === 1 && openEnd.positions[0].open === true && openEnd.tradeReturns.length === 0);
+  t('closedPositions == 逐笔收益率 == 成交数（策略结果与 simulateMaCross 都一样）',
+    closedPositions(pr.positions).length === pr.tradeReturns.length && pr.tradeReturns.length === pr.tradeCount &&
+      closedPositions(ref.positions).length === ref.tradeReturns.length);
+  t('收益分布直方图各箱之和 == 成交笔数（没有幽灵交易）',
+    histogram(pr.tradeReturns, 8).bins.reduce((s, b) => s + b.count, 0) === pr.tradeCount &&
+      histogram(ref.tradeReturns, 8).bins.reduce((s, b) => s + b.count, 0) === ref.tradeCount);
 
   const sizeRun = run(PINE_HEAD(', default_qty_value=10') + 'if bar_index == 0\n    strategy.entry("A", strategy.long)\nplot(strategy.position_size)\nplot(strategy.opentrades)', UP);
   t('strategy.position_size：第 0 根 0，成交后（第 1 根起）10；opentrades 同步',

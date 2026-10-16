@@ -87,9 +87,9 @@ VITE_DEEPSEEK_MODEL=deepseek-chat
 | 层 | 命令 | 内容 |
 | --- | --- | --- |
 | 类型 | `npm run typecheck` | `strict: true`，0 错误 |
-| 引擎（Node） | `npm test` | 绘图 39 + Pine 49 + Pine 撮合 66 + 权益 24 + 统计 30 = 208（基线，只增不减） |
+| 引擎（Node） | `npm test` | 绘图 39 + Pine 49 + Pine 撮合 69 + 权益 26 + 统计 34 = 217（基线，只增不减） |
 | Agent / 工作区 / 数据 | `npm test` | 意图解析、工具校验、runner 循环（含报错/中断/死循环兜底）、模拟账户不变式、范围高亮、mock 数据不变式 |
-| 引擎（浏览器，需 canvas） | 开发模式下控制台 `await __app.runBrowserSelfTests()` | 图表 57 + 网格 6 + 权益 35 + 统计 46 |
+| 引擎（浏览器，需 canvas） | 开发模式下控制台 `await __app.runBrowserSelfTests()` | 图表 61 + 网格 6 + 权益 37 + 统计 50 |
 
 `__app` 只在 `npm run dev` 下挂到 `window`，生产包里没有。
 
@@ -193,6 +193,15 @@ this.view.from = anchor - (px - this.plot.l) / this.view.barW;
 **⑦ `barW` 有 1px 下限**，所以 `fitContent()` 在「bar 数量 × 1px > 绘图宽度」时**装不下全部**，
 此时它会靠右对齐、保证最后一根可见。自检里这条断言写的就是这个真实契约（`canFit` 分支），
 不是「首尾都可见」那种在窄窗口下会假失败的写法。真要装下 5000 根，就得做 LOD 聚合。
+
+同一个下限也影响 `setViewTimes(t0, t1)`：目标区间比视口宽时它以 t0 为左边缘往右铺，**静默只显示左侧一段**。
+要「让某段时间可见」请用 `revealSpan(t0, t1)`（装不下时靠右对齐 t1，返回 false），`maxVisibleBars()` 给出当前最多能放多少根。
+`setRange` 和多图的「范围联动」都走 `revealSpan`。
+
+**⑧ 统计组件的三个对账坑**（都有回归自检）：
+1. 回测的 `positions` 在收尾仍持仓时比成交多一段，那段带 `open: true`，**不是一笔成交**；
+   把 positions 当成交列表去映射收益率会多出 ret=0 的幽灵交易，直方图各箱之和就对不上总数。用 `closedPositions()`。
+2. 直方图分箱和命中判定必须共用 `binIndexOf`：朴素的 `floor((v-lo)/w)` 在浮点边界上会和「`from <= v < to`」差一箱。
 
 ---
 
@@ -468,7 +477,7 @@ ta.* 的递推公式（EMA/RMA 的 SMA 播种、RSI、ATR、BOLL、MACD）、元
 | T3 工作流 | 状态 | 说明 |
 | --- | --- | --- |
 | **Pine 引擎** | ✅ Phase 1 完成 | 词法+语法+序列运行时+45 内置+plot 输出，49 条自检 |
-| **Pine 撮合（`strategy.*`）** | ✅ Phase 2 完成 | `strategy.ts`：市价入场 / 反手 / pyramiding / stop·limit 退出 / 手续费 / 滑点 / 保证金，66 条自检；口径见 §12.1 |
+| **Pine 撮合（`strategy.*`）** | ✅ Phase 2 完成 | `strategy.ts`：市价入场 / 反手 / pyramiding / stop·limit 退出 / 手续费 / 滑点 / 保证金，69 条自检；口径见 §12.1 |
 | **权益曲线图** | ✅ 完成 | 折线 + 每根盈亏柱状 + 回撤填充 + 末端标签 + 统计；见 §14 |
 | **统计组件** | ✅ 完成 | 收益分布 / 交易环形图 / 季节性叠加线；见 §15 |
 | **绘图工具框架** | ✅ 框架完成 | `draw.ts`：9 种工具 + 命中/拖动/手柄/磁吸/撤销/持久化，39 条自检；**79 种全量不承诺** |
