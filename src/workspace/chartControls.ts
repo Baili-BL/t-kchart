@@ -5,6 +5,8 @@ import { MOCK_SYMBOLS } from '../data/mockBars';
 import { TIMEFRAMES, useChartStore } from '../store/chartStore';
 import { getGrid } from './gridRegistry';
 import { replayControl } from './replayActions';
+import { useStudyStore } from '../store/studyStore';
+import { INDICATORS, findIndicator } from '../indicators';
 
 /**
  * ChartControls 的真实实现：
@@ -20,6 +22,23 @@ export const chartControls: ChartControls = {
   replay: (action, value) => replayControl(action, value),
   setIndicator: (indicator, visible) => {
     if (indicator === 'bb') useChartStore.getState().setBb(visible);
+  },
+  addStudy(query) {
+    const hit = findIndicator(query);
+    if (!hit) return { ok: false, message: `没有找到指标「${query}」。先用 list_indicators 看看有哪些。` };
+    return useStudyStore.getState().addIndicator(hit.id);
+  },
+  removeStudy(query) {
+    const hit = findIndicator(query);
+    if (!hit) return { ok: false, message: `没有找到指标「${query}」` };
+    const n = useStudyStore.getState().removeByQuery(hit.id);
+    return n > 0 ? { ok: true, message: `已移除 ${n} 个「${hit.name}」` } : { ok: false, message: `图上没有「${hit.name}」` };
+  },
+  listStudies() {
+    const on = useStudyStore.getState().studies.map((s) => s.name);
+    const usable = INDICATORS.filter((d) => d.source).map((d) => `${d.name}(${d.short})`);
+    const off = INDICATORS.filter((d) => !d.source).map((d) => `${d.name}：${d.unsupported}`);
+    return `图上已有：${on.length ? on.join('、') : '无'}\n可用（Pine v6）：${usable.join('、')}\n不可用：\n- ${off.join('\n- ')}`;
   },
 
   setRange(range) {

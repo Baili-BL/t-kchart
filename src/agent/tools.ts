@@ -18,7 +18,14 @@ export interface ChartControls {
   setLayoutId(id: string): void;
   /** 切换主图样式，所有格一起变 */
   setChartStyle(style: ChartStyle): void;
+  /** 主图自带的布林带通道显示 / 隐藏 */
   setIndicator(indicator: string, visible: boolean): void;
+  /** 按名称 / 缩写 / 中文关键词把内置指标（Pine v6 脚本）加到图上；找不到或不可用时 ok=false 并说明原因 */
+  addStudy(query: string): { ok: boolean; message: string };
+  /** 把图上这类指标全部移除 */
+  removeStudy(query: string): { ok: boolean; message: string };
+  /** 指标清单：可用的 + 不可用的（带原因）+ 图上已有的 */
+  listStudies(): string;
   /** K 线回放控制；状态不对（比如没在回放就 play）时返回 ok=false 并说明原因 */
   replay(action: ReplayActionName, value?: number): { ok: boolean; message: string };
   /** 运行 Pine 脚本并画到活动图上；失败时返回错误文本 */
@@ -105,19 +112,36 @@ export const CHART_TOOL_DEFINITIONS: ToolDefinition[] = [
   },
   {
     name: 'add_indicator',
-    description: '显示或隐藏指标。目前支持 bb（布林带通道）。',
+    description:
+      '添加（或移除）指标。indicator 可以是英文全名 / 缩写 / 中文名，如 "MACD"、"RSI"、"Exponential moving average"、"布林带"。' +
+      '特例：bb = 主图自带的布林带通道（visible 控制显示隐藏）。所有指标都是 Pine v6 脚本；visible=false 表示移除这类指标。' +
+      '不知道有哪些时先调 list_indicators。',
     parameters: {
       type: 'object',
       properties: {
-        indicator: { type: 'string', enum: ['bb'] },
-        visible: { type: 'boolean', description: '默认 true' },
+        indicator: { type: 'string', description: '指标名称或缩写' },
+        visible: { type: 'boolean', description: '默认 true；false = 移除' },
       },
       required: ['indicator'],
     },
   },
   {
+    name: 'remove_indicator',
+    description: '把图上某类指标全部移除（按名称 / 缩写 / 中文名匹配）。',
+    parameters: {
+      type: 'object',
+      properties: { indicator: { type: 'string' } },
+      required: ['indicator'],
+    },
+  },
+  {
+    name: 'list_indicators',
+    description: '列出内置指标清单（哪些可用、哪些不可用及原因）和图上已添加的指标。',
+    parameters: { type: 'object', properties: {} },
+  },
+  {
     name: 'run_pine',
-    description: '在活动图上运行 Pine v5 子集脚本（仅支持引擎已实现的内置，见 README §12）。',
+    description: '在活动图上运行 Pine 脚本（v5 / v6 子集，仅支持引擎已实现的内置，见 README §12）。',
     parameters: {
       type: 'object',
       properties: { code: { type: 'string', description: '完整的 Pine 源码' } },
@@ -214,12 +238,28 @@ export function createChartTools(ctl: ChartControls): ToolRuntime {
           return r.ok ? ok(r.message) : fail(r.message);
         }
         case 'add_indicator': {
-          const ind = str(a.indicator)?.toLowerCase();
-          if (ind !== 'bb') return fail('目前只支持 indicator = "bb"');
+          const raw = str(a.indicator);
+          if (!raw) return fail('缺少参数 indicator');
           const visible = a.visible === undefined ? true : a.visible === true || a.visible === 'true';
-          ctl.setIndicator('bb', visible);
-          return ok(`布林带已${visible ? '显示' : '隐藏'}`);
+          if (raw.toLowerCase() === 'bb') {
+            ctl.setIndicator('bb', visible);
+            return ok(`布林带已${visible ? '显示' : '隐藏'}`);
+          }
+          const r = visible ? ctl.addStudy(raw) : ctl.removeStudy(raw);
+          return r.ok ? ok(r.message) : fail(r.message);
         }
+        case 'remove_indicator': {
+          const raw = str(a.indicator);
+          if (!raw) return fail('缺少参数 indicator');
+          if (raw.toLowerCase() === 'bb') {
+            ctl.setIndicator('bb', false);
+            return ok('布林带已隐藏');
+          }
+          const r = ctl.removeStudy(raw);
+          return r.ok ? ok(r.message) : fail(r.message);
+        }
+        case 'list_indicators':
+          return ok(ctl.listStudies());
         case 'run_pine': {
           const code = str(a.code);
           if (!code) return fail('缺少参数 code');

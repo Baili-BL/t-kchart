@@ -1,5 +1,6 @@
 import { ChartGridView } from './ChartGridView';
 import { DrawToolbar } from './DrawToolbar';
+import { IndicatorDialog, StudySettingsDialog } from './IndicatorDialog';
 import { PaperTrade } from './PaperTrade';
 import { ReplayBar } from './ReplayBar';
 import { RangeBar } from './RangeBar';
@@ -25,6 +26,8 @@ export function ChartWorkspace(): JSX.Element {
       </div>
       <RightPanel />
       <RightRail />
+      <IndicatorDialog />
+      <StudySettingsDialog />
     </div>
   );
 }

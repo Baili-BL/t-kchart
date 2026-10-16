@@ -20,6 +20,7 @@
  */
 
 import { DEFAULT_LAYOUT_ID, LayoutDef, gridTemplate, layoutById, uniformLayoutId } from './layouts';
+import type { StudyDef } from './studies';
 import { Bar, ChartOptions, ChartStyle, RANGES, KChart, clamp, log, makeBars, resample } from './chart';
 
 export interface SymbolDef {
@@ -127,6 +128,9 @@ export class ChartGrid {
   private chartOptions: Partial<ChartOptions> = {};
   private initialSymbols: string[] = [];
   private styleName: ChartStyle = 'candles';
+  /** 图上的指标定义：所有格共用，新建的格子也要补上 */
+  private studyDefs: StudyDef[] = [];
+  private studyHandler: ((uid: string, action: 'settings' | 'remove') => void) | null = null;
 
   constructor(target: HTMLElement | string, options?: GridOptions) {
     const el = typeof target === 'string' ? document.querySelector(target) : target;
@@ -219,6 +223,8 @@ export class ChartGrid {
       });
       chart.setTheme(this.themeName);
       chart.setStyle(this.styleName);
+      chart.setStudyHandler(this.studyHandler);
+      if (this.studyDefs.length) chart.setStudies(this.studyDefs);
 
       const tile: Tile = { el, canvas, badge, chart, symbol: ticker, timeframe: this.timeframe };
       el.addEventListener('pointerdown', () => this.setActive(i), { passive: true });
@@ -468,6 +474,24 @@ export class ChartGrid {
   setChartStyle(style: ChartStyle): void {
     this.styleName = style;
     for (const t of this.tiles) t.chart.setStyle(style);
+  }
+
+  /* ------------------------------------------------------------- 指标 */
+
+  /** 整体换一组指标（Pine v6 脚本）；每一格在自己的数据上各自运行，新建的格子也会带上 */
+  setStudies(defs: StudyDef[]): void {
+    this.studyDefs = defs.slice();
+    for (const t of this.tiles) t.chart.setStudies(this.studyDefs);
+  }
+
+  studiesNow(): StudyDef[] {
+    return this.studyDefs;
+  }
+
+  /** 指标图例上的「设置 / 删除」按钮被点击 */
+  setStudyHandler(fn: ((uid: string, action: 'settings' | 'remove') => void) | null): void {
+    this.studyHandler = fn;
+    for (const t of this.tiles) t.chart.setStudyHandler(fn);
   }
 
   chartStyleNow(): ChartStyle {

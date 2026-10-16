@@ -32,7 +32,8 @@
 | `src/engine/chart.ts` | 单图：蜡烛/成交量、双轴、十字光标、光标锚定缩放、通道、主题、显示范围 |
 | `src/engine/grid.ts` | 多图网格 + 联动（按时间对齐）；可注入 `dataSource`、每格独立周期、`activechange` 事件；布局来自目录，支持非均匀排法 |
 | `src/engine/layouts.ts` | 多图布局目录：1–16 张图、共 55 种排法（含非均匀），纯数据 + 栅格化函数 |
-| `src/engine/pine.ts` | Pine v5 子集解释器 |
+| `src/engine/pine.ts` | Pine v5 / v6 子集解释器 |
+| `src/engine/studies.ts`、`src/indicators/` | 指标（study）模型与画法（副图 / 叠加 / fill）+ 内置指标库（全部 Pine v6 脚本）+ 浏览器自检 |
 | `src/engine/draw.ts` | 绘图工具层（9 种工具） |
 | `src/engine/equity.ts` | 权益曲线 + 双均线回测口径 |
 | `src/engine/analytics.ts` | 收益分布 / 交易环形图 / 季节性叠加线 |
@@ -50,12 +51,12 @@ Pine 编辑器、权益曲线、统计组件目前**没有对应的 UI 入口**�
 
 ```
 npm run typecheck                          0 错误（strict）
-npm test (vitest)                          引擎 590 PASS（绘图 39 + Pine 49 + Pine 撮合 69 + 权益 26 + 统计 34 + 回放 27 + 布局目录 346）
-                                           共 70 个 vitest 用例（含 Agent / 工作区 / 数据 / 回放 / 布局）
+npm test (vitest)                          引擎 615 PASS（绘图 39 + Pine 74 + Pine 撮合 69 + 权益 26 + 统计 34 + 回放 27 + 布局目录 346）
+                                           共 87 个 vitest 用例（含 Agent / 工作区 / 数据 / 回放 / 布局 / 指标库 15）
 浏览器侧（dev 控制台 __app.runBrowserSelfTests()）
                                            图表 76（改造前 48，新增 setRange 回归 1 条 + 图表样式 8 条 + revealSpan 4 条 + 回放 15 条）+ 网格 20（含 55 种布局抽样的像素位置、时间联动）
-                                           + 权益 37 + 统计 50
-E2E（puppeteer 驱动 headless Chrome，未入库）  79 PASS / 0 FAIL
+                                           + 权益 37 + 统计 50 + 指标 19
+E2E（puppeteer 驱动 headless Chrome，未入库）  布局 13 + 指标 36 PASS / 0 FAIL（早先的整页 E2E 79 条已随脚本被覆盖，未重跑）
 ```
 
 **任何改动之后这套数字必须只增不减。** 加功能要加断言，改逻辑不能让已有断言变红。
@@ -120,8 +121,22 @@ E2E（puppeteer 驱动 headless Chrome，未入库）  79 PASS / 0 FAIL
      现有数据源只有 OHLC，合成「半根」是编造数据，所以没做
 - 行为口径：回放只作用于**当前选中的那一格**；换标的 / 换周期 / 改布局 / 点另一格都会结束回放并恢复完整数据；
   回放期间实时 `update()` 只更新完整数据、不会冒出「未来」的柱子；Agent 可说「开始回放 / 回放前进 5 根 / 回放每秒 10 根 / 退出回放」
-- 限制：每步都整体重算指标，O(n) / 步，当前数据量（~1000 根）无感；Pine 指标的 plot 线没有随回放重算
-  （因果性已测，不会泄露未来，但回放期间需要重新运行才会更新）
+- 限制：每步都整体重算指标，O(n) / 步，当前数据量（~1000 根）无感；通过「指标」对话框 / `add_indicator` 加的指标会随回放重算（已测因果性）；
+  但用 `run_pine` 画上去的 plot 线不会，回放期间需要重新运行才会更新
+
+#### 2.14 指标库（Pine v6）
+
+- 状态：✅ 已完成（`src/indicators/` 脚本库 + `src/engine/studies.ts` 副图/叠加渲染 + `IndicatorDialog` + Agent `add_indicator / remove_indicator / list_indicators`）
+- 约束（用户要求）：**所有指标必须用 Pine v6 写**——36 个可用指标全部是 `//@version=6` 脚本，由 `PineEngine` 执行
+- 引擎同步升级：v5/v6 版本头（其它版本拒绝）、v6 移除 `when=`、类型前缀声明、`#RRGGBB(AA)`、`+=` 等复合赋值、`break/continue`、
+  `plot` 位置参数 / 逐根颜色 / `display=none` / 返回句柄、`fill`、`input` 声明登记、十余个新 `ta.*` 与 `ta.tr/obv/accdist` 内置变量
+- **完成判据**与完成情况（实跑）：
+  1. ✅ 每个可用指标 `//@version=6`、能在 400 根行情上跑通且有非空输出（vitest）
+  2. ✅ ~30 个指标的数值与独立 TS 参考实现逐根一致（容差 1e-7）——对数中发现并修正了 `ta.wma` 权重写反的旧 bug
+  3. ✅ 副图布局不变式（贴边、首尾相接、总高 ≤ 60%、删光后主图恢复）、像素断言、副图内点击不触发绘图层、⚙/✕ 按钮命中、回放因果、实时 tick 重算（浏览器自检 19 条）
+  4. ✅ 真鼠标 E2E 36 条：对话框结构（分区 / 胶囊 / BETA / 搜索 / 收藏 / 空态）→ 点击添加 → 图例 ⚙ 改参数 → ✕ 删除 → 切布局新格子带指标 → Agent 加 / 删 → 坏脚本隔离
+- 诚实的边界：12 个参考页里的指标**做不了**（需要全市场 / 第二标的 / 更小周期数据，或 `line.*` + 枢轴检测，或 `math.acos`），
+  清单里置灰并写明原因，不做近似；策略 / 简介 / 形态 / Options 胶囊与基本面、社区分区目前是空态；没有脚本编辑器（「我的脚本」空态）
 
 #### 2.3 图表 ↔ 统计组件联动
 

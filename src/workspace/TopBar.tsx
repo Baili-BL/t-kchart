@@ -11,6 +11,7 @@ import type { SyncState } from '../store/chartStore';
 import { MOCK_SYMBOLS } from '../data/mockBars';
 import { drawBus } from './drawBus';
 import { replayController } from '../store/replayStore';
+import { useStudyStore } from '../store/studyStore';
 import { toggleReplay } from './replayActions';
 
 const SYNC_LABELS: { key: keyof SyncState; label: string }[] = [
@@ -191,11 +192,7 @@ export function TopBar(): JSX.Element {
         const style = styleFromLabel(label);
         if (style) st().setChartStyle(style);
       },
-      onIndicators: () => {
-        const on = !st().bbVisible;
-        st().setBb(on);
-        toast(on ? '已开启布林带（BB 20 SMA close 2）' : '已关闭布林带');
-      },
+      onIndicators: () => useStudyStore.getState().openDialog(),
       onAlert: () => {
         toast('警报尚未实现');
         tbRef.current?.setAlertOn(false);
@@ -219,17 +216,19 @@ export function TopBar(): JSX.Element {
       tb.setSymbol(s.symbol);
       tb.setInterval(s.timeframe);
       tb.setLayoutName(s.layoutName);
-      tb.setIndicatorsOn(s.bbVisible);
+      tb.setIndicatorsOn(s.bbVisible || useStudyStore.getState().studies.length > 0);
       tb.setStyle(STYLE_LABELS[s.chartStyle]);
     };
     push(st());
     const unsub = useChartStore.subscribe(push);
+    const unStudy = useStudyStore.subscribe(() => push(st()));
     // 回放被别处结束（换标的、切格、控制条「退出」、Agent）时，顶栏按钮要跟着弹起
     tb.setReplayOn(replayController.state().active);
     const unReplay = replayController.subscribe((r) => tb.setReplayOn(r.active));
     return () => {
       unReplay();
       unsub();
+      unStudy();
       tbRef.current = null;
       tb.root.remove();
     };

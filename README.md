@@ -1,6 +1,6 @@
 # t-kchart · 三栏量化工作台（TypeScript）
 
-左侧菜单 + 中间 Agent 面板 + 右侧专业图表软件风格的图表区。图表核心与 Pine v5 子集解释器是**零依赖**的纯 TypeScript 引擎（`src/engine`），外壳是 Vite + React + TypeScript。
+左侧菜单 + 中间 Agent 面板 + 右侧专业图表软件风格的图表区。图表核心与 Pine v5 / v6 子集解释器是**零依赖**的纯 TypeScript 引擎（`src/engine`），外壳是 Vite + React + TypeScript。
 
 > **路线图见 [`TODO.md`](TODO.md)**。本 README 讲「现在是什么」，TODO 讲「接下来做什么、怎么算做完」。
 
@@ -39,7 +39,7 @@ src/
   agent/
     types.ts          AgentProvider / AgentMessage / ToolCall / AgentEvent 接口
     runner.ts         Agent 循环：流式输出 → 执行工具 → 结果回灌 → 直到无新调用（maxSteps 兜底）
-    tools.ts          图表工具集（set_symbol / set_timeframe / set_range / set_layout / set_chart_style / add_indicator / run_pine）
+    tools.ts          图表工具集（set_symbol / set_timeframe / set_range / set_layout / set_chart_style / replay / add_indicator / remove_indicator / list_indicators / run_pine）
     registry.ts       模型下拉与 provider 选择（Auto：配了 harness 地址用 DeepSeek，否则 mock）
     providers/mock.ts       本地演示（关键字 → 工具调用）
     providers/deepseek.ts   DeepSeek harness 适配点（空壳）
@@ -51,9 +51,10 @@ src/
     chartControls     Agent 工具的真实实现（ChartControls 接口）
     TopBar / RightRail  包装 dom/toolbar.ts / dom/rightbar.ts：store ⇄ 组件句柄（createToolbarHandle / createRightbarHandle）
     dom/              设计稿原生 DOM 组件（顶栏、绘图栏、右侧栏、策略报告面板）与图标
-  engine/       chart grid draw pine equity analytics（ESM，零依赖）
+  engine/       chart grid draw pine equity analytics studies layouts replay（ESM，零依赖）
+  indicators/   内置指标库：catalog（全部是 Pine v6 脚本）/ runner（脚本 → 画得出的输出）/ studyTest（浏览器自检）
   data/         mockBars（TSLA/AAPL/NVDA/MSFT/SPY，分钟/小时/日/周/月）
-  store/        zustand：appStore / chartStore / chatStore
+  store/        zustand：appStore / chartStore / chatStore / studyStore（图上的指标 + 收藏 + 对话框状态）
   styles/       tokens.css（设计变量，浅/深两套）+ app.css
   dev/          浏览器侧自检入口
 tests/          vitest
@@ -87,9 +88,10 @@ VITE_DEEPSEEK_MODEL=deepseek-chat
 | 层 | 命令 | 内容 |
 | --- | --- | --- |
 | 类型 | `npm run typecheck` | `strict: true`，0 错误 |
-| 引擎（Node） | `npm test` | 绘图 39 + Pine 49 + Pine 撮合 69 + 权益 26 + 统计 34 + 回放 27 + 布局目录 346 = 590（基线，只增不减） |
+| 引擎（Node） | `npm test` | 绘图 39 + Pine 74 + Pine 撮合 69 + 权益 26 + 统计 34 + 回放 27 + 布局目录 346 = 615（基线，只增不减） |
+| 指标库（Node） | `npm test` | 36 个 v6 脚本全部跑通；约 30 个指标的数值与**独立 TS 参考实现**逐根对数；搜索 / 清单 / store / Agent 控制 |
 | Agent / 工作区 / 数据 | `npm test` | 意图解析、工具校验、runner 循环（含报错/中断/死循环兜底）、模拟账户不变式、范围高亮、mock 数据不变式 |
-| 引擎（浏览器，需 canvas） | 开发模式下控制台 `await __app.runBrowserSelfTests()` | 图表 76 + 网格 20 + 权益 37 + 统计 50 |
+| 引擎（浏览器，需 canvas） | 开发模式下控制台 `await __app.runBrowserSelfTests()` | 图表 76 + 网格 20 + 权益 37 + 统计 50 + 指标 19（副图布局 / 像素 / 指针分流 / 回放 / 实时 tick） |
 
 `__app` 只在 `npm run dev` 下挂到 `window`，生产包里没有。
 
@@ -384,7 +386,7 @@ onDown(px, py, e): boolean   // 返回 true = 这次点击被图层接管，KCha
 
 ---
 
-## 引擎 §12 Pine v5 子集引擎（`pine.ts`）
+## 引擎 §12 Pine v5 / v6 子集引擎（`pine.ts`）
 
 **先说清楚它不是什么**：这是**子集**，不是 Pine 兼容实现。我不承诺、也不假装它能跑任意脚本。
 理由不是我懒 —— 是这件事本身就很难。**成熟的专用 Pine 引擎一样会翻车**：
@@ -411,23 +413,44 @@ Pine 的语法很浅，真正决定数值对不对的是执行模型。这三条
 ### 支持
 
 ```
-//@version=5 / indicator() / strategy() / input.*
-变量：x =   x :=   var x =   [a, b] = f()
-控制：if / else / if 当表达式 / for [to] [by] / while / 三元
+//@version=5 或 6（缺省按 5；其它版本拒绝）/ indicator() / strategy() / input.*
+变量：x =   x :=   var x =   [a, b] = f()    类型前缀：float x = …  var int n = 0
+赋值：:=  += -= *= /= %=      颜色字面量：#RRGGBB  #RRGGBBAA
+控制：if / else / if 当表达式 / for [to] [by] / while（含 break / continue）/ 三元
 函数：f(a, b) => expr   和   多行缩进体（最后一条表达式的值即返回值）
 序列：x[n]，以及 ta.sma(...)[n] 这类兜底
 算子：+ - * / %   == != < <= > >=   and or not   ?:   字符串 +
 内置：ta.{sma,ema,rma,wma,rsi,atr,tr,highest,lowest,change,roc,stdev,cum,
-       crossover,crossunder,barssince,valuewhen,macd,bb}
-      math.* / nz / na / fixnan / str.tostring / str.length / color.*
-      plot / plotshape / plotchar / bgcolor / hline
+       crossover,crossunder,barssince,valuewhen,macd,bb,
+       highestbars,lowestbars,dev,cci,mom,cmo,vwma,alma,hma,wpr,stoch,mfi,correlation,dmi}
+      ta.tr / ta.obv / ta.accdist（不带括号的内置变量）
+      math.*（math.sum 是滚动求和）/ nz / na / fixnan / str.tostring / str.length / color.*
+      plot（位置参数、逐根颜色、display=none、返回句柄）/ plotshape / plotchar / bgcolor / hline / fill
       strategy.{entry,close,close_all,exit,cancel,cancel_all}
       strategy.{position_size,position_avg_price,equity,netprofit,openprofit,
                 initial_capital,opentrades,closedtrades}（只读变量）
 ```
 
 **明确不支持**（遇到就抛错，不静默给 na）：`strategy.*` 里除上面之外的（limit/stop 入场单、`risk.*`、`order` …）、数组/矩阵/map、
-`request.*` / `table.*` / `label.*` / `line.*` / `box.*`、`fill()`、`barstate.*`。
+`request.*` / `table.*` / `label.*` / `line.*` / `box.*`、`barstate.*`、`ta.pivothigh/pivotlow`。
+
+**v6 与 v5 的差异**：`strategy.entry/close/exit` 的 `when=` 参数在 v6 里被移除，引擎对 v6 脚本写了 `when=` 会直接报错（提示改用 `if`）；
+`//@version=4`、`7` 等其它版本一律拒绝，不假装兼容。
+
+### 12.2 指标库（`src/indicators/` + `studies.ts`）
+
+**每个内置指标都是一份 `//@version=6` 脚本**（`catalog.ts`），由上面的 Pine 引擎执行，没有任何指标是 TypeScript 手写的计算。
+
+- 清单：36 个可用 + 12 个**明确标为「不可用」并写了原因**的（涨跌线 / 涨跌比 / Correlation / Cumulative volume index 需要全市场数据或第二个标的、CVD 需要更小周期数据、
+  Auto fib ×2 / pitchfork / trendlines / key levels 需要 `line.*`、`label.*` 与枢轴检测、Chop zone 的官方配色依赖 `math.acos`），点了只提示原因，不会给一个近似值糊弄。
+- 运行：`chart.setStudies(defs)`；每一格图在**自己的数据**上各自运行同一份定义；`overlay=true` 画在主图并参与自动量程，其余各占一个副图
+  （副图总高度封顶在可用高度的 60%，主图至少留 40%；时间轴始终贴最底部）。回放时 `bars` 是截断的前缀，所以指标天然只看得到过去，实时 tick 也会重算。
+- 输出：`plot`（line / histogram / columns / area / stepline / cross / circles，逐根颜色）、`hline`、`fill`（plot 或 hline 两端）。
+- 出错隔离：某个指标脚本出错（语法 / 未实现的写法 / 运行时），只在它自己的图例行显示 ⚠ 与原因，其它指标与图表照常。
+- 参数：脚本里的 `input.*` 被引擎登记（标题 / 类型 / 默认值 / 范围），图例上点 ⚙ 即可改（`input.source` 可在 open/high/low/close/hl2/hlc3/ohlc4/hlcc4 间切换）。
+- 对数：测试里为约 30 个指标各写了一份**独立**的 TS 参考实现，逐根比对（容差 1e-7）。这一步直接发现并修正了引擎里 `ta.wma` 权重写反的老 bug。
+- 入口：顶栏「指标」按钮 → 「指标、衡量标准和策略」对话框（搜索 / 分区 / 收藏 / BETA 标签）；Agent 说「加一个 MACD / 去掉 RSI / 有哪些指标」。
+- 还没有的：策略 / 简介 / 形态 / Options 分类的脚本（胶囊在，内容为空态）、基本面与社区分区（空态）、脚本编辑器（「我的脚本」为空态）。
 
 ### 12.1 `strategy.*` 撮合口径（`strategy.ts`）
 

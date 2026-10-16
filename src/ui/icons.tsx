@@ -137,6 +137,24 @@ const paths = {
   ),
   moon: <path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" />,
   stop: <rect x="6.5" y="6.5" width="11" height="11" rx="2" />,
+  star: <path d="m12 3.8 2.5 5.2 5.7.8-4.1 4 1 5.7-5.1-2.7-5.1 2.7 1-5.7-4.1-4 5.7-.8z" />,
+  wallet: (
+    <>
+      <path d="M4.5 7.5h13a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2z" />
+      <path d="M4.5 7.5V6.2a1.7 1.7 0 0 1 2.3-1.6l9.2 2.9M15 13.5h4.5" />
+    </>
+  ),
+  pulse: <path d="M3.5 17.5 8 11l3.5 4 4-9 5 11.5M3.5 20.5h17" />,
+  barsChart: <path d="M5 20V12M10.5 20V6M16 20V9.5M21 20V14M3.5 20.5h18" />,
+  bookmarkOutline: <path d="M7 3.8h10v16.4l-5-4-5 4z" />,
+  trend: <path d="m3.5 18.5 5.5-6 4 3.5 7-9M15 7h5v5" />,
+  flame: <path d="M12 3.5c.5 3-3.5 4.8-3.5 9a3.5 3.5 0 0 0 7 0c0-1.3-.6-2.3-1.3-3.2.2 1.6-.7 2.4-1.6 2.4 1-2.7.2-5.4-.6-8.2zM9.2 20.5h5.6" />,
+  bag: (
+    <>
+      <path d="M5.5 8h13l-.8 11.5h-11.4z" />
+      <path d="M9 8V6.5a3 3 0 0 1 6 0V8" />
+    </>
+  ),
 } satisfies Record<string, ReactElement>;
 
 export type IconName = keyof typeof paths;

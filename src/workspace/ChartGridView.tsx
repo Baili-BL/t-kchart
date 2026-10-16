@@ -4,6 +4,7 @@ import type { KChart } from '../engine/chart';
 import { DrawLayer } from '../engine/draw';
 import { mockDataSource } from '../data/mockBars';
 import { useChartStore } from '../store/chartStore';
+import { useStudyStore } from '../store/studyStore';
 import { useAppStore } from '../store/appStore';
 import { registerGrid } from './gridRegistry';
 import { drawBus } from './drawBus';
@@ -38,6 +39,17 @@ export function ChartGridView(): JSX.Element {
       legendInset: 8,
     });
     registerGrid(grid);
+
+    /* ---------- 指标：store 里是定义，每一格自己运行 ---------- */
+    grid.setStudyHandler((uid, action) => {
+      const ss = useStudyStore.getState();
+      if (action === 'remove') ss.removeStudy(uid);
+      else ss.edit(uid);
+    });
+    grid.setStudies(useStudyStore.getState().studies);
+    const unStudies = useStudyStore.subscribe((s, prev) => {
+      if (s.studies !== prev.studies) grid.setStudies(s.studies);
+    });
 
     /* ---------- 绘图层：每格一个，按需创建 ---------- */
     const layers = new Map<KChart, DrawLayer>();
@@ -174,6 +186,7 @@ export function ChartGridView(): JSX.Element {
       replayController.stop();
       unReplay();
       unsub();
+      unStudies();
       unTheme();
       unbindDraw();
       grid.el.removeEventListener('activechange', onActive);

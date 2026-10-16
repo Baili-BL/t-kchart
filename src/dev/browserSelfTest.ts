@@ -10,12 +10,14 @@ import { selfTest } from '../engine/chart';
 import { ChartGrid, gridSelfTest } from '../engine/grid';
 import { equitySelfTest } from '../engine/equity';
 import { analyticsSelfTest } from '../engine/analytics';
+import { studySelfTest } from '../indicators/studyTest';
 
 export interface BrowserSelfTestResult {
   chart: { pass: number; fail: number };
   grid: { pass: number; fail: number };
   equity: { pass: number; fail: number };
   analytics: { pass: number; fail: number };
+  study: { pass: number; fail: number };
 }
 
 export function runBrowserSelfTests(): BrowserSelfTestResult {
@@ -28,11 +30,13 @@ export function runBrowserSelfTests(): BrowserSelfTestResult {
     const g = gridSelfTest(grid);
     const e = equitySelfTest();
     const a = analyticsSelfTest();
+    const sy = studySelfTest(grid.charts()[1]);
     return {
       chart: { pass: c.pass, fail: c.fail },
       grid: { pass: g.pass, fail: g.fail },
       equity: { pass: e.pass, fail: e.fail },
       analytics: { pass: a.pass, fail: a.fail },
+      study: { pass: sy.pass, fail: sy.fail },
     };
   } finally {
     grid.dispose();

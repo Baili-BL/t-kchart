@@ -13,6 +13,33 @@ const LAYOUT_RE = /(\d)\s*[x×*]\s*(\d)/i;
 const LAYOUT_COUNT_RE = /(\d{1,2})\s*(?:个|张)?图(?!表|形|标)/;
 const LAYOUT_VARIANT_RE = /第\s*(\d+)\s*种/;
 
+/** 口语 → 清单里的指标名（只给 mock 用；真模型自己会读 list_indicators） */
+const INDICATOR_ALIASES: [RegExp, string][] = [
+  [/macd|平滑异同/i, 'MACD'],
+  [/\brsi\b|相对强弱/i, 'RSI'],
+  [/\bema\b|指数均线|指数移动平均/i, 'EMA'],
+  [/\bsma\b|简单均线|简单移动平均/i, 'SMA'],
+  [/\bwma\b|加权均线/i, 'WMA'],
+  [/\bhma\b|赫尔/i, 'HMA'],
+  [/\bvwma\b/i, 'VWMA'],
+  [/\bdema\b|双指数/i, 'DEMA'],
+  [/\balma\b/i, 'ALMA'],
+  [/\batr\b|真实波幅/i, 'ATR'],
+  [/\bobv\b|能量潮/i, 'OBV'],
+  [/\bcci\b|顺势/i, 'CCI'],
+  [/\bmfi\b|资金流量指数/i, 'MFI'],
+  [/\badx\b|平均趋向/i, 'ADX'],
+  [/\bcmf\b|蔡金资金流/i, 'CMF'],
+  [/kdj|stoch|随机指标/i, 'Stochastic oscillator'],
+  [/williams|威廉/i, 'Williams %R'],
+  [/donchian|唐奇安/i, 'Donchian channels'],
+  [/动量|momentum/i, 'Momentum'],
+  [/变动率|\broc\b/i, 'ROC'],
+  [/chandelier|吊灯/i, 'Chandelier exit'],
+  [/aroon|阿隆/i, 'Aroon oscillator'],
+  [/awesome|神奇震荡/i, 'Awesome oscillator'],
+];
+
 let seq = 0;
 const nid = (p: string): string => p + '-' + Date.now().toString(36) + '-' + (seq++).toString(36);
 
@@ -87,9 +114,16 @@ export function planToolCalls(text: string): ToolCall[] {
           : null;
   if (styleKey) calls.push({ id: nid('call'), name: 'set_chart_style', arguments: { style: styleKey } });
 
+  const off = /关|隐藏|hide|off|remove|删|移除|去掉|取消/i.test(text);
   if (/布林|bollinger|\bbb\b/i.test(text)) {
-    const off = /关|隐藏|hide|off|remove/i.test(text);
     calls.push({ id: nid('call'), name: 'add_indicator', arguments: { indicator: 'bb', visible: !off } });
+  }
+  // 脚本指标：用常见叫法映射到清单里的名字（真正的解析在 chartControls.addStudy → findIndicator）
+  if (/有哪些指标|指标列表|指标清单|list indicators/i.test(text)) {
+    calls.push({ id: nid('call'), name: 'list_indicators', arguments: {} });
+  } else {
+    const hit = INDICATOR_ALIASES.find(([re]) => re.test(text));
+    if (hit) calls.push({ id: nid('call'), name: 'add_indicator', arguments: { indicator: hit[1], visible: !off } });
   }
   return calls;
 }

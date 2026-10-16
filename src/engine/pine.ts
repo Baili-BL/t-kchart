@@ -1,7 +1,7 @@
 /**
  * kc-chart / pine.ts
  * ---------------------------------------------------------------------------
- * Pine Script v5 **子集** 解释器（T3 Phase 1）。
+ * Pine Script **v5 / v6 子集** 解释器（T3 Phase 1）。内置指标库（src/indicators/）全部是 v6 脚本。
  *
  * 依赖 chart.ts（ESM `import`）。
  * 只使用可擦除类型语法，`pine.js` 就是本文件删掉类型注解后的样子：
@@ -19,21 +19,24 @@
  * 所以下面每一条实现都尽量写成「错了能看出来」，并且配了手算自检。
  *
  * 支持：
- *   //@version=5 / indicator() / strategy() / input.*
+ *   //@version=5 或 6（缺省按 5；其它版本明确拒绝）/ indicator() / strategy() / input.*
+ *   类型前缀声明：float x = … / var int n = 0；#RRGGBB(AA) 颜色字面量；x += / -= / *= /= %=；for / while 里的 break / continue
+ *   v6 差异：strategy.entry/close/exit 的 when= 参数被移除（写了就报错，提示改用 if）
  *   变量：x =  /  x :=  /  var x =  /  [a,b] = f()
  *   控制：if / else / if 表达式 / for [to] [by] / while / 三元
  *   函数：f(a, b) => expr  和 多行缩进体
  *   序列：x[n]（含 `f(x)[n]` 兜底）
  *   算子：+ - * / %  == != < <= > >=  and or not  ?:  字符串 +
  *   内置：ta.* / math.* / input.* / nz / na / fixnan / str.tostring / color.*
- *         plot / plotshape / plotchar / bgcolor / hline
+ *         plot（含位置参数、逐根颜色、display=none、返回句柄）/ plotshape / plotchar / bgcolor / hline / fill（plot 或 hline 句柄）
+ *         ta.{highestbars,lowestbars,dev,cci,mom,cmo,vwma,alma,hma,wpr,stoch,mfi,correlation,dmi} + 内置变量 ta.tr / ta.obv / ta.accdist；math.sum 是滚动求和
  *         strategy.entry / close / close_all / exit / cancel / cancel_all（撮合口径见 strategy.ts）
  *         strategy.position_size / position_avg_price / equity / netprofit / openprofit /
  *               initial_capital / opentrades / closedtrades
  *
  * 不支持（明确拒答，不静默给错值）：
  *   strategy.* 里除上面之外的（limit/stop 入场单、risk.*、order…）、数组/矩阵/map、request.*、table.*、label.*、line.*、
- *   barstate.*、fill()、box.*、多返回值以外的元组、`f(x)[1]` 以外的复杂历史引用
+ *   barstate.*、box.*、多返回值以外的元组、`f(x)[1]` 以外的复杂历史引用
  * ===========================================================================
  */
 
@@ -253,7 +256,7 @@ export interface PToken {
   line: number;
 }
 
-export const PINE_OPS_2 = [':=', '==', '!=', '<=', '>=', '=>'];
+export const PINE_OPS_2 = [':=', '==', '!=', '<=', '>=', '=>', '+=', '-=', '*=', '/=', '%='];
 export const PINE_OPS_1 = '+-*/%()[],?:<>=!';
 
 export function pineTokenize(src: string): PToken[] {
@@ -325,6 +328,22 @@ export function pineTokenize(src: string): PToken[] {
         continue;
       }
 
+      // 颜色字面量 #RRGGBB / #RRGGBBAA（Pine 的写法）。AA 是不透明度，转成 rgba()
+      if (ch === '#') {
+        const m = /^#([0-9a-fA-F]{8}|[0-9a-fA-F]{6})(?![0-9a-zA-Z_])/.exec(noTab.slice(i));
+        if (!m) throw new Error('第 ' + (li + 1) + ' 行颜色字面量写错了（应为 #RRGGBB 或 #RRGGBBAA）');
+        let v = '#' + m[1].slice(0, 6).toLowerCase();
+        if (m[1].length === 8) {
+          const n = parseInt(m[1].slice(0, 6), 16);
+          const a = Math.round((parseInt(m[1].slice(6), 16) / 255) * 1000) / 1000;
+          v = 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+        }
+        out.push({ t: 'STR', v, line: li + 1 });
+        i += m[0].length;
+        lastWasOp = false;
+        continue;
+      }
+
       if (/[A-Za-z_]/.test(ch)) {
         let j = i;
         while (j < noTab.length && /[A-Za-z0-9_]/.test(noTab[j])) j++;
@@ -372,7 +391,22 @@ export function pineTokenize(src: string): PToken[] {
  * 5. 语法
  * ========================================================================= */
 
+/** 支持的 Pine 版本。没写 `//@version=` 时按 5 处理（引擎的历史行为） */
+export const PINE_VERSIONS = [5, 6];
+
+/** 读 `//@version=N`；没有就是 5。N 不在支持列表里直接抛错，不装作能跑 */
+export function pineVersionOf(src: string): number {
+  const m = /^\s*\/\/\s*@version\s*=\s*(\d+)/m.exec(String(src));
+  if (!m) return 5;
+  const v = Number(m[1]);
+  if (!PINE_VERSIONS.includes(v)) {
+    throw new Error('只支持 Pine v' + PINE_VERSIONS.join(' / v') + '（//@version=' + PINE_VERSIONS.join('|') + '），收到 v' + v);
+  }
+  return v;
+}
+
 export function pineParse(src: string): any {
+  const version = pineVersionOf(src);
   const toks = pineTokenize(src);
   let p = 0;
 
@@ -606,12 +640,25 @@ export function pineParse(src: string): any {
     return { k: 'fn', name, params, body: [{ k: 'ret', expr: e }] };
   };
 
+  /** v5/v6 都允许的类型前缀：`float x = …` / `var int n = 0`。类型只是标注，引擎不据此做检查。 */
+  const TYPE_WORDS = ['int', 'float', 'bool', 'string', 'color'];
+  const skipTypeWord = (): void => {
+    if (at('IDENT') && TYPE_WORDS.includes(toks[p].v) && toks[p + 1] && toks[p + 1].t === 'IDENT'
+      && toks[p + 2] && toks[p + 2].t === 'OP' && toks[p + 2].v === '=') p++;
+  };
+
   const parseStmt = (): any => {
+    skipTypeWord();
     if (at('IDENT', 'var') || at('IDENT', 'varip')) {
       p++;
+      skipTypeWord();
       const name = eat('IDENT').v;
       eat('OP', '=');
       return { k: 'decl', name, expr: parseExpr(), isVar: true };
+    }
+    if (at('IDENT', 'break') || at('IDENT', 'continue')) {
+      const k = toks[p++].v === 'break' ? 'break' : 'continue';
+      return { k };
     }
     if (at('IDENT', 'if')) return parseIf();
     if (at('IDENT', 'for')) return parseFor();
@@ -645,6 +692,13 @@ export function pineParse(src: string): any {
       const name = toks[p++].v;
       if (at('OP', '=')) { p++; return { k: 'decl', name, expr: parseExpr(), isVar: false }; }
       if (at('OP', ':=')) { p++; return { k: 'assign', name, expr: parseExpr() }; }
+      for (const op of ['+', '-', '*', '/', '%']) {
+        if (at('OP', op + '=')) {
+          p++;
+          // x += e  ≡  x := x + e
+          return { k: 'assign', name, expr: { k: 'bin', op, a: { k: 'ident', name }, b: parseExpr() } };
+        }
+      }
       p = save;
     }
 
@@ -690,6 +744,7 @@ export function pineParse(src: string): any {
   for (const k in head.kwargs) opts[k] = lit(head.kwargs[k], undefined);
 
   return {
+    version,
     kind,
     title: lit(head.kwargs.title, lit(head.args[0], '')),
     opts,
@@ -728,6 +783,8 @@ export const PINE_CONSTS: { [k: string]: any } = {
   'plot.style_cross': 'cross',
   'plot.style_area': 'area',
   'plot.style_columns': 'columns',
+  'plot.style_circles': 'circles',
+  'plot.style_areabr': 'area',
   'shape.triangleup': 'triangleup',
   'shape.triangledown': 'triangledown',
   'shape.circle': 'circle',
@@ -749,6 +806,21 @@ export const PINE_CONSTS: { [k: string]: any } = {
   'size.normal': 'normal',
   'size.large': 'large',
   'size.huge': 'huge',
+  'hline.style_solid': 'solid',
+  'hline.style_dashed': 'dashed',
+  'hline.style_dotted': 'dotted',
+  'display.all': 'all',
+  'display.none': 'none',
+  'display.pane': 'pane',
+  'display.data_window': 'data_window',
+  'display.status_line': 'status_line',
+  'format.inherit': 'inherit',
+  'format.price': 'price',
+  'format.volume': 'volume',
+  'format.percent': 'percent',
+  'scale.right': 'right',
+  'scale.left': 'left',
+  'scale.none': 'none',
   'barmerge.gaps_off': 'gaps_off',
   'barmerge.lookahead_off': 'lookahead_off',
   // strategy 方向 / 仓位类型 / 手续费类型
@@ -763,9 +835,11 @@ export const PINE_CONSTS: { [k: string]: any } = {
   'math.max_bars_back': 5000,
 };
 
+export const SOURCE_NAMES = ['open', 'high', 'low', 'close', 'hl2', 'hlc3', 'ohlc4', 'hlcc4'];
+
 export const PINE_CONST_PREFIXES = [
   'color.', 'plot.', 'shape.', 'location.', 'size.', 'barmerge.',
-  'strategy.', 'math.', 'timeframe.', 'syminfo.', 'ta.', 'input.', 'request.', 'table.', 'label.',
+  'strategy.', 'math.', 'hline.', 'display.', 'format.', 'scale.', 'timeframe.', 'syminfo.', 'ta.', 'input.', 'request.', 'table.', 'label.',
 ];
 
 /* ===========================================================================
@@ -800,9 +874,13 @@ function argOf(a: any[], kw: any, i: number, name: string): any {
   return a[i] !== undefined ? a[i] : kw[name];
 }
 
-/** `when=` 条件；没写就当 true。Pine v5 仍然支持这个参数 */
-function whenOk(kw: any): boolean {
-  return kw.when === undefined ? true : truthy(kw.when);
+/** `when=` 条件；没写就当 true。Pine v5 仍然支持这个参数；**v6 已移除**，必须报错而不是悄悄接受 */
+function whenOk(ctx: PBuiltinCtx, kw: any): boolean {
+  if (kw.when === undefined) return true;
+  if (ctx.engine.version >= 6) {
+    throw new Error('Pine v6 已移除 strategy.* 的 when= 参数，请改用 if 包起来');
+  }
+  return truthy(kw.when);
 }
 
 function strId(v: any, fn: string): string {
@@ -822,7 +900,7 @@ export const PINE_BUILTINS: { [k: string]: (ctx: PBuiltinCtx, node: any, a: any[
   /* ------------------------------------------------------------- 策略撮合 */
   'strategy.entry': (ctx, node, a, kw) => {
     const b = brokerOf(ctx, 'strategy.entry');
-    if (!whenOk(kw)) return NA;
+    if (!whenOk(ctx, kw)) return NA;
     const id = strId(argOf(a, kw, 0, 'id'), 'strategy.entry');
     const dir = argOf(a, kw, 1, 'direction');
     const qty = argOf(a, kw, 2, 'qty');
@@ -833,7 +911,7 @@ export const PINE_BUILTINS: { [k: string]: (ctx: PBuiltinCtx, node: any, a: any[
   },
   'strategy.close': (ctx, node, a, kw) => {
     const b = brokerOf(ctx, 'strategy.close');
-    if (!whenOk(kw)) return NA;
+    if (!whenOk(ctx, kw)) return NA;
     rejectGiven('strategy.close', { qty: argOf(a, kw, 2, 'qty'), qty_percent: argOf(a, kw, 3, 'qty_percent') },
       '只能整笔平仓，部分平仓暂不支持');
     b.placeClose(strId(argOf(a, kw, 0, 'id'), 'strategy.close'));
@@ -841,13 +919,13 @@ export const PINE_BUILTINS: { [k: string]: (ctx: PBuiltinCtx, node: any, a: any[
   },
   'strategy.close_all': (ctx, node, a, kw) => {
     const b = brokerOf(ctx, 'strategy.close_all');
-    if (!whenOk(kw)) return NA;
+    if (!whenOk(ctx, kw)) return NA;
     b.placeCloseAll();
     return NA;
   },
   'strategy.exit': (ctx, node, a, kw) => {
     const b = brokerOf(ctx, 'strategy.exit');
-    if (!whenOk(kw)) return NA;
+    if (!whenOk(ctx, kw)) return NA;
     rejectGiven('strategy.exit', {
       qty: argOf(a, kw, 2, 'qty'), qty_percent: argOf(a, kw, 3, 'qty_percent'),
       profit: argOf(a, kw, 4, 'profit'), loss: argOf(a, kw, 6, 'loss'),
@@ -871,9 +949,14 @@ export const PINE_BUILTINS: { [k: string]: (ctx: PBuiltinCtx, node: any, a: any[
 
   /* ------------------------------------------------------------- 输出 */
   plot: (ctx, node, a, kw) => {
+    // 位置参数：plot(series, title, color, linewidth, style, ...)
+    kw = withPositional(kw, a, ['', 'title', 'color', 'linewidth', 'style']);
     const p = ctx.engine.plotFor(node, kw);
     p.values[ctx.bar] = isNa(a[0]) ? null : toNum(a[0]);
-    return a[0];
+    // 颜色可以逐根不同（color = cond ? a : b），所以每根都记一份
+    if (kw && kw.color !== undefined && !isNa(kw.color)) p.colors[ctx.bar] = String(kw.color);
+    else if (kw && kw.color !== undefined) p.colors[ctx.bar] = null;
+    return { __plot: p };    // 和 Pine 一样：plot() 返回的是绘图句柄，不是数值，只能交给 fill()
   },
   plotshape: (ctx, node, a, kw) => {
     if (truthy(a[0])) ctx.engine.markFor(node, kw, 'shape').marks[ctx.bar] = kw.text || kw.style || '•';
@@ -890,29 +973,45 @@ export const PINE_BUILTINS: { [k: string]: (ctx: PBuiltinCtx, node: any, a: any[
     }
     return NA;
   },
-  hline: (ctx, node, a, kw) => {
-    ctx.engine.hlineFor(node, kw, a[0]);
+  hline: (ctx, node, a, kw) => ({
+    __hline: ctx.engine.hlineFor(node, withPositional(kw, a, ['', 'title', 'color', 'linestyle', 'linewidth']), a[0]),
+  }),
+  fill: (ctx, node, a, kw) => {
+    const x = a[0];
+    const y = a[1];
+    const ok = (h: any): boolean => !!h && (!!h.__plot || !!h.__hline);
+    if (!ok(x) || !ok(y)) throw new Error('fill() 的前两个参数必须是 plot() 或 hline() 返回的句柄');
+    const f = ctx.engine.fillFor(node, x.__plot || x.__hline, y.__plot || y.__hline);
+    const col = kw && kw.color !== undefined ? kw.color : a[2];
+    f.colors[ctx.bar] = isNa(col) ? null : String(col);
     return NA;
   },
-  fill: () => NA,          // 明确不支持，不装作支持
 
   /* ------------------------------------------------------------ 输入 */
-  'input.int': (ctx, node, a, kw) => inputVal(ctx, a, kw),
-  'input.float': (ctx, node, a, kw) => inputVal(ctx, a, kw),
-  'input.bool': (ctx, node, a, kw) => inputVal(ctx, a, kw),
-  'input.string': (ctx, node, a, kw) => inputVal(ctx, a, kw),
-  'input.color': (ctx, node, a, kw) => inputVal(ctx, a, kw),
-  'input.timeframe': (ctx, node, a, kw) => inputVal(ctx, a, kw),
-  'input.symbol': (ctx, node, a, kw) => inputVal(ctx, a, kw),
-  'input.price': (ctx, node, a, kw) => inputVal(ctx, a, kw),
-  'input.time': (ctx, node, a, kw) => inputVal(ctx, a, kw),
+  'input.int': (ctx, node, a, kw) => inputVal(ctx, a, kw, 'int'),
+  'input.float': (ctx, node, a, kw) => inputVal(ctx, a, kw, 'float'),
+  'input.bool': (ctx, node, a, kw) => inputVal(ctx, a, kw, 'bool'),
+  'input.string': (ctx, node, a, kw) => inputVal(ctx, a, kw, 'string'),
+  'input.color': (ctx, node, a, kw) => inputVal(ctx, a, kw, 'color'),
+  'input.timeframe': (ctx, node, a, kw) => inputVal(ctx, a, kw, 'timeframe'),
+  'input.symbol': (ctx, node, a, kw) => inputVal(ctx, a, kw, 'symbol'),
+  'input.price': (ctx, node, a, kw) => inputVal(ctx, a, kw, 'price'),
+  'input.time': (ctx, node, a, kw) => inputVal(ctx, a, kw, 'time'),
   // ⚠️ 只返回当前值，不是「序列引用」——所以 input.source(close)[1] 不支持
-  'input.source': (ctx, node, a) => a[0],
+  'input.source': (ctx, node, a, kw) => {
+    const defName = node.args[0] && node.args[0].k === 'ident' ? node.args[0].name : 'close';
+    const key = kw && kw.title != null ? String(kw.title) : a.length > 1 && a[1] != null ? String(a[1]) : null;
+    if (key && !(key in ctx.engine.inputDefs)) ctx.engine.inputDefs[key] = { title: key, kind: 'source', def: defName };
+    const over = key && ctx.engine.inputs ? ctx.engine.inputs[key] : undefined;
+    const name = typeof over === 'string' && SOURCE_NAMES.includes(over) ? over : defName;
+    const s = ctx.env.lookup(name);
+    return s ? s.get(0) : a[0];
+  },
 
   /* ------------------------------------------------------------ math */
   'math.abs': (c, n, a) => (isNa(a[0]) ? NA : Math.abs(toNum(a[0]))),
-  'math.max': (c, n, a) => (isNa(a[0]) || isNa(a[1]) ? NA : Math.max(toNum(a[0]), toNum(a[1]))),
-  'math.min': (c, n, a) => (isNa(a[0]) || isNa(a[1]) ? NA : Math.min(toNum(a[0]), toNum(a[1]))),
+  'math.max': (c, n, a) => (a.length === 0 || a.some(isNa) ? NA : Math.max(...a.map(toNum))),
+  'math.min': (c, n, a) => (a.length === 0 || a.some(isNa) ? NA : Math.min(...a.map(toNum))),
   'math.round': (c, n, a) => (isNa(a[0]) ? NA : roundTo(toNum(a[0]), a.length > 1 ? toNum(a[1]) : 0)),
   'math.floor': (c, n, a) => (isNa(a[0]) ? NA : Math.floor(toNum(a[0]))),
   'math.ceil': (c, n, a) => (isNa(a[0]) ? NA : Math.ceil(toNum(a[0]))),
@@ -923,11 +1022,21 @@ export const PINE_BUILTINS: { [k: string]: (ctx: PBuiltinCtx, node: any, a: any[
   'math.exp': (c, n, a) => (isNa(a[0]) ? NA : Math.exp(toNum(a[0]))),
   'math.sign': (c, n, a) => (isNa(a[0]) ? NA : Math.sign(toNum(a[0]))),
   'math.avg': (c, n, a) => avgOf(a),
-  'math.sum': (c, n, a) => {
-    let s = 0;
-    for (const v of a) { if (isNa(v)) return NA; s += toNum(v); }
-    return s;
+  /** math.sum(source, length)：最近 length 根的滚动和（Pine 的语义；不是把参数加起来） */
+  'math.sum': (ctx, node, a) => {
+    const len = Math.max(1, Math.round(toNum(a[1])));
+    const st = ctx.env.state(node, () => ({ buf: [] as number[], sum: 0 }));
+    if (isNa(a[0])) return NA;
+    const v = toNum(a[0]);
+    st.buf.push(v);
+    st.sum += v;
+    if (st.buf.length > len) st.sum -= st.buf.shift() as number;
+    return st.buf.length < len ? NA : st.sum;
   },
+  'math.atan': (c, n, a) => (isNa(a[0]) ? NA : Math.atan(toNum(a[0]))),
+  'math.tan': (c, n, a) => (isNa(a[0]) ? NA : Math.tan(toNum(a[0]))),
+  'math.sin': (c, n, a) => (isNa(a[0]) ? NA : Math.sin(toNum(a[0]))),
+  'math.cos': (c, n, a) => (isNa(a[0]) ? NA : Math.cos(toNum(a[0]))),
 
   /* -------------------------------------------------------------- ta */
   'ta.sma': (ctx, node, a) => {
@@ -979,6 +1088,7 @@ export const PINE_BUILTINS: { [k: string]: (ctx: PBuiltinCtx, node: any, a: any[
     return st.prev;
   },
 
+  /** 线性加权：最新一根权重 = len，最老一根 = 1（早期版本把权重写反了，由指标库对数发现并修正） */
   'ta.wma': (ctx, node, a) => {
     const len = Math.max(1, Math.round(toNum(a[1])));
     const st = ctx.env.state(node, () => ({ buf: [] }));
@@ -986,14 +1096,7 @@ export const PINE_BUILTINS: { [k: string]: (ctx: PBuiltinCtx, node: any, a: any[
     st.buf.push(toNum(a[0]));
     if (st.buf.length > len) st.buf.shift();
     if (st.buf.length < len) return NA;
-    let num = 0;
-    let den = 0;
-    for (let i = 0; i < len; i++) {
-      const w = i + 1;
-      num += st.buf[len - 1 - i] * w;
-      den += w;
-    }
-    return num / den;
+    return wmaOf(st.buf, len);
   },
 
   'ta.rsi': (ctx, node, a) => {
@@ -1177,6 +1280,251 @@ export const PINE_BUILTINS: { [k: string]: (ctx: PBuiltinCtx, node: any, a: any[
   },
 };
 
+
+/* ===========================================================================
+ * 7b. Pine v6 指标库用到的内置（ta.* 的其余部分 + 内置变量）
+ * ========================================================================= */
+
+/** 滚动窗口：压入新值，只留最近 len 个；还没攒够 len 个返回 null */
+function windowOf(ctx: PBuiltinCtx, node: any, v: number, len: number, slot: string = 'w'): number[] | null {
+  const st = ctx.env.state(node, () => ({}));
+  const buf: number[] = st[slot] || (st[slot] = []);
+  buf.push(v);
+  if (buf.length > len) buf.shift();
+  return buf.length < len ? null : buf;
+}
+
+/** Wilder / RMA 的单步：与 ta.rma 同一套（前 len-1 根 na，第 len 根 SMA 播种） */
+function rmaStep(st: { n: number; sum: number; prev: any }, v: number, len: number): any {
+  st.n++;
+  if (st.n < len) { st.sum += v; return NA; }
+  if (st.n === len) { st.sum += v; st.prev = st.sum / len; return st.prev; }
+  st.prev = (st.prev * (len - 1) + v) / len;
+  return st.prev;
+}
+const rmaNew = (): { n: number; sum: number; prev: any } => ({ n: 0, sum: 0, prev: NA });
+
+function wmaOf(buf: number[], len: number): number {
+  let num = 0;
+  for (let i = 0; i < len; i++) num += buf[i] * (i + 1);
+  return num / ((len * (len + 1)) / 2);
+}
+
+const intArg = (v: any, d: number): number => (isNa(v) ? d : Math.max(1, Math.round(toNum(v))));
+
+Object.assign(PINE_BUILTINS, {
+  /** 最近 len 根里最高点距当前的偏移（≤ 0；0 = 当前根）。并列取最近的一根 */
+  'ta.highestbars': (ctx: PBuiltinCtx, node: any, a: any[]) => {
+    const len = intArg(a[1], 1);
+    if (isNa(a[0])) return NA;
+    const w = windowOf(ctx, node, toNum(a[0]), len);
+    if (!w) return NA;
+    let bi = 0; let m = -Infinity;
+    for (let i = 0; i < len; i++) if (w[i] >= m) { m = w[i]; bi = i; }
+    return bi - (len - 1);
+  },
+  'ta.lowestbars': (ctx: PBuiltinCtx, node: any, a: any[]) => {
+    const len = intArg(a[1], 1);
+    if (isNa(a[0])) return NA;
+    const w = windowOf(ctx, node, toNum(a[0]), len);
+    if (!w) return NA;
+    let bi = 0; let m = Infinity;
+    for (let i = 0; i < len; i++) if (w[i] <= m) { m = w[i]; bi = i; }
+    return bi - (len - 1);
+  },
+  /** 平均绝对偏差 */
+  'ta.dev': (ctx: PBuiltinCtx, node: any, a: any[]) => {
+    const len = intArg(a[1], 1);
+    if (isNa(a[0])) return NA;
+    const w = windowOf(ctx, node, toNum(a[0]), len);
+    if (!w) return NA;
+    const m = avgOf(w);
+    let acc = 0;
+    for (const v of w) acc += Math.abs(v - m);
+    return acc / len;
+  },
+  'ta.cci': (ctx: PBuiltinCtx, node: any, a: any[]) => {
+    const len = intArg(a[1], 20);
+    if (isNa(a[0])) return NA;
+    const w = windowOf(ctx, node, toNum(a[0]), len);
+    if (!w) return NA;
+    const m = avgOf(w);
+    let acc = 0;
+    for (const v of w) acc += Math.abs(v - m);
+    const dev = acc / len;
+    return dev === 0 ? 0 : (toNum(a[0]) - m) / (0.015 * dev);
+  },
+  'ta.mom': (ctx: PBuiltinCtx, node: any, a: any[]) => {
+    const len = intArg(a[1], 10);
+    if (isNa(a[0])) return NA;
+    const w = windowOf(ctx, node, toNum(a[0]), len + 1);
+    return w ? w[len] - w[0] : NA;
+  },
+  /** Chande 动量：100 × (Σ涨 − Σ跌) / (Σ涨 + Σ跌) */
+  'ta.cmo': (ctx: PBuiltinCtx, node: any, a: any[]) => {
+    const len = intArg(a[1], 9);
+    if (isNa(a[0])) return NA;
+    const w = windowOf(ctx, node, toNum(a[0]), len + 1);
+    if (!w) return NA;
+    let up = 0; let dn = 0;
+    for (let i = 1; i <= len; i++) {
+      const d = w[i] - w[i - 1];
+      if (d > 0) up += d; else dn -= d;
+    }
+    return up + dn === 0 ? 0 : (100 * (up - dn)) / (up + dn);
+  },
+  'ta.vwma': (ctx: PBuiltinCtx, node: any, a: any[]) => {
+    const len = intArg(a[1], 20);
+    if (isNa(a[0])) return NA;
+    const vol = ctx.engine.bars[ctx.bar].volume;
+    const pv = windowOf(ctx, node, toNum(a[0]) * vol, len, 'pv');
+    const vv = windowOf(ctx, node, vol, len, 'vv');
+    if (!pv || !vv) return NA;
+    const sv = vv.reduce((x, y) => x + y, 0);
+    return sv === 0 ? NA : pv.reduce((x, y) => x + y, 0) / sv;
+  },
+  /** Arnaud Legoux 移动平均：高斯权重，offset 控制峰值位置、sigma 控制宽度 */
+  'ta.alma': (ctx: PBuiltinCtx, node: any, a: any[]) => {
+    const len = intArg(a[1], 9);
+    const offset = isNa(a[2]) ? 0.85 : toNum(a[2]);
+    const sigma = isNa(a[3]) ? 6 : toNum(a[3]);
+    if (isNa(a[0])) return NA;
+    const w = windowOf(ctx, node, toNum(a[0]), len);
+    if (!w) return NA;
+    const m = Math.floor(offset * (len - 1));
+    const s = len / sigma;
+    let norm = 0; let sum = 0;
+    for (let i = 0; i < len; i++) {
+      const wt = Math.exp(-((i - m) * (i - m)) / (2 * s * s));
+      norm += wt;
+      sum += w[i] * wt;
+    }
+    return sum / norm;
+  },
+  'ta.hma': (ctx: PBuiltinCtx, node: any, a: any[]) => {
+    const len = intArg(a[1], 9);
+    if (isNa(a[0])) return NA;
+    const half = Math.max(1, Math.floor(len / 2));
+    const sq = Math.max(1, Math.floor(Math.sqrt(len)));
+    const v = toNum(a[0]);
+    const wh = windowOf(ctx, node, v, half, 'h');
+    const wf = windowOf(ctx, node, v, len, 'f');
+    if (!wh || !wf) return NA;
+    const raw = 2 * wmaOf(wh, half) - wmaOf(wf, len);
+    const wr = windowOf(ctx, node, raw, sq, 'r');
+    return wr ? wmaOf(wr, sq) : NA;
+  },
+  /** ta.wpr(length)：威廉 %R，用当根的 high / low / close */
+  'ta.wpr': (ctx: PBuiltinCtx, node: any, a: any[]) => {
+    const len = intArg(a[0], 14);
+    const b = ctx.engine.bars[ctx.bar];
+    const hs = windowOf(ctx, node, b.high, len, 'h');
+    const ls = windowOf(ctx, node, b.low, len, 'l');
+    if (!hs || !ls) return NA;
+    const hi = Math.max(...hs);
+    const lo = Math.min(...ls);
+    return hi === lo ? NA : (-100 * (hi - b.close)) / (hi - lo);
+  },
+  /** ta.stoch(source, high, low, length) */
+  'ta.stoch': (ctx: PBuiltinCtx, node: any, a: any[]) => {
+    const len = intArg(a[3], 14);
+    if (isNa(a[0]) || isNa(a[1]) || isNa(a[2])) return NA;
+    const hs = windowOf(ctx, node, toNum(a[1]), len, 'h');
+    const ls = windowOf(ctx, node, toNum(a[2]), len, 'l');
+    if (!hs || !ls) return NA;
+    const hi = Math.max(...hs);
+    const lo = Math.min(...ls);
+    return hi === lo ? NA : (100 * (toNum(a[0]) - lo)) / (hi - lo);
+  },
+  /** 资金流量指数 */
+  'ta.mfi': (ctx: PBuiltinCtx, node: any, a: any[]) => {
+    const len = intArg(a[1], 14);
+    if (isNa(a[0])) return NA;
+    const st = ctx.env.state(node, () => ({ prev: NA as any }));
+    const vol = ctx.engine.bars[ctx.bar].volume;
+    const v = toNum(a[0]);
+    const ch = isNa(st.prev) ? NaN : v - st.prev;
+    st.prev = v;
+    const up = isNaN(ch) || ch <= 0 ? 0 : vol * v;
+    const dn = isNaN(ch) || ch >= 0 ? 0 : vol * v;
+    const ups = windowOf(ctx, node, up, len, 'u');
+    const dns = windowOf(ctx, node, dn, len, 'd');
+    if (!ups || !dns) return NA;
+    const su = ups.reduce((x, y) => x + y, 0);
+    const sd = dns.reduce((x, y) => x + y, 0);
+    return sd === 0 ? 100 : 100 - 100 / (1 + su / sd);
+  },
+  'ta.correlation': (ctx: PBuiltinCtx, node: any, a: any[]) => {
+    const len = intArg(a[2], 20);
+    if (isNa(a[0]) || isNa(a[1])) return NA;
+    const xs = windowOf(ctx, node, toNum(a[0]), len, 'x');
+    const ys = windowOf(ctx, node, toNum(a[1]), len, 'y');
+    if (!xs || !ys) return NA;
+    const mx = avgOf(xs); const my = avgOf(ys);
+    let sxy = 0; let sxx = 0; let syy = 0;
+    for (let i = 0; i < len; i++) { sxy += (xs[i] - mx) * (ys[i] - my); sxx += (xs[i] - mx) ** 2; syy += (ys[i] - my) ** 2; }
+    return sxx === 0 || syy === 0 ? NA : sxy / Math.sqrt(sxx * syy);
+  },
+  /** ta.dmi(diLength, adxSmoothing) → [+DI, −DI, ADX]（Wilder，与官方文档里的等价写法一致） */
+  'ta.dmi': (ctx: PBuiltinCtx, node: any, a: any[]) => {
+    const len = intArg(a[0], 14);
+    const adxLen = intArg(a[1], len);
+    const st = ctx.env.state(node, () => ({
+      tr: rmaNew(), pdm: rmaNew(), mdm: rmaNew(), adx: rmaNew(), plus: NA as any, minus: NA as any,
+    }));
+    const i = ctx.bar;
+    const b = ctx.engine.bars[i];
+    const tr = trueRange(ctx, node);
+    const rtr = rmaStep(st.tr, tr, len);
+    let rp: any = NA; let rm: any = NA;
+    if (i > 0) {
+      const pb = ctx.engine.bars[i - 1];
+      const up = b.high - pb.high;
+      const down = pb.low - b.low;
+      rp = rmaStep(st.pdm, up > down && up > 0 ? up : 0, len);
+      rm = rmaStep(st.mdm, down > up && down > 0 ? down : 0, len);
+    }
+    // fixnan：没有新值就沿用上一个
+    if (!isNa(rp) && !isNa(rtr)) st.plus = (100 * rp) / rtr;
+    if (!isNa(rm) && !isNa(rtr)) st.minus = (100 * rm) / rtr;
+    let adx: any = NA;
+    if (!isNa(st.plus) && !isNa(st.minus)) {
+      const sum = st.plus + st.minus;
+      adx = rmaStep(st.adx, (Math.abs(st.plus - st.minus) / (sum === 0 ? 1 : sum)), adxLen);
+      if (!isNa(adx)) adx *= 100;
+    }
+    return [st.plus, st.minus, adx];
+  },
+});
+
+/** 内置「变量」（不带括号的 ta.*）：每次读取都按当前 bar 结算 */
+export const PINE_BUILTIN_VARS: { [k: string]: (ctx: PBuiltinCtx, node: any) => any } = {
+  'ta.tr': (ctx, node) => trueRange(ctx, node),
+  /** 累积 / 派发线：close == high == low 或 high == low 时当根贡献 0 */
+  'ta.accdist': (ctx, node) => {
+    const st = ctx.env.state(node, () => ({ s: 0, bar: -1 }));
+    if (st.bar !== ctx.bar) {
+      st.bar = ctx.bar;
+      const b = ctx.engine.bars[ctx.bar];
+      st.s += b.high === b.low ? 0 : ((2 * b.close - b.low - b.high) / (b.high - b.low)) * b.volume;
+    }
+    return st.s;
+  },
+  /** 能量潮 */
+  'ta.obv': (ctx, node) => {
+    const st = ctx.env.state(node, () => ({ s: 0, bar: -1 }));
+    if (st.bar !== ctx.bar) {
+      st.bar = ctx.bar;
+      const i = ctx.bar;
+      if (i > 0) {
+        const ch = ctx.engine.bars[i].close - ctx.engine.bars[i - 1].close;
+        st.s += ch > 0 ? ctx.engine.bars[i].volume : ch < 0 ? -ctx.engine.bars[i].volume : 0;
+      }
+    }
+    return st.s;
+  },
+};
+
 /** 需要「参数上一根值」的交叉判断 */
 export function crossCheck(ctx: PBuiltinCtx, node: any, a: any[], up: boolean): boolean {
   const st = ctx.env.state(node, () => ({ pa: NA, pb: NA }));
@@ -1252,10 +1600,28 @@ export function withAlpha(color: any, transp: number): string {
  * 也可能是**第二个位置参数**（`input.int(3, "N")`）——两个都得认，
  * 只认 kwargs 的话位置写法会被静默忽略。
  */
-export function inputVal(ctx: PBuiltinCtx, a: any[], kw: any): any {
+/** 把位置参数按名字补进 kw（关键字写法优先）。names 的第 i 项对应第 i 个位置参数，'' 表示跳过 */
+export function withPositional(kw: any, a: any[], names: string[]): any {
+  const out: any = Object.assign({}, kw || {});
+  for (let i = 1; i < names.length && i < a.length; i++) {
+    if (names[i] && out[names[i]] === undefined && a[i] !== undefined) out[names[i]] = a[i];
+  }
+  return out;
+}
+
+export function inputVal(ctx: PBuiltinCtx, a: any[], kw: any, kind: string = 'float'): any {
   let key: string | null = null;
   if (kw && kw.title != null) key = String(kw.title);
   else if (a.length > 1 && a[1] != null) key = String(a[1]);
+  // 登记这个输入的声明（标题 / 类型 / 默认值 / 范围），指标面板据此生成参数表单，自检据此核对注册表
+  if (key && ctx.engine.inputDefs && !(key in ctx.engine.inputDefs)) {
+    ctx.engine.inputDefs[key] = {
+      title: key, kind, def: a[0],
+      min: kw && kw.minval != null ? toNum(kw.minval) : undefined,
+      max: kw && kw.maxval != null ? toNum(kw.maxval) : undefined,
+      step: kw && kw.step != null ? toNum(kw.step) : undefined,
+    };
+  }
   if (key && ctx.engine.inputs && Object.prototype.hasOwnProperty.call(ctx.engine.inputs, key)) {
     return ctx.engine.inputs[key];
   }
@@ -1277,6 +1643,7 @@ export function pEval(node: any, env: PEnv, eng: any): any {
       const s = env.lookup(node.name);
       if (s) return s.get(0);
       if (node.name in PINE_CONSTS) return PINE_CONSTS[node.name];
+      if (node.name in PINE_BUILTIN_VARS) return PINE_BUILTIN_VARS[node.name]({ env, engine: eng, bar: eng.bar }, node);
       if (eng.broker && node.name.indexOf('strategy.') === 0) {
         const v = eng.broker.varValue(node.name);
         if (v !== undefined) return v === null ? NA : v;
@@ -1360,7 +1727,7 @@ export function pExecBody(body: any[], env: PEnv, eng: any): any {
   let last: any = NA;
   for (const st of body) {
     const r = pExec(st, env, eng);
-    if (r && r.__ret) return r;      // 原样往上抛，别在这里解包
+    if (r && (r.__ret || r.__brk || r.__cnt)) return r;      // 原样往上抛，别在这里解包
     last = r;
   }
   return last;
@@ -1396,6 +1763,9 @@ export function pExec(st: any, env: PEnv, eng: any): any {
     case 'ret':
       return { __ret: true, v: pEval(st.expr, env, eng) };
 
+    case 'break': return { __brk: true };
+    case 'continue': return { __cnt: true };
+
     case 'if':
       if (truthy(pEval(st.cond, env, eng))) return pExecBody(st.then, env, eng);
       if (st.els) return pExecBody(st.els, env, eng);
@@ -1414,6 +1784,7 @@ export function pExec(st: any, env: PEnv, eng: any): any {
           if (vs) vs.set(i);
           const r = pExecBody(st.body, env, eng);
           if (r && r.__ret) return r;
+          if (r && r.__brk) break;
           if (++guard > 100000) throw new Error('for 循环超过 10 万次');
         }
       } else {
@@ -1421,6 +1792,7 @@ export function pExec(st: any, env: PEnv, eng: any): any {
           if (vs) vs.set(i);
           const r = pExecBody(st.body, env, eng);
           if (r && r.__ret) return r;
+          if (r && r.__brk) break;
           if (++guard > 100000) throw new Error('for 循环超过 10 万次');
         }
       }
@@ -1432,6 +1804,7 @@ export function pExec(st: any, env: PEnv, eng: any): any {
       while (truthy(pEval(st.cond, env, eng))) {
         const r = pExecBody(st.body, env, eng);
         if (r && r.__ret) return r;
+        if (r && r.__brk) break;
         if (++guard > 100000) throw new Error('while 循环超过 10 万次，疑似死循环');
       }
       return NA;
@@ -1456,7 +1829,13 @@ export class PineEngine {
   marks: any[];
   hlines: any[];
   bg: any[];
+  /** 绘图句柄之间的填充（fill） */
+  fills: any[];
   inputs: any;
+  /** 脚本里 input.* 的声明（标题 → 类型 / 默认值 / 范围），按调用顺序登记 */
+  inputDefs: { [title: string]: { title: string; kind: string; def: any; min?: number; max?: number; step?: number } };
+  /** //@version=N（缺省 5） */
+  version: number;
   logs: string[];
   bar: number;
   error: string | null;
@@ -1470,6 +1849,9 @@ export class PineEngine {
     this.bars = bars;
     this.program = pineParse(code);
     this.kind = this.program.kind;
+    this.version = this.program.version;
+    this.fills = [];
+    this.inputDefs = {};
     this.title = String(this.program.title || '');
     this.overlay = !!this.program.opts.overlay;
     this.globalEnv = new PEnv(null);
@@ -1501,11 +1883,24 @@ export class PineEngine {
         width: kw && kw.linewidth != null ? toNum(kw.linewidth) : 1,
         style: kw && kw.style != null ? String(kw.style) : 'line',
         values: [],
+        /** 逐根颜色（color= 写成表达式时每根可以不同）；null / 缺省 = 沿用 color */
+        colors: [],
+        hidden: !!(kw && kw.display != null && String(kw.display) === 'none'),
       };
       this.plotByNode.set(node, p);
       this.plots.push(p);
     }
     return p;
+  }
+
+  fillFor(node: any, a: any, b: any): any {
+    let f = this.plotByNode.get(node);
+    if (!f) {
+      f = { a, b, colors: [] };
+      this.plotByNode.set(node, f);
+      this.fills.push(f);
+    }
+    return f;
   }
 
   markFor(node: any, kw: any, kind: string): any {
@@ -1956,6 +2351,75 @@ export function pineSelfTest(): PineTestResult {
   t('给未声明变量 := 要抛错', throws('indicator("t")\nz := 1\nplot(z)'), '');
   t('strategy.* 这类未实现的前缀要明确抛错',
     throws('indicator("t")\nstrategy.entry("L", strategy.long)\nplot(1)'), '');
+
+  // ============ Pine v6 ============
+  const V6 = '//@version=6\n';
+  t('pineVersionOf：5 / 6 通过，缺省按 5', pineVersionOf('//@version=6\nindicator("t")') === 6
+    && pineVersionOf('//@version=5\nindicator("t")') === 5 && pineVersionOf('indicator("t")') === 5, '');
+  t('//@version=4 / 7 明确拒绝（不假装兼容）', throws('//@version=4\nindicator("t")\nplot(1)') && throws('//@version=7\nindicator("t")\nplot(1)'), '');
+  t('引擎记下脚本版本', new PineEngine(V6 + 'indicator("t")\nplot(1)', pineTestBars(RISE)).version === 6, '');
+  t('v6：strategy.entry 的 when= 被拒绝（v6 已移除）',
+    throws(V6 + 'strategy("t")\nstrategy.entry("L", strategy.long, when=close > 1)'), '');
+  t('带类型的声明：float x = 2 / var int n = 0 / int k = 3',
+    near(last(V6 + 'indicator("t")\nfloat x = 2.5\nvar int n = 0\nn := n + 1\nint k = 3\nplot(x + n + k)', RISE), 2.5 + 5 + 3), '');
+  t('十六进制颜色字面量 #RRGGBB / #RRGGBBAA',
+    (() => {
+      const e = run1(V6 + 'indicator("t")\nplot(close, color=#2962FF)\nplot(close, color=#FF000080)', RISE);
+      return e.plots[0].color === '#2962ff' && /^rgba\(255,0,0,0\.5/.test(e.plots[1].color);
+    })(), '');
+  t('复合赋值 += -= *= /=',
+    near(last(V6 + 'indicator("t")\nfloat s = 10.0\ns += 5\ns -= 3\ns *= 2\ns /= 4\nplot(s)', [1]), ((10 + 5 - 3) * 2) / 4), '');
+  t('for + break：累加到 i==3 就停',
+    near(last(V6 + 'indicator("t")\nfloat s = 0.0\nfor i = 0 to 9\n    if i > 3\n        break\n    s += i\nplot(s)', [1]), 0 + 1 + 2 + 3), '');
+  t('for + continue：跳过偶数',
+    near(last(V6 + 'indicator("t")\nfloat s = 0.0\nfor i = 0 to 5\n    if i % 2 == 0\n        continue\n    s += i\nplot(s)', [1]), 1 + 3 + 5), '');
+  t('plot 位置参数：plot(x, "标题", #颜色)',
+    (() => { const e = run1(V6 + 'indicator("t")\nplot(close, "收盘", #ff0000)', RISE); return e.plots[0].title === '收盘' && e.plots[0].color === '#ff0000'; })(), '');
+  t('plot 带逐根颜色（color= 表达式）',
+    (() => {
+      const e = run1(V6 + 'indicator("t")\nplot(close, color=close > 3 ? #00ff00 : #ff0000)', RISE);
+      return e.plots[0].colors[0] === '#ff0000' && e.plots[0].colors[4] === '#00ff00';
+    })(), '');
+  t('plot(display=display.none) 标成 hidden',
+    run1(V6 + 'indicator("t")\nplot(close, display=display.none)', RISE).plots[0].hidden === true, '');
+  t('fill(plot, plot) 记录两端与逐根颜色',
+    (() => {
+      const e = run1(V6 + 'indicator("t")\na = plot(close)\nb = plot(open)\nfill(a, b, color=#112233)', RISE);
+      return e.fills.length === 1 && e.fills[0].a === e.plots[0] && e.fills[0].b === e.plots[1] && e.fills[0].colors[2] === '#112233';
+    })(), '');
+  t('fill(hline, hline)', run1(V6 + 'indicator("t")\nh1 = hline(70)\nh2 = hline(30)\nfill(h1, h2, color=#112233)\nplot(close)', RISE).fills.length === 1, '');
+  t('fill 的参数不是绘图句柄要抛错', throws(V6 + 'indicator("t")\nfill(close, open)\nplot(1)'), '');
+  t('math.sum 是滚动求和（不是累计）：sum(close,3) 末值 12',
+    near(last(V6 + 'indicator("t")\nplot(math.sum(close, 3))', RISE), 12), '');
+  t('math.max / math.min 可变参数', near(last(V6 + 'indicator("t")\nplot(math.max(1, 7, 3) - math.min(4, 2, 9))', RISE), 5), '');
+  t('input 声明被登记（标题 / 类型 / 默认值 / 下限）',
+    (() => {
+      const e = run1(V6 + 'indicator("t")\nl = input.int(14, "Length", minval=2)\nplot(close)', RISE);
+      const d = e.inputDefs.Length;
+      return !!d && d.kind === 'int' && d.def === 14 && d.min === 2;
+    })(), '');
+  t('input 默认值与覆盖值都生效', near(last(V6 + 'indicator("t")\nl = input.int(2, "Length")\nplot(l)', RISE), 2)
+    && near(run1(V6 + 'indicator("t")\nl = input.int(2, "Length")\nplot(l)', RISE, { Length: 7 }).lastPlot(0), 7), '');
+  t('input.source 可以用名字覆盖（hl2）',
+    (() => {
+      const e = run1(V6 + 'indicator("t")\ns = input.source(close, "Source")\nplot(s)', RISE, { Source: 'hl2' });
+      return near(e.lastPlot(0), 4.5);   // 末根 high=5.5 low=3.5 → hl2=4.5
+    })(), '');
+  t('ta.wma(close,3) 在 [1..5] = (3·1+4·2+5·3)/6 末值权重向最新倾斜',
+    near(last(V6 + 'indicator("t")\nplot(ta.wma(close, 3))', RISE), (3 * 1 + 4 * 2 + 5 * 3) / 6), '');
+  t('ta.highestbars / ta.lowestbars 偏移 ≤ 0',
+    near(last(V6 + 'indicator("t")\nplot(ta.highestbars(close, 3))', RISE), 0)
+    && near(last(V6 + 'indicator("t")\nplot(ta.lowestbars(close, 3))', RISE), -2), '');
+  t('ta.mom / ta.dev / ta.cmo 手算',
+    near(last(V6 + 'indicator("t")\nplot(ta.mom(close, 2))', RISE), 2)
+    && near(last(V6 + 'indicator("t")\nplot(ta.dev(close, 5))', RISE), 1.2)
+    && near(last(V6 + 'indicator("t")\nplot(ta.cmo(close, 3))', RISE), 100), '');
+  t('ta.tr / ta.obv / ta.accdist 作为内置变量可直接读取',
+    near(last(V6 + 'indicator("t")\nplot(ta.tr)', [1, 2, 3]), 2)
+    && near(last(V6 + 'indicator("t")\nplot(ta.obv)', RISE), 400)          // 4 次上涨 × 成交量 100
+    && near(last(V6 + 'indicator("t")\nplot(ta.accdist)', RISE), 200), '');   // 每根 (2c−l−h)/(h−l)=0.5 × 100，第 0 根 0
+  t('元组返回：ta.dmi 给出 3 个值',
+    (() => { const e = run1(V6 + 'indicator("t")\n[a, b, c] = ta.dmi(2, 2)\nplot(a)\nplot(b)\nplot(c)', [1, 2, 3, 4, 5, 6]); return e.plots.length === 3 && e.plots[2].values[5] !== null; })(), '');
 
   log('Pine 自检：' + pass + ' PASS / ' + fail + ' FAIL');
   return { pass, fail, names };

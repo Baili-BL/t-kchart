@@ -19,6 +19,11 @@
  * ---------------------------------------------------------------------------
  */
 
+import {
+  drawStudyOutput, fmtStudyValue, getStudyRunner, paneScale, paneStudies, paneTicks, studyParamsText,
+} from './studies';
+import type { Study, StudyDef, StudyGeom } from './studies';
+
 /* ===========================================================================
  * 1. 类型（编译时整体擦除）
  * ========================================================================= */
@@ -473,6 +478,12 @@ export class KChart {
   private extraMarks: { index: number; price: number; color: string; text: string; above: boolean }[] = [];
   channels: Channel[] = [];
 
+  /** 通过 setStudies() 加进来的指标（Pine v6 脚本的运行结果）：overlay 画主图，其余各占一个副图 */
+  studies: Study[] = [];
+  /** 指标图例上的按钮（设置 / 删除）：每次重绘重建，鼠标点击时据此命中 */
+  private studyHits: { uid: string; action: 'settings' | 'remove'; x: number; y: number; w: number; h: number }[] = [];
+  private studyHandler: ((uid: string, action: 'settings' | 'remove') => void) | null = null;
+
   private rafId = 0;
   private ac: AbortController;
   private ro: ResizeObserver | null = null;
@@ -539,6 +550,79 @@ export class KChart {
         ch.lower.values = bb.lower.values;
       }
     }
+    this.runStudies();
+  }
+
+  /* ------------------------------------------------------------- 指标（study） */
+
+  /** 公开选项（只读）：副图 / 外部图层要跟主题取色 */
+  opts(): Readonly<Required<ChartOptions>> {
+    return this.o;
+  }
+
+  /**
+   * 整体换一组指标定义（顺序即显示顺序）。每个指标在**本图的数据**上独立运行：
+   * 同一个定义在日线图和 30 分钟图上结果不同，这是对的。
+   * 回放时 bars 是截断后的前缀，所以指标天然只看得到「过去」。
+   */
+  setStudies(defs: StudyDef[]): void {
+    this.studies = defs.map((def) => ({ def, output: null, error: null }));
+    this.runStudies();
+    this.plot = this.computePlot();
+    this.clampView();
+    this.invalidate();
+  }
+
+  studyList(): Study[] {
+    return this.studies;
+  }
+
+  /** 指标图例上的按钮被点击时回调（设置 / 删除） */
+  setStudyHandler(fn: ((uid: string, action: 'settings' | 'remove') => void) | null): void {
+    this.studyHandler = fn;
+  }
+
+  private runStudies(): void {
+    const run = getStudyRunner();
+    for (const st of this.studies) {
+      if (!run) {
+        st.output = null;
+        st.error = '指标引擎未就绪';
+        continue;
+      }
+      try {
+        st.output = run(st.def, this.bars, { symbol: this.o.symbol, timeframe: this.o.timeframe });
+        st.error = null;
+      } catch (e) {
+        st.output = null;
+        st.error = e instanceof Error ? e.message : String(e);
+      }
+    }
+  }
+
+  /** 单个副图的高度（0 = 没有副图）。主图至少留 40%：副图总高度封顶在 60% */
+  private paneHeight(): number {
+    const k = paneStudies(this.studies).length;
+    if (!k) return 0;
+    const avail = Math.max(1, this.H - this.o.axisHeight - 6);
+    const each = clamp(Math.round(avail * 0.22), 60, 200);
+    return Math.max(24, Math.floor(Math.min(each * k, avail * 0.6) / k));
+  }
+
+  /** 每个副图占的矩形（从主图下沿往下依次排；最下面一个贴着时间轴） */
+  paneRects(): { study: Study; rect: Rect }[] {
+    const list = paneStudies(this.studies);
+    const h = this.paneHeight();
+    const p = this.plot;
+    return list.map((study, j) => {
+      const t = p.b + j * h;
+      return { study, rect: { l: p.l, t, r: p.r, b: t + h, w: p.w, h } };
+    });
+  }
+
+  /** 时间轴文字所在的纵坐标（时间轴永远贴着画布最底部，副图夹在主图与它之间） */
+  private axisY(): number {
+    return this.H - this.o.axisHeight / 2;
   }
 
   /* ------------------------------------------------------ 通用叠加线 API */
@@ -921,7 +1005,8 @@ export class KChart {
     const l = 0;
     const t = 6;
     const r = Math.max(1, this.W - this.o.axisWidth);
-    const b = Math.max(1, this.H - this.o.axisHeight);
+    const panes = paneStudies(this.studies).length * this.paneHeight();
+    const b = Math.max(t + 1, this.H - this.o.axisHeight - panes);
     return { l, t, r, b, w: Math.max(1, r - l), h: Math.max(1, b - t) };
   }
 
@@ -994,8 +1079,15 @@ export class KChart {
       const py = e.offsetY;
       try { c.setPointerCapture(e.pointerId); } catch (_e) { /* 忽略 */ }
       this.pointer = { x: px, y: py };
-      // 外部图层先挑：它接管了这次点击，本图就不平移
-      const taken = !!(this.hooks && this.hooks.onDown && this.hooks.onDown(px, py, e));
+      // 指标图例上的按钮先挑
+      const btn = this.hitStudyButton(px, py);
+      if (btn) {
+        if (this.studyHandler) this.studyHandler(btn.uid, btn.action);
+        this.invalidate();
+        return;
+      }
+      // 外部图层先挑：它接管了这次点击，本图就不平移。副图区域不交给绘图层（那里的坐标不是价格）
+      const taken = py < this.plot.b && !!(this.hooks && this.hooks.onDown && this.hooks.onDown(px, py, e));
       if (!taken) {
         this.dragging = true;
         this.dragX = e.clientX;
@@ -1006,7 +1098,8 @@ export class KChart {
     c.addEventListener('pointermove', (e: PointerEvent) => {
       const px = e.offsetX;
       const py = e.offsetY;
-      if (this.hooks && this.hooks.onMove) this.hooks.onMove(px, py, e);
+      if (py < this.plot.b && this.hooks && this.hooks.onMove) this.hooks.onMove(px, py, e);
+      c.style.cursor = this.hitStudyButton(px, py) ? 'pointer' : 'crosshair';
       if (this.dragging) {
         const dx = e.clientX - this.dragX;
         this.dragX = e.clientX;
@@ -1160,6 +1253,18 @@ export class KChart {
         if (v > max) max = v;
       }
     }
+    for (const st of this.studies) {
+      if (!st.output || !st.output.overlay) continue;
+      for (const pl of st.output.plots) {
+        if (pl.hidden) continue;
+        for (let i = lo; i <= hi; i++) {
+          const v = pl.values[i];
+          if (v == null) continue;
+          if (v < min) min = v;
+          if (v > max) max = v;
+        }
+      }
+    }
     if (!isFinite(min) || !isFinite(max)) return { min: 0, max: 1 };
     if (max - min < 1e-9) { max = min + 1; }
     const pad = (max - min) * this.o.padding;
@@ -1188,16 +1293,209 @@ export class KChart {
     this.drawSeries(i0, i1);
     this.drawLines(i0, i1);          // MA
     this.drawChannelLines(i0, i1);   // 通道线在 K 线上面
+    this.drawOverlayStudies(i0, i1); // Pine v6 指标（overlay=true）
     this.drawMarks();                // Pine plotshape 打点
     if (this.hooks && this.hooks.onDraw) this.hooks.onDraw(ctx);   // 外部图层（绘图工具）
     this.drawCrosshairV();
     ctx.restore();
 
+    this.studyHits = [];
     this.drawPriceAxis();
+    this.drawStudyPanes(i0, i1);
     this.drawTimeAxis(i0, i1);
     this.drawLastPrice();
     this.drawCrosshairLabels(i0, i1);
     this.drawLegend(i0, i1);
+    this.drawPaneLegends(i1);
+  }
+
+  /** 主图几何（给 drawStudyOutput 用） */
+  private mainGeom(i0: number, i1: number): StudyGeom {
+    const p = this.plot;
+    return {
+      l: p.l, r: p.r, t: p.t, b: p.b, barW: this.view.barW,
+      xCenter: (i) => this.xCenter(i), yOf: (v) => this.yOf(v), i0, i1: Math.min(this.bars.length - 1, i1),
+    };
+  }
+
+  private drawOverlayStudies(i0: number, i1: number): void {
+    const g = this.mainGeom(i0, i1);
+    for (const st of this.studies) {
+      if (st.output && st.output.overlay) drawStudyOutput(this.ctx, st.output, g);
+    }
+  }
+
+  /** 副图：每个 overlay=false 的指标一块。网格 / 图形 / 纵轴 / 十字线都在这里，图例在 drawPaneLegends */
+  private drawStudyPanes(i0: number, i1: number): void {
+    const ctx = this.ctx;
+    const p = this.plot;
+    const lo = Math.max(0, i0);
+    const hi = Math.min(this.bars.length - 1, i1);
+    if (hi < lo) return;
+    const idx = this.snapIndex();
+    for (const { study, rect } of this.paneRects()) {
+      const out = study.output;
+      if (!out) continue;
+      const sc = paneScale(out, lo, hi);
+      const span = sc.max - sc.min || 1;
+      const yOf = (v: number): number => rect.t + ((sc.max - v) / span) * rect.h;
+      const { ticks, step } = paneTicks(sc.min, sc.max, rect.h);
+
+      // 分隔线（压在主图 / 上一个副图的下沿）
+      ctx.strokeStyle = this.o.axisTextColor;
+      ctx.globalAlpha = 0.35;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, Math.round(rect.t) + 0.5);
+      ctx.lineTo(this.W, Math.round(rect.t) + 0.5);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+
+      // 网格
+      ctx.strokeStyle = this.o.gridColor;
+      ctx.beginPath();
+      for (const v of ticks) {
+        const y = Math.round(yOf(v)) + 0.5;
+        if (y <= rect.t + 2 || y >= rect.b - 1) continue;
+        ctx.moveTo(rect.l, y);
+        ctx.lineTo(rect.r, y);
+      }
+      for (const i of this.timeTicks(i0, i1)) {
+        const x = Math.round(this.xCenter(i)) + 0.5;
+        if (x < rect.l || x > rect.r) continue;
+        ctx.moveTo(x, rect.t);
+        ctx.lineTo(x, rect.b);
+      }
+      ctx.stroke();
+
+      // 图形
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(rect.l, rect.t + 1, rect.w, rect.h - 1);
+      ctx.clip();
+      drawStudyOutput(ctx, out, {
+        l: rect.l, r: rect.r, t: rect.t + 1, b: rect.b, barW: this.view.barW,
+        xCenter: (i) => this.xCenter(i), yOf, i0: lo, i1: hi,
+      });
+      if (idx != null) {
+        const x = Math.round(this.xCenter(idx)) + 0.5;
+        ctx.strokeStyle = this.o.crossColor;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(x, rect.t);
+        ctx.lineTo(x, rect.b);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      // 本地鼠标在这个副图里：横向十字线
+      const ptr = this.pointer;
+      if (ptr && ptr.y > rect.t && ptr.y < rect.b) {
+        ctx.strokeStyle = this.o.crossColor;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(rect.l, Math.round(ptr.y) + 0.5);
+        ctx.lineTo(rect.r, Math.round(ptr.y) + 0.5);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      ctx.restore();
+
+      // 纵轴刻度
+      ctx.font = this.o.font;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = this.o.axisTextColor;
+      for (const v of ticks) {
+        const y = yOf(v);
+        if (y < rect.t + 8 || y > rect.b - 6) continue;
+        ctx.fillText(fmtStudyValue(v, step), p.r + 8, Math.round(y));
+      }
+      // 鼠标处的数值标签（反色）
+      if (ptr && ptr.y > rect.t && ptr.y < rect.b) {
+        const v = sc.max - ((ptr.y - rect.t) / rect.h) * span;
+        const label = fmtStudyValue(v, step / 10);
+        const tw = ctx.measureText(label).width;
+        const bw = Math.max(this.o.axisWidth - 4, tw + 12);
+        const y = Math.round(ptr.y);
+        ctx.fillStyle = this.o.crossColor;
+        ctx.fillRect(p.r + 2, y - 9, bw, 18);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(label, p.r + 8, y);
+      }
+    }
+    // 价格轴竖线延伸到最底下一个副图
+    if (paneStudies(this.studies).length) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+      ctx.beginPath();
+      ctx.moveTo(p.r + 0.5, p.b);
+      ctx.lineTo(p.r + 0.5, this.H - this.o.axisHeight);
+      ctx.stroke();
+    }
+  }
+
+  /** 一个指标的图例行：名称 (参数) 各条线当前值 [设置][删除]。`hover` 为真才画按钮 */
+  private drawStudyRow(st: Study, x0: number, y: number, i: number, hover: boolean): void {
+    const ctx = this.ctx;
+    let x = x0;
+    const put = (text: string, fill: string, gap: number): void => {
+      ctx.fillStyle = fill;
+      ctx.fillText(text, x, y);
+      x += ctx.measureText(text).width + gap;
+    };
+    ctx.font = this.o.font;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    put(st.def.short || st.def.name, this.o.titleColor, 6);
+    if (st.output) {
+      const params = studyParamsText(st.output);
+      if (params) put('(' + params + ')', this.o.axisTextColor, 10);
+      for (const pl of st.output.plots) {
+        if (pl.hidden) continue;
+        const v = pl.values[i];
+        put(fmtStudyValue(v), pl.colors[i] || pl.color, 10);
+      }
+    } else if (st.error) {
+      put('⚠ ' + (st.error.length > 46 ? st.error.slice(0, 46) + '…' : st.error), '#f23645', 10);
+    }
+    if (!hover) return;
+    // 按钮：设置（⚙）/ 删除（✕）。16×16 的小圆角块，放在文字后面
+    const btn = (label: string, action: 'settings' | 'remove'): void => {
+      const bx = Math.round(x);
+      const by = Math.round(y - 8);
+      ctx.fillStyle = 'rgba(120,123,134,0.28)';
+      ctx.beginPath();
+      ctx.roundRect ? ctx.roundRect(bx, by, 16, 16, 3) : ctx.rect(bx, by, 16, 16);
+      ctx.fill();
+      ctx.fillStyle = this.o.titleColor;
+      ctx.textAlign = 'center';
+      ctx.fillText(label, bx + 8, by + 8.5);
+      ctx.textAlign = 'left';
+      this.studyHits.push({ uid: st.def.uid, action, x: bx, y: by, w: 16, h: 16 });
+      x += 20;
+    };
+    btn('⚙', 'settings');
+    btn('✕', 'remove');
+  }
+
+  /** 副图图例：每个副图左上角一行 */
+  private drawPaneLegends(i1: number): void {
+    const n = this.bars.length;
+    if (!n) return;
+    const idx = this.snapIndex();
+    const i = idx == null ? Math.min(n - 1, i1) : idx;
+    const ptr = this.pointer;
+    for (const { study, rect } of this.paneRects()) {
+      const hover = !!ptr && ptr.y > rect.t && ptr.y < rect.b;
+      this.drawStudyRow(study, rect.l + this.o.legendInset, rect.t + 12, i, hover);
+    }
+  }
+
+  /** 点中了指标图例上的哪个按钮（没点中返回 null） */
+  private hitStudyButton(px: number, py: number): { uid: string; action: 'settings' | 'remove' } | null {
+    for (const h of this.studyHits) {
+      if (px >= h.x && px <= h.x + h.w && py >= h.y && py <= h.y + h.h) return { uid: h.uid, action: h.action };
+    }
+    return null;
   }
 
   private drawGrid(i0: number, i1: number): void {
@@ -1571,7 +1869,7 @@ export class KChart {
     for (const i of this.timeTicks(i0, i1)) {
       const x = this.xCenter(i);
       if (x < p.l || x > p.r) continue;
-      ctx.fillText(fmtTime(this.bars[i].time, spanDays), Math.round(x), p.b + this.o.axisHeight / 2);
+      ctx.fillText(fmtTime(this.bars[i].time, spanDays), Math.round(x), this.axisY());
     }
   }
 
@@ -1641,7 +1939,7 @@ export class KChart {
       const tw = ctx.measureText(label).width;
       const bw = tw + 14;
       const x = clamp(this.xCenter(i), p.l + bw / 2, p.r - bw / 2);
-      const y = p.b + this.o.axisHeight / 2;
+      const y = this.axisY();
       ctx.fillStyle = this.o.crossColor;
       ctx.fillRect(Math.round(x - bw / 2), Math.round(y - 9), Math.round(bw), 18);
       ctx.fillStyle = '#ffffff';
@@ -1720,6 +2018,15 @@ export class KChart {
         const bw = ((u - l) / ((u + l) / 2)) * 100;
         put('带 ' + bw.toFixed(2) + '%', this.o.axisTextColor, 12);
       }
+    }
+
+    // Pine v6 指标：overlay 的和运行失败的各占一行（副图指标的图例在各自的副图里）
+    const ptr = this.pointer;
+    for (const st of this.studies) {
+      if (st.output && !st.output.overlay) continue;
+      y += rowH;
+      const hover = !!ptr && ptr.y >= y - rowH / 2 && ptr.y <= y + rowH / 2 && ptr.x < p.r;
+      this.drawStudyRow(st, x0, y, i, hover);
     }
   }
 
