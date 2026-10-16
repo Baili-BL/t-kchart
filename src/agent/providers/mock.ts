@@ -52,6 +52,36 @@ function normalizeTf(raw: string): string {
 }
 
 /** 把一句话翻译成若干个工具调用（纯函数，方便单测） */
+/** 文字 → 主图样式 key；不认识返回 null。菜单里做不了的样式也返回各自的 key，由工具层说明原因 */
+const STYLE_RULES: Array<[RegExp, string]> = [
+  [/砖形|renko/i, 'renko'],
+  [/新价线|三线反转/, 'linebreak'],
+  [/卡吉|kagi/i, 'kagi'],
+  [/点数图|圈叉|point\s*(and|&)\s*figure/i, 'pnf'],
+  [/范围图|range\s*bars?/i, 'range'],
+  [/成交量轨迹|footprint/i, 'footprint'],
+  [/时间价格机会|\btpo\b/i, 'tpo'],
+  [/成交量分布/, 'sessionvp'],
+  [/平均\s*k\s*线|平均蜡烛|heikin|\bha\b/i, 'heikin'],
+  [/空心/, 'hollow'],
+  [/成交量蜡烛|volume\s*candle/i, 'volcandles'],
+  [/带标记线|标记线|line\s*with\s*markers/i, 'linemarkers'],
+  [/阶梯|step\s*line/i, 'step'],
+  [/hlc/i, 'hlcarea'],
+  [/基准线|baseline/i, 'baseline'],
+  [/柱状图|columns/i, 'columns'],
+  [/高[-－—\s]?低|high[-\s]?low/i, 'highlow'],
+  [/面积/, 'area'],
+  [/线形|折线|line\s*chart/i, 'line'],
+  [/美国线|\bbars?\b/i, 'bars'],
+  [/k\s*线|蜡烛|candle/i, 'candles'],
+];
+
+export function pickStyle(text: string): string | null {
+  for (const [re, key] of STYLE_RULES) if (re.test(text)) return key;
+  return null;
+}
+
 export function planToolCalls(text: string): ToolCall[] {
   const calls: ToolCall[] = [];
   const upper = text.toUpperCase();
@@ -102,16 +132,8 @@ export function planToolCalls(text: string): ToolCall[] {
     calls.push({ id: nid('call'), name: 'replay', arguments: { action: act[0], ...act[1] } });
   }
 
-  // 样式：先判面积/折线/美国线，最后才是「K线」
-  const styleKey = /面积/.test(text)
-    ? 'area'
-    : /线形|折线|line\s*chart/i.test(text)
-      ? 'line'
-      : /美国线|\bbars?\b/i.test(text)
-        ? 'bars'
-        : /k\s*线|蜡烛|candle/i.test(text)
-          ? 'candles'
-          : null;
+  // 样式：具体的名字（空心K线 / 平均K线 / 带标记线…）要先于泛称（K线 / 线形），否则「空心K线图」会被认成普通 K 线
+  const styleKey = pickStyle(text);
   if (styleKey) calls.push({ id: nid('call'), name: 'set_chart_style', arguments: { style: styleKey } });
 
   const off = /关|隐藏|hide|off|remove|删|移除|去掉|取消/i.test(text);

@@ -188,7 +188,11 @@ export function TopBar(): JSX.Element {
       onCompare: () => toast('比较商品尚未实现'),
       onDataType: () => toast('数据类型切换尚未实现（当前为演示数据）'),
       onInterval: (_label, code) => st().setTimeframe(code),
-      onStyle: (label) => {
+      onStyle: (label, unavailable) => {
+        if (unavailable) {
+          toast(`「${label}」暂不可用：${unavailable}`);
+          return;
+        }
         const style = styleFromLabel(label);
         if (style) st().setChartStyle(style);
       },

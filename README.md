@@ -52,6 +52,7 @@ src/
     TopBar / RightRail  包装 dom/toolbar.ts / dom/rightbar.ts：store ⇄ 组件句柄（createToolbarHandle / createRightbarHandle）
     dom/              设计稿原生 DOM 组件（顶栏、绘图栏、右侧栏、策略报告面板）与图标
   engine/       chart grid draw pine equity analytics studies layouts replay（ESM，零依赖）
+  engine/styleTest.ts   图表样式的浏览器自检（像素）
   indicators/   内置指标库：catalog（全部是 Pine v6 脚本）/ runner（脚本 → 画得出的输出）/ studyTest（浏览器自检）
   data/         mockBars（TSLA/AAPL/NVDA/MSFT/SPY，分钟/小时/日/周/月）
   store/        zustand：appStore / chartStore / chatStore / studyStore（图上的指标 + 收藏 + 对话框状态）
@@ -89,9 +90,10 @@ VITE_DEEPSEEK_MODEL=deepseek-chat
 | --- | --- | --- |
 | 类型 | `npm run typecheck` | `strict: true`，0 错误 |
 | 引擎（Node） | `npm test` | 绘图 39 + Pine 74 + Pine 撮合 69 + 权益 26 + 统计 34 + 回放 27 + 布局目录 346 = 615（基线，只增不减） |
+| 图表样式（Node） | `npm test` | 平均K线手算对数、成交量蜡烛宽度、关键词 → 样式、不可用样式的原因、带标记线渐变色（8 条） |
 | 指标库（Node） | `npm test` | 36 个 v6 脚本全部跑通；约 30 个指标的数值与**独立 TS 参考实现**逐根对数；搜索 / 清单 / store / Agent 控制 |
 | Agent / 工作区 / 数据 | `npm test` | 意图解析、工具校验、runner 循环（含报错/中断/死循环兜底）、模拟账户不变式、范围高亮、mock 数据不变式 |
-| 引擎（浏览器，需 canvas） | 开发模式下控制台 `await __app.runBrowserSelfTests()` | 图表 76 + 网格 20 + 权益 37 + 统计 50 + 指标 19（副图布局 / 像素 / 指针分流 / 回放 / 实时 tick） |
+| 引擎（浏览器，需 canvas） | 开发模式下控制台 `await __app.runBrowserSelfTests()` | 图表 76 + 网格 20 + 权益 37 + 统计 50 + 指标 19（副图布局 / 像素 / 指针分流 / 回放 / 实时 tick）+ 样式 52（13 种样式的价格轴口径 + 像素） |
 
 `__app` 只在 `npm run dev` 下挂到 `window`，生产包里没有。
 
@@ -134,7 +136,12 @@ VITE_DEEPSEEK_MODEL=deepseek-chat
 
 - **Layout + Sync**：1 到 16 格、55 种排法，每格是**独立的 `KChart` 实例**
   （各自有坐标轴、图例、指标、缩放）；联动项：十字线 / 时间 / 日期范围 / 商品代码 / 周期
-- **主图样式**：K 线 / 美国线 / 线形图（收盘价折线）/ 面积图，`KChart.setStyle()` 切换；线形与面积的价格轴只按收盘价取范围；`ChartGrid.setChartStyle()` 让所有格一起变
+- **主图样式**：13 种，`KChart.setStyle()` 切换，`ChartGrid.setChartStyle()` 让所有格一起变。**全部是纯显示层变换**——数据、指标、回放、联动都仍跑在真实 OHLC 上：
+  - 蜡烛族：`candles` K线 / `bars` 美国线 / `hollow` 空心K线（涨空心跌实心）/ `volcandles` 成交量蜡烛（实体宽度 ∝ 成交量，见 `volCandleWidth`）/ `heikin` 平均K线（`heikinAshi()` 纯函数，带缓存，实时 tick 改最后一根会失效）
+  - 折线族（价格轴只按收盘价取范围）：`line` / `linemarkers` 带标记线（紫→蓝纵向渐变折线 + 实心圆点，渐变锚在可见范围最高 / 最低收盘价）/ `step` 阶梯线 / `area` 面积 / `baseline` 基准线（基准价 = 可见收盘价中点，之上涨色之下跌色）/ `columns` 柱状图
+  - 区间族（按最高最低价取范围）：`hlcarea` HLC 区域 / `highlow` 高-低
+  - 菜单里有但**做不了**的 8 个（灰显，点了只提示原因，Agent 点名也会如实说明，不会悄悄换成别的样式）：成交量轨迹 / 时间价格机会 / 交易时段成交量分布图（需要逐笔或更小周期数据，数据源只有 OHLC）；砖形图 / 新价线 / 卡吉图 / 点数图 / 范围图（非时间序列，会改变 bar 数量与时间轴，指标 / 回放 / 联动要跟着重做）
+  - 顶栏菜单是设计稿的 6 组 21 行，每行有 `?`（说明）与 `☆`（收藏：工具栏上出现该样式的快捷按钮，存 localStorage `kc.style.favorites`）
 - 联动**按时间对齐**（`viewTimes()` / `setViewTimes()` / `indexAtTime()` 二分），不按像素 —— 见 §10
 
 **Pine 引擎（`pine.ts`）—— T3 Phase 1，见 §12**

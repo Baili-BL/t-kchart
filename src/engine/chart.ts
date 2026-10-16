@@ -38,10 +38,69 @@ export interface Bar {
   volume: number;
 }
 
-/** 主图样式：蜡烛 / 美国线（OHLC 竖线+左右短线）/ 收盘价折线 / 面积 */
-export type ChartStyle = 'candles' | 'bars' | 'line' | 'area';
+/**
+ * 主图样式。全部是**纯显示层**变换：数据、指标、回放、联动都仍然跑在真实 OHLC 上。
+ *   蜡烛族：candles K线 / bars 美国线 / hollow 空心K线（涨空心跌实心）/ volcandles 成交量蜡烛（实体宽度 ∝ 成交量）/ heikin 平均K线
+ *   折线族（价格轴只按收盘价取范围）：line / linemarkers 带标记线 / step 阶梯线 / area 面积 / baseline 基准线 / columns 柱状图
+ *   区间族（按最高最低价取范围）：hlcarea HLC 区域 / highlow 高-低
+ */
+export type ChartStyle =
+  | 'candles' | 'bars' | 'hollow' | 'volcandles'
+  | 'line' | 'linemarkers' | 'step'
+  | 'area' | 'hlcarea' | 'baseline'
+  | 'columns' | 'highlow'
+  | 'heikin';
 
-export const CHART_STYLES: ChartStyle[] = ['candles', 'bars', 'line', 'area'];
+export const CHART_STYLES: ChartStyle[] = [
+  'candles', 'bars', 'hollow', 'volcandles',
+  'line', 'linemarkers', 'step',
+  'area', 'hlcarea', 'baseline',
+  'columns', 'highlow',
+  'heikin',
+];
+
+/** 只看收盘价的样式（价格轴也只按收盘价取范围） */
+const CLOSE_ONLY_STYLES: ReadonlySet<ChartStyle> = new Set<ChartStyle>(['line', 'linemarkers', 'step', 'area', 'baseline', 'columns']);
+
+/**
+ * 平均K线（Heikin-Ashi）。纯函数，输入真实 K 线，输出等长的平均K线（time / volume 不变）。
+ *   haClose = (o+h+l+c)/4；haOpen = 上一根 (haOpen+haClose)/2，首根 (o+c)/2；
+ *   haHigh = max(h, haOpen, haClose)；haLow = min(l, haOpen, haClose)
+ */
+export function heikinAshi(bars: Bar[]): Bar[] {
+  const out: Bar[] = [];
+  let po = 0;
+  let pc = 0;
+  for (let i = 0; i < bars.length; i++) {
+    const b = bars[i];
+    const c = (b.open + b.high + b.low + b.close) / 4;
+    const o = i === 0 ? (b.open + b.close) / 2 : (po + pc) / 2;
+    out.push({
+      time: b.time, open: o, close: c,
+      high: Math.max(b.high, o, c), low: Math.min(b.low, o, c), volume: b.volume,
+    });
+    po = o;
+    pc = c;
+  }
+  return out;
+}
+
+/** 带标记线的渐变：最高收盘价处紫、最低收盘价处蓝，中间按纵向位置线性过渡（颜色取自设计稿） */
+export const MARKER_TOP: [number, number, number] = [0x96, 0x37, 0xf3];
+export const MARKER_BOTTOM: [number, number, number] = [0x2d, 0x9b, 0xd2];
+
+/** t = 0 → 紫（最高），t = 1 → 蓝（最低）；越界夹紧；返回 `rgb(r,g,b)` */
+export function markerColor(t: number): string {
+  const k = Math.min(1, Math.max(0, t));
+  const c = MARKER_TOP.map((a, i) => Math.round(a + (MARKER_BOTTOM[i] - a) * k));
+  return `rgb(${c[0]},${c[1]},${c[2]})`;
+}
+
+/** 成交量蜡烛的实体宽度（像素）：随成交量在 [20%, 100%] × 90% 的柱距之间线性变化，至少 1px */
+export function volCandleWidth(volume: number, maxVolume: number, barW: number): number {
+  const r = maxVolume > 0 ? Math.min(1, Math.max(0, volume / maxVolume)) : 1;
+  return Math.max(1, Math.floor(barW * 0.9 * (0.2 + 0.8 * r)));
+}
 
 export interface ChartOptions {
   /** 图例里显示的标的 */
@@ -729,9 +788,29 @@ export class KChart {
     return { up: this.o.upColor, down: this.o.downColor };
   }
 
-  /** 折线 / 面积只看收盘价，价格轴也只按收盘价取范围 */
+  /** 折线族只看收盘价，价格轴也只按收盘价取范围 */
   private closeOnly(): boolean {
-    return this.o.style === 'line' || this.o.style === 'area';
+    return CLOSE_ONLY_STYLES.has(this.o.style);
+  }
+
+  /** 平均K线缓存：按 (数组, 长度, 首根时间, 末根 OHLC) 判断是否失效，实时 tick 改最后一根也能刷新 */
+  private haKey = '';
+  private haCache: Bar[] = [];
+  private haBars(): Bar[] {
+    const n = this.bars.length;
+    const l = n ? this.bars[n - 1] : null;
+    const key = n + '|' + (n ? this.bars[0].time : 0) + '|' + (l ? l.open + ',' + l.high + ',' + l.low + ',' + l.close : '');
+    if (key !== this.haKey) {
+      this.haCache = heikinAshi(this.bars);
+      this.haKey = key;
+    }
+    return this.haCache;
+  }
+
+  /** 基准线样式的基准价 = 可见范围收盘价的中点；最近一次绘制时更新（供自检 / 外部读取） */
+  private baselineValue: number | null = null;
+  baselinePrice(): number | null {
+    return this.baselineValue;
   }
 
   /* ---------------------------------------------------------------- 主题 */
@@ -1238,8 +1317,9 @@ export class KChart {
     const hi = Math.min(this.bars.length - 1, i1);
     let min = Infinity;
     let max = -Infinity;
+    const src = this.o.style === 'heikin' ? this.haBars() : this.bars;
     for (let i = lo; i <= hi; i++) {
-      const b = this.bars[i];
+      const b = src[i];
       const lowV = this.closeOnly() ? b.close : b.low;
       const highV = this.closeOnly() ? b.close : b.high;
       if (lowV < min) min = lowV;
@@ -1721,8 +1801,17 @@ export class KChart {
   private drawSeries(i0: number, i1: number): void {
     switch (this.o.style) {
       case 'bars': return this.drawBars(i0, i1);
-      case 'line': return this.drawCloseLine(i0, i1, false);
-      case 'area': return this.drawCloseLine(i0, i1, true);
+      case 'hollow': return this.drawCandles(i0, i1, { hollow: true });
+      case 'volcandles': return this.drawCandles(i0, i1, { volWidth: true });
+      case 'heikin': return this.drawCandles(i0, i1, { src: this.haBars() });
+      case 'line': return this.drawCloseLine(i0, i1, 'line');
+      case 'linemarkers': return this.drawCloseLine(i0, i1, 'markers');
+      case 'step': return this.drawCloseLine(i0, i1, 'step');
+      case 'area': return this.drawCloseLine(i0, i1, 'area');
+      case 'baseline': return this.drawBaseline(i0, i1);
+      case 'hlcarea': return this.drawHlcArea(i0, i1);
+      case 'columns': return this.drawColumns(i0, i1);
+      case 'highlow': return this.drawHighLow(i0, i1);
       default: return this.drawCandles(i0, i1);
     }
   }
@@ -1746,8 +1835,11 @@ export class KChart {
     }
   }
 
-  /** 收盘价折线；`fill` 为 true 时在线下做自上而下的渐变填充（面积图） */
-  private drawCloseLine(i0: number, i1: number, fill: boolean): void {
+  /**
+   * 收盘价折线族：line 折线 / markers 带标记线（蓝紫渐变折线 + 每根收盘价一个实心圆点）/ step 阶梯线（先横后竖）/
+   * area 面积（线下自上而下渐变填充）
+   */
+  private drawCloseLine(i0: number, i1: number, kind: 'line' | 'markers' | 'step' | 'area'): void {
     const ctx = this.ctx;
     const lo = Math.max(0, i0);
     const hi = Math.min(this.bars.length - 1, i1);
@@ -1755,13 +1847,17 @@ export class KChart {
     const p = this.plot;
     const path = new Path2D();
     let top = Infinity;
+    let prevY = 0;
     for (let i = lo; i <= hi; i++) {
       const x = this.xCenter(i);
       const y = this.yOf(this.bars[i].close);
       if (y < top) top = y;
-      if (i === lo) path.moveTo(x, y); else path.lineTo(x, y);
+      if (i === lo) path.moveTo(x, y);
+      else if (kind === 'step') { path.lineTo(x, prevY); path.lineTo(x, y); }
+      else path.lineTo(x, y);
+      prevY = y;
     }
-    if (fill) {
+    if (kind === 'area') {
       const area = new Path2D(path);
       area.lineTo(this.xCenter(hi), p.b);
       area.lineTo(this.xCenter(lo), p.b);
@@ -1773,22 +1869,183 @@ export class KChart {
       ctx.fill(area);
     }
     ctx.save();
-    ctx.strokeStyle = this.o.lineColor;
     ctx.lineWidth = 2;
     ctx.lineJoin = 'round';
-    ctx.stroke(path);
+    if (kind === 'markers') {
+      // 渐变锚在可见范围内最高 / 最低收盘价的位置上，颜色因此只取决于价格相对高低，不随缩放 / 平移跳变
+      let mx = -Infinity;
+      let mn = Infinity;
+      for (let i = lo; i <= hi; i++) {
+        const c = this.bars[i].close;
+        if (c > mx) mx = c;
+        if (c < mn) mn = c;
+      }
+      const yTop = this.yOf(mx);
+      const yBot = this.yOf(mn);
+      const colorAt = (y: number): string => markerColor(yBot - yTop < 1e-6 ? 0.5 : (y - yTop) / (yBot - yTop));
+      const g = ctx.createLinearGradient(0, yTop, 0, Math.max(yBot, yTop + 1));
+      g.addColorStop(0, markerColor(0));
+      g.addColorStop(1, markerColor(1));
+      ctx.strokeStyle = g;
+      ctx.stroke(path);
+      for (let i = lo; i <= hi; i++) {
+        const y = this.yOf(this.bars[i].close);
+        ctx.beginPath();
+        ctx.arc(this.xCenter(i), y, 4, 0, Math.PI * 2);
+        ctx.fillStyle = colorAt(y);
+        ctx.fill();
+      }
+    } else {
+      ctx.strokeStyle = this.o.lineColor;
+      ctx.stroke(path);
+    }
     ctx.restore();
   }
 
-  private drawCandles(i0: number, i1: number): void {
+  /**
+   * 基准线：基准价 = 可见范围收盘价的中点（虚线）。线在基准之上用涨色、之下用跌色，
+   * 线与基准之间各自渐变填充 —— 用两个裁剪矩形分别画，不用手算交点。
+   */
+  private drawBaseline(i0: number, i1: number): void {
+    const ctx = this.ctx;
+    const lo = Math.max(0, i0);
+    const hi = Math.min(this.bars.length - 1, i1);
+    if (hi < lo) return;
+    const p = this.plot;
+    let mn = Infinity;
+    let mx = -Infinity;
+    for (let i = lo; i <= hi; i++) {
+      const c = this.bars[i].close;
+      if (c < mn) mn = c;
+      if (c > mx) mx = c;
+    }
+    const base = (mn + mx) / 2;
+    this.baselineValue = base;
+    const yB = this.yOf(base);
+    const path = new Path2D();
+    for (let i = lo; i <= hi; i++) {
+      const x = this.xCenter(i);
+      const y = this.yOf(this.bars[i].close);
+      if (i === lo) path.moveTo(x, y); else path.lineTo(x, y);
+    }
+    const area = new Path2D(path);
+    area.lineTo(this.xCenter(hi), yB);
+    area.lineTo(this.xCenter(lo), yB);
+    area.closePath();
+    const half = (above: boolean): void => {
+      const color = above ? this.o.upColor : this.o.downColor;
+      ctx.save();
+      ctx.beginPath();
+      if (above) ctx.rect(p.l, p.t, p.w, Math.max(0, yB - p.t));
+      else ctx.rect(p.l, yB, p.w, Math.max(0, p.b - yB));
+      ctx.clip();
+      const g = ctx.createLinearGradient(0, above ? p.t : p.b, 0, yB);
+      g.addColorStop(0, withAlpha(color, 0.32));
+      g.addColorStop(1, withAlpha(color, 0.04));
+      ctx.fillStyle = g;
+      ctx.fill(area);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.lineJoin = 'round';
+      ctx.stroke(path);
+      ctx.restore();
+    };
+    half(true);
+    half(false);
+    ctx.save();
+    ctx.strokeStyle = this.o.axisTextColor;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(p.l, Math.round(yB) + 0.5);
+    ctx.lineTo(p.r, Math.round(yB) + 0.5);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /** HLC 区域：最高价线 / 最低价线之间半透明填充，收盘价一条细线；高低线分别用涨 / 跌色 */
+  private drawHlcArea(i0: number, i1: number): void {
+    const ctx = this.ctx;
+    const lo = Math.max(0, i0);
+    const hi = Math.min(this.bars.length - 1, i1);
+    if (hi < lo) return;
+    const hiPath = new Path2D();
+    const loPath = new Path2D();
+    const clPath = new Path2D();
+    const fill = new Path2D();
+    for (let i = lo; i <= hi; i++) {
+      const b = this.bars[i];
+      const x = this.xCenter(i);
+      if (i === lo) { hiPath.moveTo(x, this.yOf(b.high)); loPath.moveTo(x, this.yOf(b.low)); clPath.moveTo(x, this.yOf(b.close)); fill.moveTo(x, this.yOf(b.high)); }
+      else { hiPath.lineTo(x, this.yOf(b.high)); loPath.lineTo(x, this.yOf(b.low)); clPath.lineTo(x, this.yOf(b.close)); fill.lineTo(x, this.yOf(b.high)); }
+    }
+    for (let i = hi; i >= lo; i--) fill.lineTo(this.xCenter(i), this.yOf(this.bars[i].low));
+    fill.closePath();
+    ctx.fillStyle = withAlpha(this.o.lineColor, 0.16);
+    ctx.fill(fill);
+    ctx.save();
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = this.o.upColor;
+    ctx.stroke(hiPath);
+    ctx.strokeStyle = this.o.downColor;
+    ctx.stroke(loPath);
+    ctx.strokeStyle = this.o.lineColor;
+    ctx.lineWidth = 1.5;
+    ctx.stroke(clPath);
+    ctx.restore();
+  }
+
+  /** 柱状图：每根收盘价一根自底向上的柱，颜色按收盘相对上一根收盘（首根按开盘）涨跌 */
+  private drawColumns(i0: number, i1: number): void {
     const ctx = this.ctx;
     const bw = Math.max(1, Math.floor(this.view.barW * 0.7));
     const lo = Math.max(0, i0);
     const hi = Math.min(this.bars.length - 1, i1);
+    const p = this.plot;
     for (let i = lo; i <= hi; i++) {
       const b = this.bars[i];
+      const ref = i > 0 ? this.bars[i - 1].close : b.open;
+      ctx.fillStyle = b.close >= ref ? this.o.upColor : this.o.downColor;
+      const y = Math.round(this.yOf(b.close));
+      ctx.fillRect(Math.round(this.xCenter(i) - bw / 2), y, bw, Math.max(1, Math.round(p.b) - y));
+    }
+  }
+
+  /** 高-低：每根一根从最低价到最高价的悬浮柱，单色 */
+  private drawHighLow(i0: number, i1: number): void {
+    const ctx = this.ctx;
+    const bw = Math.max(1, Math.floor(this.view.barW * 0.7));
+    const lo = Math.max(0, i0);
+    const hi = Math.min(this.bars.length - 1, i1);
+    ctx.fillStyle = this.o.lineColor;
+    for (let i = lo; i <= hi; i++) {
+      const b = this.bars[i];
+      const yH = Math.round(this.yOf(b.high));
+      const yL = Math.round(this.yOf(b.low));
+      ctx.fillRect(Math.round(this.xCenter(i) - bw / 2), yH, bw, Math.max(1, yL - yH));
+    }
+  }
+
+  /**
+   * 蜡烛体。默认行为（实心、固定宽度、真实 OHLC）不变；
+   *   hollow：涨（close ≥ open）空心 —— 先填背景色再描边；跌实心；
+   *   volWidth：实体宽度随成交量变化（`volCandleWidth`）；
+   *   src：改用别的 OHLC 序列（平均K线）。
+   */
+  private drawCandles(i0: number, i1: number, o: { hollow?: boolean; volWidth?: boolean; src?: Bar[] } = {}): void {
+    const ctx = this.ctx;
+    const src = o.src || this.bars;
+    const bw0 = Math.max(1, Math.floor(this.view.barW * 0.7));
+    const lo = Math.max(0, i0);
+    const hi = Math.min(this.bars.length - 1, i1);
+    let maxV = 0;
+    if (o.volWidth) for (let i = lo; i <= hi; i++) if (src[i].volume > maxV) maxV = src[i].volume;
+    for (let i = lo; i <= hi; i++) {
+      const b = src[i];
       const up = b.close >= b.open;
       const color = up ? this.o.upColor : this.o.downColor;
+      const bw = o.volWidth ? volCandleWidth(b.volume, maxV, this.view.barW) : bw0;
       const xc = Math.round(this.xCenter(i));
       const yH = this.yOf(b.high);
       const yL = this.yOf(b.low);
@@ -1799,7 +2056,16 @@ export class KChart {
       ctx.fillRect(Math.round(xc - 0.5), Math.round(yH), 1, Math.max(1, Math.round(yL - yH)));
       const top = Math.min(yO, yC);
       const hgt = Math.max(1, Math.abs(yC - yO));
-      ctx.fillRect(Math.round(xc - bw / 2), Math.round(top), bw, Math.round(hgt));
+      const bx = Math.round(xc - bw / 2);
+      if (o.hollow && up && bw >= 3 && hgt >= 3) {
+        ctx.fillStyle = this.o.bgColor;
+        ctx.fillRect(bx, Math.round(top), bw, Math.round(hgt));
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(bx + 0.5, Math.round(top) + 0.5, bw - 1, Math.round(hgt) - 1);
+      } else {
+        ctx.fillRect(bx, Math.round(top), bw, Math.round(hgt));
+      }
     }
   }
 

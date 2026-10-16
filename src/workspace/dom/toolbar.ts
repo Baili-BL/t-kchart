@@ -4,6 +4,7 @@
 // 悬停底 rgb(242,242,242)、强调色 rgb(41,98,255)。
 // 用法：createToolbar(document.getElementById('mount'));
 // 需要从外部同步状态（品种 / 周期 / 布局名 / 撤销态）时用 createToolbarHandle。
+import * as SI from './style-icons';
 import { DATA_TYPE, COMPARE, CANDLES, INDICATORS, CARET_INDICATORS, IND_TEMPLATES, ALERT, REPLAY, UNDO, REDO, LAYOUT, CARET_LAYOUT, QUICK_SEARCH, SETTINGS, FULLSCREEN, SNAPSHOT } from './toolbar-icons';
 
 /* ------------------------------------------------------------------ 工具 */
@@ -95,6 +96,28 @@ const CSS = `
 .kc-tb-menu li .check { width: 14px; visibility: hidden; }
 .kc-tb-menu li.sel .check { visibility: visible; }
 .kc-tb-menu li svg { flex: 0 0 auto; color: rgb(15,15,15); }
+/* —— 图表样式菜单（分组 + 说明 + 收藏） —— */
+.kc-tb-menu.kc-sm { width: 266px; padding: 6px; max-height: calc(100vh - 80px); overflow-y: auto; }
+.kc-tb-menu.kc-sm li.kc-sm-row {
+  height: 36px; padding: 2px 4px; gap: 4px; border-radius: 6px; box-sizing: border-box;
+}
+.kc-sm-row .kc-sm-label { flex: 1 1 auto; display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 14px; line-height: 18px; }
+.kc-sm-row .kc-sm-help, .kc-sm-row .kc-sm-star {
+  display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; flex: 0 0 auto;
+  color: rgb(184,184,184); opacity: 0; cursor: pointer;
+}
+.kc-sm-row:hover .kc-sm-help, .kc-sm-row:hover .kc-sm-star, .kc-sm-row .kc-sm-star.on { opacity: 1; }
+.kc-sm-row .kc-sm-help:hover, .kc-sm-row .kc-sm-star:hover { color: rgb(15,15,15); }
+.kc-sm-row .kc-sm-star.on { color: rgb(255,171,0); }
+.kc-sm-row .kc-sm-star { margin-right: 4px; }
+.kc-tb-menu li.kc-sm-row.sel { background: rgb(231,240,255); color: rgb(41,98,255); }
+.kc-tb-menu li.kc-sm-row.sel svg:first-child { color: rgb(41,98,255); }
+.kc-tb-menu li.kc-sm-row.na { opacity: .45; cursor: not-allowed; }
+.kc-tb-menu li.kc-sm-row.na:hover { background: transparent; }
+.kc-tb-menu li.kc-sm-sep { height: 1px; padding: 0; margin: 6px 4px; background: rgb(235,235,235); cursor: default; }
+.kc-tb-menu li.kc-sm-sep:hover { background: rgb(235,235,235); }
+.kc-tb-fav { padding: 0 3px; }
+.kc-tb-fav.kc-on { background: rgb(231,240,255); color: rgb(41,98,255); }
 /* —— 窄屏降级：按容器宽度（而非视口）逐级收起次要按钮，避免挤出右侧面板 —— */
 .kc-toolbar { container-type: inline-size; container-name: tvtb; }
 @container tvtb (max-width: 1000px) {
@@ -117,19 +140,55 @@ function injectStyle(): void {
 }
 
 /* ------------------------------------------------------------ 下拉菜单定义 */
-// 手绘的三枚 28×28 备用图形（K线以外的图表样式）
-const I_BARS = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="28" height="28"><g stroke="currentColor" stroke-width="1.6" fill="none"><path d="M6 6v16M4 8h4M4 20h4"/><path d="M14 4v18M12 6h4M12 18h4"/><path d="M22 8v14M20 10h4M20 20h4"/></g></svg>';
-const I_LINE = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="28" height="28"><path stroke="currentColor" stroke-width="1.6" fill="none" d="M3 20l6-8 5 4 5-9 6 5"/></svg>';
-const I_AREA = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="28" height="28"><path fill="currentColor" opacity=".25" d="M3 20l6-8 5 4 5-9 6 5v10H3z"/><path stroke="currentColor" stroke-width="1.6" fill="none" d="M3 20l6-8 5 4 5-9 6 5"/></svg>';
-
 const INTERVALS: Array<[string, string]> = [
   ['1分', '1m'], ['5分', '5m'], ['15分', '15m'], ['30分', '30m'],
   ['1时', '1h'], ['4时', '4h'], ['天', '1D'], ['周', '1W'], ['月', '1M'],
 ];
 
-const CHART_STYLES: Array<[string, string]> = [
-  ['K线图', CANDLES], ['美国线', I_BARS], ['线形图', I_LINE], ['面积图', I_AREA],
+/** 图表样式菜单的一行。`unavailable` 有值 = 做不了，灰显，点击只提示原因（不切换） */
+interface StyleRow { label: string; icon: string; help: string; unavailable?: string }
+
+const NEED_INTRABAR = '需要逐笔 / 更小周期的成交数据，现有数据源只有 OHLC';
+const NON_TIME = '按价格变动出 bar 的非时间序列图，会改变 bar 数量与时间轴，指标 / 回放 / 联动都要跟着改，暂未实现';
+
+/** 与设计稿一致：6 组（组间有分隔线），共 21 行，目前可用 13 行 */
+const STYLE_GROUPS: StyleRow[][] = [
+  [
+    { label: '美国线', icon: SI.ST_BARS, help: '用竖线连接最高价与最低价，左短线为开盘价，右短线为收盘价。' },
+    { label: 'K线图', icon: SI.ST_CANDLES, help: '实体显示开盘到收盘，影线显示最高与最低价。' },
+    { label: '空心K线图', icon: SI.ST_HOLLOW, help: '收盘高于开盘的 K 线实体为空心，反之为实心。' },
+    { label: '成交量蜡烛', icon: SI.ST_VOLCANDLES, help: '蜡烛实体的宽度与该根的成交量成正比。' },
+  ],
+  [
+    { label: '线形图', icon: SI.ST_LINE, help: '连接每根 K 线收盘价的折线。' },
+    { label: '带标记线', icon: SI.ST_LINEMARKERS, help: '在每根 K 线的收盘价处加一个标记点的折线。' },
+    { label: '阶梯线', icon: SI.ST_STEP, help: '收盘价变化时先横后竖的阶梯折线。' },
+  ],
+  [
+    { label: '面积图', icon: SI.ST_AREA, help: '收盘价折线，线下方做渐变填充。' },
+    { label: 'HLC区域', icon: SI.ST_HLCAREA, help: '最高价线与最低价线之间填充，并叠加收盘价线。' },
+    { label: '基准线', icon: SI.ST_BASELINE, help: '以可见范围收盘价的中点为基准，之上用涨色、之下用跌色。' },
+  ],
+  [
+    { label: '柱状图', icon: SI.ST_COLUMNS, help: '以柱子表示收盘价，颜色按相对上一根收盘价的涨跌。' },
+    { label: '高-低', icon: SI.ST_HIGHLOW, help: '每根 K 线一根从最低价到最高价的悬浮柱。' },
+  ],
+  [
+    { label: '成交量轨迹', icon: SI.ST_FOOTPRINT, help: '每根 K 线内按价位拆分买卖成交量。', unavailable: NEED_INTRABAR },
+    { label: '时间价格机会', icon: SI.ST_TPO, help: '市场轮廓（TPO）图。', unavailable: NEED_INTRABAR },
+    { label: '交易时段成交量分布图', icon: SI.ST_SESSIONVP, help: '按交易时段统计各价位的成交量。', unavailable: NEED_INTRABAR },
+  ],
+  [
+    { label: '平均K线图', icon: SI.ST_HEIKIN, help: 'Heikin-Ashi：用前后两根的平均值平滑 K 线，更容易看出趋势。' },
+    { label: '砖形图', icon: SI.ST_RENKO, help: '只在价格移动一个固定幅度时才画一块砖，忽略时间。', unavailable: NON_TIME },
+    { label: '新价线', icon: SI.ST_LINEBREAK, help: '三线反转图：只在价格突破前几条线时才画反转线。', unavailable: NON_TIME },
+    { label: '卡吉图', icon: SI.ST_KAGI, help: '用粗细变化的竖线记录价格趋势，忽略时间。', unavailable: NON_TIME },
+    { label: '点数图', icon: SI.ST_PNF, help: '用 X 和 O 的列记录价格上涨和下跌，忽略时间。', unavailable: NON_TIME },
+    { label: '范围图', icon: SI.ST_RANGE, help: '每根 bar 的价格振幅固定，忽略时间。', unavailable: '每根 bar 的价格范围固定，准确切分需要根内逐笔数据，现有数据源只有 OHLC，暂未实现' },
+  ],
 ];
+const STYLE_ROWS: StyleRow[] = STYLE_GROUPS.flat();
+const FAV_KEY = 'kc.style.favorites';
 
 const CHECK = '<svg class="check" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 14 14" width="14" height="14" fill="none"><path stroke="currentColor" stroke-width="1.6" d="M2.5 7.5l3 3 6-7"/></svg>';
 
@@ -137,7 +196,8 @@ const CHECK = '<svg class="check" xmlns="http://www.w3.org/2000/svg" viewBox="0 
 export interface ToolbarCallbacks {
   onSymbol?: () => void;
   onInterval?: (label: string, code: string) => void;
-  onStyle?: (label: string) => void;
+  /** 选中样式。`unavailable` 有值表示该样式暂不可用（原因），调用方应提示而不是切换 */
+  onStyle?: (label: string, unavailable?: string) => void;
   onCompare?: () => void;
   onIndicators?: () => void;
   onAlert?: (on: boolean) => void;
@@ -270,18 +330,102 @@ export function createToolbarHandle(mount: HTMLElement, cb: ToolbarCallbacks = {
   const styleIcon = el('span', '', CANDLES);
   styleIcon.style.display = 'flex';
   styleBtn.appendChild(styleIcon);
-  const styleMenu = buildMenu(styleBtn, CHART_STYLES, true, label => {
-    applyStyle(label);
-    cb.onStyle?.(label);
-  }, 0);
-  function applyStyle(label: string): void {
-    const found = CHART_STYLES.find(x => x[0] === label);
-    if (!found) return;
-    styleIcon.innerHTML = found[1];
-    styleBtn.title = label;
-    markSel(styleMenu, CHART_STYLES.findIndex(x => x[0] === label));
+  let curStyle = 'K线图';
+  const favs: string[] = (() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem(FAV_KEY) || '[]') as unknown;
+      return Array.isArray(raw) ? raw.filter((x): x is string => typeof x === 'string' && STYLE_ROWS.some(r => r.label === x && !r.unavailable)) : [];
+    } catch { return []; }
+  })();
+  const favBox = el('span', 'kc-tb-favbox kc-p2');
+  favBox.style.display = 'flex';
+  const styleMenu = el('ul', 'kc-tb-menu kc-sm');
+  const rowEls = new Map<string, HTMLElement>();
+  const pickStyle = (row: StyleRow): void => {
+    if (row.unavailable) {
+      cb.onStyle?.(row.label, row.unavailable);
+      return;
+    }
+    applyStyle(row.label);
+    cb.onStyle?.(row.label);
+  };
+  function renderFavs(): void {
+    favBox.innerHTML = '';
+    for (const label of favs) {
+      const row = STYLE_ROWS.find(r => r.label === label);
+      if (!row) continue;
+      const b = el('button', 'kc-tb-btn kc-tb-fav' + (label === curStyle ? ' kc-on' : '')) as HTMLButtonElement;
+      b.type = 'button';
+      b.title = label;
+      b.dataset.style = label;
+      b.innerHTML = row.icon;
+      b.addEventListener('click', () => pickStyle(row));
+      favBox.appendChild(b);
+    }
+    rowEls.forEach((li, label) => {
+      const on = favs.includes(label);
+      const star = li.querySelector('.kc-sm-star');
+      if (star) { star.classList.toggle('on', on); star.innerHTML = on ? SI.ST_STAR_ON : SI.ST_STAR; star.setAttribute('aria-pressed', String(on)); }
+    });
   }
+  STYLE_GROUPS.forEach((group, gi) => {
+    if (gi > 0) styleMenu.appendChild(el('li', 'kc-sm-sep'));
+    for (const row of group) {
+      const li = el('li', 'kc-sm-row' + (row.unavailable ? ' na' : '') + (row.label === curStyle ? ' sel' : ''));
+      li.dataset.style = row.label;
+      li.title = row.unavailable ? `${row.label}：暂不可用 — ${row.unavailable}` : row.label;
+      li.setAttribute('role', 'menuitem');
+      li.innerHTML = row.icon;
+      const lab = el('span', 'kc-sm-label');
+      lab.append(row.label);
+      const help = el('span', 'kc-sm-help');
+      help.innerHTML = SI.ST_HELP;
+      help.title = row.help;
+      lab.appendChild(help);
+      li.appendChild(lab);
+      if (!row.unavailable) {
+        const star = el('span', 'kc-sm-star');
+        star.innerHTML = SI.ST_STAR;
+        star.title = '收藏：在工具栏上显示快捷按钮';
+        star.setAttribute('role', 'button');
+        star.addEventListener('click', e => {
+          e.stopPropagation();
+          const k = favs.indexOf(row.label);
+          if (k >= 0) favs.splice(k, 1); else favs.push(row.label);
+          try { localStorage.setItem(FAV_KEY, JSON.stringify(favs)); } catch { /* 隐私模式 */ }
+          renderFavs();
+        });
+        li.appendChild(star);
+      }
+      li.addEventListener('click', e => {
+        e.stopPropagation();
+        closeMenus();
+        pickStyle(row);
+      });
+      rowEls.set(row.label, li);
+      styleMenu.appendChild(li);
+    }
+  });
+  styleBtn.appendChild(styleMenu);
+  menus.push(styleMenu);
+  styleBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    const was = styleMenu.classList.contains('open');
+    closeMenus();
+    if (!was) styleMenu.classList.add('open');
+  });
+  function applyStyle(label: string): void {
+    const found = STYLE_ROWS.find(x => x.label === label);
+    if (!found || found.unavailable) return;
+    curStyle = label;
+    styleIcon.innerHTML = found.icon;
+    styleBtn.title = label;
+    rowEls.forEach((li, l) => li.classList.toggle('sel', l === label));
+    favBox.querySelectorAll('button').forEach(b => b.classList.toggle('kc-on', (b as HTMLElement).dataset.style === label));
+  }
+  renderFavs();
   gStyle.appendChild(styleBtn);
+  gStyle.appendChild(favBox);
   root.appendChild(gStyle);
 
   /* ================= 指标 ================= */

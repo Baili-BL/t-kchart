@@ -41,8 +41,31 @@ export type ReplayActionName = (typeof REPLAY_ACTION_NAMES)[number];
 export const REPLAY_SPEED_VALUES = [1, 2, 5, 10, 30];
 
 /** 主图样式（与引擎 ChartStyle 同构；Agent 层不依赖引擎，故在此重复声明） */
-export type ChartStyle = 'candles' | 'bars' | 'line' | 'area';
-export const CHART_STYLE_KEYS: ChartStyle[] = ['candles', 'bars', 'line', 'area'];
+export type ChartStyle =
+  | 'candles' | 'bars' | 'hollow' | 'volcandles'
+  | 'line' | 'linemarkers' | 'step'
+  | 'area' | 'hlcarea' | 'baseline'
+  | 'columns' | 'highlow'
+  | 'heikin';
+export const CHART_STYLE_KEYS: ChartStyle[] = [
+  'candles', 'bars', 'hollow', 'volcandles',
+  'line', 'linemarkers', 'step',
+  'area', 'hlcarea', 'baseline',
+  'columns', 'highlow',
+  'heikin',
+];
+
+/** 菜单里有、但目前做不了的样式（key → 原因）。Agent 点名要这些时，把原因原样告诉用户，而不是悄悄换成别的 */
+export const UNAVAILABLE_STYLES: Record<string, string> = {
+  renko: '砖形图是按价格变动而不是按时间出 bar 的非时间序列图，会改变 bar 的数量与时间轴，指标 / 回放 / 联动都要跟着改，暂未实现',
+  linebreak: '新价线（三线反转）是按价格变动出 bar 的非时间序列图，暂未实现',
+  kagi: '卡吉图是按价格反转出线的非时间序列图，暂未实现',
+  pnf: '点数图（圈叉图）是按价格变动出列的非时间序列图，暂未实现',
+  range: '范围图需要根内逐笔数据才能准确切分，现有数据源只有 OHLC，暂未实现',
+  footprint: '成交量轨迹需要逐笔 / 更小周期的买卖成交量，现有数据源只有 OHLC，暂不可用',
+  tpo: '时间价格机会（TPO）需要日内更小周期数据，现有数据源只有 OHLC，暂不可用',
+  sessionvp: '交易时段成交量分布图需要日内更小周期数据，现有数据源只有 OHLC，暂不可用',
+};
 
 export const CHART_TOOL_DEFINITIONS: ToolDefinition[] = [
   {
@@ -89,7 +112,7 @@ export const CHART_TOOL_DEFINITIONS: ToolDefinition[] = [
   },
   {
     name: 'set_chart_style',
-    description: '切换主图样式：candles K线 / bars 美国线 / line 收盘价折线 / area 面积图。',
+    description: '切换主图样式：candles K线 / bars 美国线 / hollow 空心K线 / volcandles 成交量蜡烛 / line 折线 / linemarkers 带标记线 / step 阶梯线 / area 面积 / hlcarea HLC 区域 / baseline 基准线 / columns 柱状图 / highlow 高-低 / heikin 平均K线。',
     parameters: {
       type: 'object',
       properties: { style: { type: 'string', enum: CHART_STYLE_KEYS } },
@@ -217,6 +240,7 @@ export function createChartTools(ctl: ChartControls): ToolRuntime {
           const raw = str(a.style)?.toLowerCase();
           if (!raw) return fail('缺少参数 style');
           const style = CHART_STYLE_KEYS.find((k) => k === raw);
+          if (!style && UNAVAILABLE_STYLES[raw]) return fail(`样式 ${raw} 暂不可用：${UNAVAILABLE_STYLES[raw]}`);
           if (!style) return fail(`未知样式 ${raw}，可选：${CHART_STYLE_KEYS.join(', ')}`);
           ctl.setChartStyle(style);
           return ok(`主图样式已切换为 ${style}`);
