@@ -57,7 +57,7 @@ npm test (vitest)                          引擎 615 PASS（绘图 39 + Pine 74
 浏览器侧（dev 控制台 __app.runBrowserSelfTests()）
                                            图表 76（改造前 48，新增 setRange 回归 1 条 + 图表样式 8 条 + revealSpan 4 条 + 回放 15 条）+ 网格 20（含 55 种布局抽样的像素位置、时间联动）
                                            + 权益 37 + 统计 50 + 指标 19 + 样式 52
-E2E（puppeteer 驱动 headless Chrome，未入库）  布局 13 + 指标 36 + 样式 38 PASS / 0 FAIL（早先的整页 E2E 79 条已随脚本被覆盖，未重跑）
+E2E（puppeteer 驱动 headless Chrome，未入库）  布局 13 + 指标 36 + 样式 38 + 商品代码搜索 28 PASS / 0 FAIL（早先的整页 E2E 79 条已随脚本被覆盖，未重跑）
 ```
 
 **任何改动之后这套数字必须只增不减。** 加功能要加断言，改逻辑不能让已有断言变红。
