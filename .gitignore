@@ -8,3 +8,6 @@ _d*.html
 
 # 本地产物
 *.log
+
+# WorkBuddy 工作区数据
+.workbuddy/

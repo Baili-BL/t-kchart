@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tv-chart · 图表页框架（顶部 + 左侧 + 右侧）</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    display: flex; flex-direction: column; overflow: hidden;
+    font: 14px -apple-system, "system-ui", "Trebuchet MS", Roboto, Ubuntu, sans-serif;
+    background: #f8f9fa; color: #0f0f0f;
+  }
+  #toolbar { flex: 0 0 38px; border-bottom: 1px solid rgb(220,220,220); background: #fff; }
+  #middle { flex: 1 1 auto; display: flex; min-height: 0; }
+  #sidebar { flex: 0 0 52px; }
+  #stage { flex: 1 1 auto; position: relative; overflow: hidden; }
+  #stage .hint {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    color: #b2b2b2; font-size: 13px; letter-spacing: .08em; pointer-events: none;
+  }
+  #rightbar { flex: 0 0 45px; display: flex; justify-content: flex-end; background: #fff; }
+  #rightbar > div { height: 100%; }
+  #state {
+    position: absolute; left: 12px; bottom: 12px; padding: 6px 10px;
+    background: #fff; border: 1px solid #e0e0e0; border-radius: 6px;
+    font: 12px/1.6 ui-monospace, Consolas, monospace; color: #555;
+  }
+</style>
+</head>
+<body>
+  <div id="toolbar"></div>
+  <div id="middle">
+    <div id="sidebar"></div>
+    <div id="stage">
+      <div class="hint">图表区域占位 —— 顶部横排 + 左侧绘图栏 + 右侧边栏 + 底部面板四件套</div>
+      <div id="state">四套组件的事件统一回显在这里</div>
+    </div>
+    <div id="rightbar"></div>
+  </div>
+  <div id="bottom"></div>
+
+  <script type="module">
+    import { createToolbar } from './toolbar.js';
+    import { createSidebar } from './sidebar.js';
+    import { createRightbar } from './rightbar.js';
+    import { createBottom } from './bottom.js';
+
+    const state = document.getElementById('state');
+    const log = (msg) => { state.textContent = msg; };
+
+    createToolbar(document.getElementById('toolbar'), {
+      onSymbol:   () => log('顶部: 打开品种搜索'),
+      onCompare:  () => log('顶部: 比较商品'),
+      onInterval: (label) => log(`顶部: 周期 → ${label}`),
+      onStyle:    (label) => log(`顶部: 图表样式 → ${label}`),
+      onIndicators: () => log('顶部: 指标'),
+      onAlert:    (on) => log(`顶部: 警报 ${on ? '开启' : '关闭'}`),
+      onReplay:   (on) => log(`顶部: 回放 ${on ? '开启' : '关闭'}`),
+    });
+
+    createSidebar(document.getElementById('sidebar'), {
+      onTool:   (label) => log(`左侧: 工具 → ${label}`),
+      onToggle: (label, on) => log(`左侧: ${label} ${on ? '开启' : '关闭'}`),
+    });
+
+    createRightbar(document.getElementById('rightbar'), {
+      onSelect: (label, on) => log(`右侧: ${label} ${on ? '展开' : '收起'}`),
+    });
+
+    createBottom(document.getElementById('bottom'), {
+      onCollapse: (c) => log(`底部: 面板${c ? '折叠' : '展开'}`),
+      onMaximize: () => log('底部: 最大化面板'),
+      onSnapshot: () => log('底部: 生成快照'),
+      onExpand: () => log('底部: 展开图表'),
+      onDateRange: () => log('底部: 日期范围'),
+      onInterval: () => log('底部: 周期'),
+      onPrecision: () => log('底部: 精度'),
+      onScript: () => log('底部: 脚本执行'),
+      onSettings: () => log('底部: 设置'),
+      onAlert: () => log('底部: 添加警报'),
+    });
+  </script>
+</body>
+</html>
