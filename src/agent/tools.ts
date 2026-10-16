@@ -1,3 +1,4 @@
+import { LAYOUT_COUNTS, layoutsOfCount, uniformLayoutId } from '../engine/layouts';
 import type { ToolCall, ToolDefinition, ToolResult, ToolRuntime } from './types';
 
 /**
@@ -11,7 +12,10 @@ export interface ChartControls {
   setTimeframe(timeframe: string): void;
   /** 返回 false 表示数据不够长，已退化为 ALL */
   setRange(range: string): boolean;
+  /** 均匀 rows × cols 网格（调用方已确认存在这种布局） */
   setLayout(rows: number, cols: number): void;
+  /** 按布局目录 id 切换（如 `4-3`），调用方已确认 id 存在 */
+  setLayoutId(id: string): void;
   /** 切换主图样式，所有格一起变 */
   setChartStyle(style: ChartStyle): void;
   setIndicator(indicator: string, visible: boolean): void;
@@ -63,11 +67,17 @@ export const CHART_TOOL_DEFINITIONS: ToolDefinition[] = [
   },
   {
     name: 'set_layout',
-    description: '设置多图网格布局，行列各 1–4。',
+    description:
+      '设置多图布局。两种写法二选一：① rows + cols（均匀网格，各 1–4）；' +
+      '② count + variant（按图数选，count ∈ 1–10、12、14、16；同图数有多种排法，variant 从 1 起，默认 1）。',
     parameters: {
       type: 'object',
-      properties: { rows: { type: 'number' }, cols: { type: 'number' } },
-      required: ['rows', 'cols'],
+      properties: {
+        rows: { type: 'number' },
+        cols: { type: 'number' },
+        count: { type: 'number', description: '图的张数' },
+        variant: { type: 'number', description: '同张数里的第几种排法（从 1 起）' },
+      },
     },
   },
   {
@@ -156,12 +166,28 @@ export function createChartTools(ctl: ChartControls): ToolRuntime {
           return ok(enough ? `显示范围已设为 ${raw}` : `数据不足 ${raw}，已退化为 ALL`);
         }
         case 'set_layout': {
+          if (a.count !== undefined) {
+            const n = num(a.count);
+            if (n == null || !Number.isInteger(n) || !LAYOUT_COUNTS.includes(n)) {
+              return fail(`count 只能是 ${LAYOUT_COUNTS.join(' / ')} 之一`);
+            }
+            const list = layoutsOfCount(n);
+            const v = a.variant === undefined ? 1 : num(a.variant);
+            if (v == null || !Number.isInteger(v) || v < 1 || v > list.length) {
+              return fail(`${n} 图共有 ${list.length} 种排法，variant 取 1–${list.length}`);
+            }
+            ctl.setLayoutId(list[v - 1].id);
+            return ok(`布局已设为 ${n} 图第 ${v} 种（${list[v - 1].id}）`);
+          }
           const r = num(a.rows);
           const c = num(a.cols);
-          if (r == null || c == null) return fail('rows / cols 必须是数字');
+          if (r == null || c == null) return fail('请提供 rows + cols，或 count（+ variant）');
           if (r < 1 || r > 4 || c < 1 || c > 4) return fail('rows / cols 取值范围 1–4');
-          ctl.setLayout(Math.round(r), Math.round(c));
-          return ok(`布局已设为 ${Math.round(r)}×${Math.round(c)}`);
+          const rr = Math.round(r);
+          const cc = Math.round(c);
+          if (!uniformLayoutId(rr, cc)) return fail(`没有 ${rr}×${cc} 的均匀布局；可改用 count（+ variant）选非均匀排法`);
+          ctl.setLayout(rr, cc);
+          return ok(`布局已设为 ${rr}×${cc}`);
         }
         case 'set_chart_style': {
           const raw = str(a.style)?.toLowerCase();

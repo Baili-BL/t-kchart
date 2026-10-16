@@ -19,6 +19,7 @@
  * ---------------------------------------------------------------------------
  */
 
+import { DEFAULT_LAYOUT_ID, LayoutDef, gridTemplate, layoutById, uniformLayoutId } from './layouts';
 import { Bar, ChartOptions, ChartStyle, RANGES, KChart, clamp, log, makeBars, resample } from './chart';
 
 export interface SymbolDef {
@@ -32,6 +33,9 @@ export interface SyncFlags {
   symbol: boolean;
   interval: boolean;
   crosshair: boolean;
+  /** 时间：其它格跟着滚到同一个最新时刻，但各格保持自己的缩放（可视跨度不变） */
+  time: boolean;
+  /** 日期范围：其它格显示与活动格完全相同的起止时间 */
   range: boolean;
 }
 
@@ -45,8 +49,11 @@ export interface GridOptions {
   chartOptions?: Partial<ChartOptions>;
   /** 每格的初始标的（按格序号轮流取）；不传则用内置演示标的 */
   symbols?: string[];
+  /** 均匀网格的行列数（兼容旧入口）；同时给了 layoutId 时以 layoutId 为准 */
   rows?: number;
   cols?: number;
+  /** 布局目录里的 id（见 layouts.ts），如 `4-3` */
+  layoutId?: string;
   symbol?: string;
   timeframe?: string;
   theme?: string;
@@ -107,13 +114,12 @@ export class ChartGrid {
   el: HTMLElement;
   tiles: Tile[] = [];
 
-  private rows = 2;
-  private cols = 2;
+  private layout: LayoutDef = layoutById(uniformLayoutId(2, 2) ?? DEFAULT_LAYOUT_ID) as LayoutDef;
   private active = 0;
   private timeframe = '1D';
   private themeName = 'dark';
   private legendInset = 34;
-  private sync: SyncFlags = { symbol: true, interval: true, crosshair: true, range: true };
+  private sync: SyncFlags = { symbol: true, interval: true, crosshair: true, time: true, range: true };
   /** 构建 / 批量换数据期间屏蔽回调，防止联动自己触发自己 */
   private busyGuard = false;
   private ready = false;
@@ -131,8 +137,9 @@ export class ChartGrid {
     if (o.chartOptions) this.chartOptions = o.chartOptions;
     this.styleName = this.chartOptions.style ?? 'candles';
     if (o.symbols && o.symbols.length) this.initialSymbols = o.symbols.slice();
-    this.rows = clamp(o.rows == null ? 2 : o.rows, 1, 4);
-    this.cols = clamp(o.cols == null ? 2 : o.cols, 1, 4);
+    const byId = o.layoutId ? layoutById(o.layoutId) : null;
+    const byGrid = layoutById(uniformLayoutId(clamp(o.rows == null ? 2 : o.rows, 1, 4), clamp(o.cols == null ? 2 : o.cols, 1, 4)) ?? '');
+    this.layout = byId ?? byGrid ?? this.layout;
     this.timeframe = o.timeframe || '1D';
     this.themeName = o.theme || 'dark';
     this.legendInset = o.legendInset == null ? 34 : o.legendInset;
@@ -140,25 +147,39 @@ export class ChartGrid {
       if (o.sync.symbol != null) this.sync.symbol = !!o.sync.symbol;
       if (o.sync.interval != null) this.sync.interval = !!o.sync.interval;
       if (o.sync.crosshair != null) this.sync.crosshair = !!o.sync.crosshair;
+      if (o.sync.time != null) this.sync.time = !!o.sync.time;
       if (o.sync.range != null) this.sync.range = !!o.sync.range;
     }
 
     this.el.classList.add('kc-grid');
     this.applyGridCss();
-    this.ensureTiles(this.rows * this.cols);
+    this.ensureTiles(this.layout.count);
+    this.placeTiles();
     this.ready = true;
     this.applyAll();
-    log('ChartGrid: ' + this.rows + '×' + this.cols + ' = ' + this.tiles.length + ' 格');
+    log('ChartGrid: 布局 ' + this.layout.id + ' = ' + this.tiles.length + ' 格');
   }
 
   /* ------------------------------------------------------------- 布局 */
 
   private applyGridCss(): void {
+    const g = gridTemplate(this.layout);
     this.el.style.display = 'grid';
-    // minmax(0, 1fr) 而不是 1fr —— 否则画布的固有尺寸会把轨道撑开，整个网格溢出
-    this.el.style.gridTemplateColumns = 'repeat(' + this.cols + ', minmax(0, 1fr))';
-    this.el.style.gridTemplateRows = 'repeat(' + this.rows + ', minmax(0, 1fr))';
+    // minmax(0, Nfr) 而不是 Nfr —— 否则画布的固有尺寸会把轨道撑开，整个网格溢出
+    this.el.style.gridTemplateColumns = g.cols.map((w) => 'minmax(0, ' + w.toFixed(6) + 'fr)').join(' ');
+    this.el.style.gridTemplateRows = g.rows.map((h) => 'minmax(0, ' + h.toFixed(6) + 'fr)').join(' ');
     this.el.style.gap = '1px';
+  }
+
+  /** 按当前布局给每一格指定它占的行列（非均匀布局靠跨度实现） */
+  private placeTiles(): void {
+    const g = gridTemplate(this.layout);
+    this.tiles.forEach((t, i) => {
+      const p = g.place[i];
+      if (!p) return;
+      t.el.style.gridColumn = p.c0 + ' / ' + p.c1;
+      t.el.style.gridRow = p.r0 + ' / ' + p.r1;
+    });
   }
 
   private ensureTiles(n: number): void {
@@ -206,15 +227,22 @@ export class ChartGrid {
     for (let i = 0; i < this.tiles.length; i++) this.tiles[i].badge.textContent = String(i + 1);
   }
 
-  setLayout(rows: number, cols: number): void {
-    const r = clamp(Math.round(rows), 1, 4);
-    const c = clamp(Math.round(cols), 1, 4);
+  /** 均匀 rows × cols 入口（兼容旧调用）；没有这种均匀布局时返回 false、不动 */
+  setLayout(rows: number, cols: number): boolean {
+    const id = uniformLayoutId(clamp(Math.round(rows), 1, 4), clamp(Math.round(cols), 1, 4));
+    return id ? this.setLayoutId(id) : false;
+  }
+
+  /** 按布局目录里的 id 切换；id 不存在返回 false */
+  setLayoutId(id: string): boolean {
+    const def = layoutById(id);
+    if (!def) return false;
     this.busyGuard = true;
     try {
-      this.rows = r;
-      this.cols = c;
+      this.layout = def;
       this.applyGridCss();
-      this.ensureTiles(r * c);
+      this.ensureTiles(def.count);
+      this.placeTiles();
     } finally {
       this.busyGuard = false;
     }
@@ -222,10 +250,17 @@ export class ChartGrid {
     this.applyAll();
     this.setActive(Math.min(this.active, this.tiles.length - 1));
     this.el.dispatchEvent(new CustomEvent('layoutchange', { detail: this.layoutInfo() }));
+    return true;
   }
 
-  layoutInfo(): { rows: number; cols: number; total: number } {
-    return { rows: this.rows, cols: this.cols, total: this.tiles.length };
+  layoutId(): string {
+    return this.layout.id;
+  }
+
+  /** rows / cols 是布局的行列轨道数（均匀网格时就是行列数） */
+  layoutInfo(): { rows: number; cols: number; total: number; id: string } {
+    const g = gridTemplate(this.layout);
+    return { rows: g.rows.length, cols: g.cols.length, total: this.tiles.length, id: this.layout.id };
   }
 
   setActive(i: number): void {
@@ -263,13 +298,20 @@ export class ChartGrid {
   /** 时间轴范围联动（公开：宿主也可以手动驱动） */
   onView(ix: number, t0: number, t1: number): void {
     if (!this.ready || this.busyGuard) return;
-    if (this.sync.range) {
+    if (this.sync.range || this.sync.time) {
       this.busyGuard = true;
       try {
         for (let k = 0; k < this.tiles.length; k++) {
           if (k === ix) continue;
-          // 目标区间比这一格的视口宽时靠右对齐，而不是静默只显示左侧一段
-          this.tiles[k].chart.revealSpan(t0, t1);
+          const c = this.tiles[k].chart;
+          if (this.sync.range) {
+            // 日期范围：起止时间完全一致。目标区间比这一格的视口宽时靠右对齐，而不是静默只显示左侧一段
+            c.revealSpan(t0, t1);
+          } else {
+            // 时间：只对齐最新一端的时刻，各格保持自己的可视跨度（缩放不被带走）
+            const own = c.viewTimes();
+            if (own) c.revealSpan(t1 - (own[1] - own[0]), t1);
+          }
         }
       } finally {
         this.busyGuard = false;
@@ -297,6 +339,7 @@ export class ChartGrid {
       symbol: this.sync.symbol,
       interval: this.sync.interval,
       crosshair: this.sync.crosshair,
+      time: this.sync.time,
       range: this.sync.range,
     };
   }
@@ -305,6 +348,7 @@ export class ChartGrid {
     if (key === 'symbol') this.sync.symbol = !!on;
     else if (key === 'interval') this.sync.interval = !!on;
     else if (key === 'crosshair') this.sync.crosshair = !!on;
+    else if (key === 'time') this.sync.time = !!on;
     else if (key === 'range') this.sync.range = !!on;
     else return;
 
@@ -506,8 +550,7 @@ export function gridSelfTest(grid: ChartGrid): { pass: number; fail: number } {
   };
 
   const L0 = grid.layoutInfo();
-  t('网格格数 = rows × cols', L0.total === L0.rows * L0.cols,
-    L0.rows + 'x' + L0.cols + '=' + L0.total);
+  t('网格格数 = 布局张数', L0.total === (layoutById(L0.id)?.count ?? -1), L0.id + '=' + L0.total);
   t('每格都有 K 线', grid.charts().every((c) => c.bars.length > 0),
     grid.charts().map((c) => c.bars.length).join(','));
   t('每格都有 BB 通道', grid.charts().every((c) => c.channels.length >= 1));
@@ -529,13 +572,49 @@ export function gridSelfTest(grid: ChartGrid): { pass: number; fail: number } {
   grid.eachTile((c) => c.setSyncIndex(null));
   grid.setSync('crosshair', saved);
 
-  // 布局切换
-  const r2 = L0.rows === 3 ? 2 : 3;
-  grid.setLayout(r2, 2);
-  const L1 = grid.layoutInfo();
-  t('setLayout 后格数正确', L1.total === r2 * 2, L1.rows + 'x' + L1.cols + '=' + L1.total);
-  grid.setLayout(L0.rows, L0.cols);
-  t('setLayout 还原成功', grid.layoutInfo().total === L0.total);
+  // 布局切换：均匀网格入口 + 目录里的非均匀布局
+  grid.setLayout(2, 2);
+  t('setLayout(2,2) 后是 4 格', grid.layoutInfo().total === 4 && grid.layoutId() === uniformLayoutId(2, 2));
+  t('没有这种均匀布局时 setLayout 返回 false 且不动', (() => { const id = grid.layoutId(); return grid.setLayout(3, 4) === false && grid.layoutId() === id; })());
+  t('未知布局 id 返回 false 且不动', (() => { const id = grid.layoutId(); return grid.setLayoutId('nope') === false && grid.layoutId() === id; })());
+  for (const id of ['3-3', '4-5', '7-1', '16-2', '1-1']) {
+    const def = layoutById(id);
+    grid.setLayoutId(id);
+    const tiles = grid.tiles;
+    t('布局 ' + id + '：格数 = ' + (def ? def.count : '?'), !!def && tiles.length === def.count && grid.charts().every((c) => c.bars.length > 0));
+    // 每格的实际占位要和目录里的矩形一致（按网格实测像素，容差 3px）
+    const host = grid.el.getBoundingClientRect();
+    if (def && host.width > 50 && host.height > 50) {
+      const ok = def.cells.every((c, i) => {
+        const r = tiles[i].el.getBoundingClientRect();
+        const ex0 = host.left + c[0] * host.width, ey0 = host.top + c[1] * host.height;
+        const ex1 = host.left + c[2] * host.width, ey1 = host.top + c[3] * host.height;
+        return Math.abs(r.left - ex0) < 3 && Math.abs(r.top - ey0) < 3 && Math.abs(r.right - ex1) < 3 && Math.abs(r.bottom - ey1) < 3;
+      });
+      t('布局 ' + id + '：每格像素位置与目录一致', ok);
+    }
+  }
+  grid.setLayoutId(L0.id);
+  t('布局还原成功', grid.layoutInfo().total === L0.total && grid.layoutId() === L0.id);
+
+  // 时间 / 日期范围联动的区别
+  if (grid.tiles.length >= 2) {
+    const savedS = grid.syncFlags();
+    const [a0, b0] = [grid.charts()[0], grid.charts()[1]];
+    grid.setSync('range', false);
+    grid.setSync('time', true);
+    const vb0 = b0.viewTimes();
+    a0.showLast(40);
+    const va = a0.viewTimes();
+    const vb = b0.viewTimes();
+    const dtB = b0.bars.length > 1 ? b0.bars[1].time - b0.bars[0].time : 86400000;
+    t('「时间」联动：另一格的最新端时刻跟上活动格（容差 2 根）', !!va && !!vb && Math.abs(vb[1] - va[1]) <= dtB * 2,
+      va && vb ? new Date(va[1]).toISOString().slice(0, 10) + ' vs ' + new Date(vb[1]).toISOString().slice(0, 10) : 'null');
+    t('「时间」联动：另一格的可视跨度不被带走（±1 根）', !!vb && !!vb0 && Math.abs((vb[1] - vb[0]) - (vb0[1] - vb0[0])) <= dtB);
+    grid.setSync('time', false);
+    grid.setSync('range', savedS.range);
+    grid.setSync('time', savedS.time);
+  }
 
   log('网格自检：' + pass + ' PASS / ' + fail + ' FAIL');
   return { pass, fail };

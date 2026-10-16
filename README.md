@@ -87,9 +87,9 @@ VITE_DEEPSEEK_MODEL=deepseek-chat
 | 层 | 命令 | 内容 |
 | --- | --- | --- |
 | 类型 | `npm run typecheck` | `strict: true`，0 错误 |
-| 引擎（Node） | `npm test` | 绘图 39 + Pine 49 + Pine 撮合 69 + 权益 26 + 统计 34 + 回放 27 = 244（基线，只增不减） |
+| 引擎（Node） | `npm test` | 绘图 39 + Pine 49 + Pine 撮合 69 + 权益 26 + 统计 34 + 回放 27 + 布局目录 346 = 590（基线，只增不减） |
 | Agent / 工作区 / 数据 | `npm test` | 意图解析、工具校验、runner 循环（含报错/中断/死循环兜底）、模拟账户不变式、范围高亮、mock 数据不变式 |
-| 引擎（浏览器，需 canvas） | 开发模式下控制台 `await __app.runBrowserSelfTests()` | 图表 76 + 网格 6 + 权益 37 + 统计 50 |
+| 引擎（浏览器，需 canvas） | 开发模式下控制台 `await __app.runBrowserSelfTests()` | 图表 76 + 网格 20 + 权益 37 + 统计 50 |
 
 `__app` 只在 `npm run dev` 下挂到 `window`，生产包里没有。
 
@@ -130,8 +130,8 @@ VITE_DEEPSEEK_MODEL=deepseek-chat
 
 **多图网格（`grid.ts`）**
 
-- **Layout + Sync**：1×1 到 4×4 共 16 格，每格是**独立的 `KChart` 实例**
-  （各自有坐标轴、图例、指标、缩放）；联动项：十字光标 / 时间轴范围 / 标的 / 周期
+- **Layout + Sync**：1 到 16 格、55 种排法，每格是**独立的 `KChart` 实例**
+  （各自有坐标轴、图例、指标、缩放）；联动项：十字线 / 时间 / 日期范围 / 商品代码 / 周期
 - **主图样式**：K 线 / 美国线 / 线形图（收盘价折线）/ 面积图，`KChart.setStyle()` 切换；线形与面积的价格轴只按收盘价取范围；`ChartGrid.setChartStyle()` 让所有格一起变
 - 联动**按时间对齐**（`viewTimes()` / `setViewTimes()` / `indexAtTime()` 二分），不按像素 —— 见 §10
 
@@ -288,18 +288,21 @@ chart.viewSpan() / 86400000;   // 当前视口覆盖多少天
 
 ## 引擎 §10 多图网格 + 联动
 
-左侧 Layout 选 1×1 ~ 4×4（最多 16 格），Sync 四个开关控制联动。
+顶栏「布局」菜单：13 行（1–10、12、14、16 张图）共 **55 种排法**，不只是均匀网格（有「左大右小」「上 1 下 3」「7 列」等），
+数据在 `layouts.ts`（每种 = 一组铺满单位方块、互不重叠的矩形；`gridTemplate()` 翻成 CSS Grid 的轨道 + 跨度，图标用设计稿原图标 `src/ui/layoutIcons.ts`，键 = 布局 id，缺图标时退回按几何画的描边框）。
+「同步到所有图表」五个开关：商品代码 / 周期 / 十字线 / 时间 / 日期范围。
 每格左上角有编号徽章，**蓝框那一格是「活动图」**——关掉 SYNC 时，换标的/周期只改它。
 
 ```ts
 const grid = new ChartGrid('#grid', {
-  rows: 2, cols: 2,
+  layoutId: '4-3',                       // 目录 id；也可以传 rows / cols（只认目录里存在的均匀网格）
   theme: 'dark',
   legendInset: 34,                       // 给左上角徽章让位
-  sync: { symbol: true, interval: true, crosshair: true, range: true },
+  sync: { symbol: true, interval: true, crosshair: true, time: true, range: true },
 });
 
-grid.setLayout(3, 4);                    // 任意 r×c，最多 4×4
+grid.setLayoutId('7-1');                 // 目录里的任意一种；未知 id 返回 false、不动
+grid.setLayout(2, 2);                    // 兼容旧入口：只认目录里存在的均匀网格，没有就返回 false
 grid.setSync('crosshair', false);
 grid.setSymbol('300750.SZ');
 grid.setTimeframe('1W');

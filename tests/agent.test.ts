@@ -19,6 +19,7 @@ function fakeControls(): ChartControls & { log: string[] } {
       return r !== '5Y';
     },
     setLayout: (r, c) => void log.push(`layout:${r}x${c}`),
+    setLayoutId: (id) => void log.push(`layoutId:${id}`),
     setChartStyle: (s) => void log.push('style:' + s),
     replay: (a, v) => {
       log.push('replay:' + a + (v === undefined ? '' : ':' + v));
@@ -73,6 +74,14 @@ describe('mock provider · 意图 → 工具调用', () => {
     expect(planToolCalls('用 1w')[0].arguments).toEqual({ timeframe: '1W' });
   });
 
+  it('「7 图」「4 图第 3 种」→ 按张数选布局；「面积图」不会被当成布局', () => {
+    expect(planToolCalls('布局 7 图')[0]).toMatchObject({ name: 'set_layout', arguments: { count: 7 } });
+    expect(planToolCalls('切成 4 张图，第 3 种')[0]).toMatchObject({ name: 'set_layout', arguments: { count: 4, variant: 3 } });
+    expect(planToolCalls('布局 2x2')[0].arguments).toEqual({ rows: 2, cols: 2 });
+    expect(planToolCalls('切成面积图').some((c) => c.name === 'set_layout')).toBe(false);
+    expect(planToolCalls('回放前进 5 根').some((c) => c.name === 'set_layout')).toBe(false);
+  });
+
   it('布局 2x3 / 关闭布林带', () => {
     expect(planToolCalls('布局 2x3')[0]).toMatchObject({ name: 'set_layout', arguments: { rows: 2, cols: 3 } });
     expect(planToolCalls('关闭布林带')[0]).toMatchObject({ name: 'add_indicator', arguments: { visible: false } });
@@ -109,6 +118,24 @@ describe('工具运行时', () => {
     const r = await createChartTools(ctl).execute(call('set_symbol', { symbol: 'XXXX' }));
     expect(r.ok).toBe(false);
     expect(ctl.log).toEqual([]);
+  });
+
+  it('set_layout：按张数 + 排法选；非法张数 / 排法 / 不存在的均匀网格都报错且不触碰图表', async () => {
+    const ctl = fakeControls();
+    const t = createChartTools(ctl);
+    expect((await t.execute(call('set_layout', { count: 7 }))).ok).toBe(true);
+    expect((await t.execute(call('set_layout', { count: 4, variant: 3 }))).ok).toBe(true);
+    expect((await t.execute(call('set_layout', { rows: 2, cols: 2 }))).ok).toBe(true);
+    expect(ctl.log).toEqual(['layoutId:7-1', 'layoutId:4-3', 'layout:2x2']);
+    ctl.log.length = 0;
+    expect((await t.execute(call('set_layout', { count: 11 }))).ok).toBe(false); // 没有 11 张的布局
+    expect((await t.execute(call('set_layout', { count: 16, variant: 3 }))).ok).toBe(false); // 16 张只有 2 种
+    expect((await t.execute(call('set_layout', { count: 4, variant: 0 }))).ok).toBe(false);
+    expect((await t.execute(call('set_layout', { count: 4.5 }))).ok).toBe(false);
+    expect((await t.execute(call('set_layout', { rows: 4, cols: 3 }))).ok).toBe(true); // 4 行 3 列 = 12 图，目录里有
+    expect((await t.execute(call('set_layout', { rows: 3, cols: 4 }))).ok).toBe(false); // 3 行 4 列的均匀网格不在目录里
+    expect((await t.execute(call('set_layout', {}))).ok).toBe(false);
+    expect(ctl.log).toEqual(['layout:4x3']);
   });
 
   it('参数缺失 / 越界 / 类型不对都报错且不触碰图表', async () => {

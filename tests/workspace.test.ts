@@ -119,3 +119,40 @@ describe('chartStore · 主图样式', () => {
     expect(styleFromLabel('不存在')).toBeNull();
   });
 });
+
+describe('chartStore · 布局与联动', () => {
+  it('默认是「左右 2 图」；只有「时间」「日期范围」默认关、商品代码与十字线默认开', () => {
+    const s = useChartStore.getState();
+    expect(s.layoutId).toBe('2-1');
+    expect(s.sync).toEqual({ symbol: true, interval: false, crosshair: true, time: false, range: false });
+  });
+
+  it('setLayoutId：合法 id 生效；未知 id 返回 false 且不改状态', () => {
+    const st = useChartStore.getState();
+    expect(st.setLayoutId('7-1')).toBe(true);
+    expect(useChartStore.getState().layoutId).toBe('7-1');
+    expect(st.setLayoutId('nope')).toBe(false);
+    expect(useChartStore.getState().layoutId).toBe('7-1');
+    st.setLayoutId('2-1');
+  });
+
+  it('setLayout(rows, cols)：映射到均匀布局；没有的组合返回 false', () => {
+    const st = useChartStore.getState();
+    expect(st.setLayout(2, 2)).toBe(true);
+    expect(useChartStore.getState().layoutId).toBe('4-1');
+    expect(st.setLayout(3, 4)).toBe(false);
+    expect(useChartStore.getState().layoutId).toBe('4-1');
+    st.setLayout(1, 2);
+    expect(useChartStore.getState().layoutId).toBe('2-1');
+  });
+
+  it('setSync 可以单独翻转「时间」与「日期范围」，互不影响', () => {
+    const st = useChartStore.getState();
+    st.setSync('time', true);
+    expect(useChartStore.getState().sync).toMatchObject({ time: true, range: false });
+    st.setSync('time', false);
+    st.setSync('range', true);
+    expect(useChartStore.getState().sync).toMatchObject({ time: false, range: true });
+    st.setSync('range', false);
+  });
+});

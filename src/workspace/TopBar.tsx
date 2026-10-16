@@ -4,7 +4,9 @@ import { Icon } from '../ui/icons';
 import { useToast } from '../ui/toast';
 import { createToolbarHandle } from './dom/toolbar';
 import type { ToolbarHandle } from './dom/toolbar';
-import { LAYOUT_PRESETS, STYLE_LABELS, styleFromLabel, useChartStore } from '../store/chartStore';
+import { STYLE_LABELS, styleFromLabel, useChartStore } from '../store/chartStore';
+import { LAYOUT_COUNTS, layoutsOfCount } from '../engine/layouts';
+import { LayoutIcon } from '../ui/LayoutIcon';
 import type { SyncState } from '../store/chartStore';
 import { MOCK_SYMBOLS } from '../data/mockBars';
 import { drawBus } from './drawBus';
@@ -12,10 +14,11 @@ import { replayController } from '../store/replayStore';
 import { toggleReplay } from './replayActions';
 
 const SYNC_LABELS: { key: keyof SyncState; label: string }[] = [
-  { key: 'symbol', label: '标的' },
+  { key: 'symbol', label: '商品代码' },
   { key: 'interval', label: '周期' },
-  { key: 'crosshair', label: '十字光标' },
-  { key: 'range', label: '时间范围' },
+  { key: 'crosshair', label: '十字线' },
+  { key: 'time', label: '时间' },
+  { key: 'range', label: '日期范围' },
 ];
 
 function SymbolPicker({ close }: { close: () => void }): JSX.Element {
@@ -55,35 +58,41 @@ function SymbolPicker({ close }: { close: () => void }): JSX.Element {
 }
 
 function LayoutMenu({ close }: { close: () => void }): JSX.Element {
-  const layout = useChartStore((s) => s.layout);
-  const setLayout = useChartStore((s) => s.setLayout);
+  const layoutId = useChartStore((s) => s.layoutId);
+  const setLayoutId = useChartStore((s) => s.setLayoutId);
   const sync = useChartStore((s) => s.sync);
   const setSync = useChartStore((s) => s.setSync);
   return (
     <div className="layout-menu">
-      <div className="menu-title">布局</div>
-      <ul className="menu">
-        {LAYOUT_PRESETS.map((p) => {
-          const sel = p.rows === layout.rows && p.cols === layout.cols;
-          return (
-            <li key={p.key}>
-              <button
-                type="button"
-                className={sel ? 'sel' : ''}
-                onClick={() => {
-                  setLayout(p.rows, p.cols);
-                  close();
-                }}
-              >
-                <span className="menu-check">{sel && <Icon name="check" size={13} />}</span>
-                {p.label}
-                <span className="menu-tag">{p.key}</span>
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-      <div className="menu-title">联动</div>
+      <div className="layout-rows">
+        {LAYOUT_COUNTS.map((n) => (
+          <div className="layout-row" key={n}>
+            <span className="layout-n">{n}</span>
+            <div className="layout-opts">
+              {layoutsOfCount(n).map((l) => {
+                const sel = l.id === layoutId;
+                return (
+                  <button
+                    type="button"
+                    key={l.id}
+                    className={'layout-opt' + (sel ? ' sel' : '')}
+                    aria-label={`布局 ${l.id}`}
+                    aria-pressed={sel}
+                    title={`${n} 图 · 第 ${l.variant} 种`}
+                    onClick={() => {
+                      setLayoutId(l.id);
+                      close();
+                    }}
+                  >
+                    <LayoutIcon def={l} />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="menu-title">同步到所有图表</div>
       <div className="sync-list">
         {SYNC_LABELS.map(({ key, label }) => (
           <button

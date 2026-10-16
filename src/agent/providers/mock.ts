@@ -9,6 +9,9 @@ const TICKERS = ['TSLA', 'AAPL', 'NVDA', 'MSFT', 'SPY'];
 const TF_RE = /\b(1m|5m|15m|30m|1h|4h|1d|1w|1M)\b/i;
 const RANGE_RE = /\b(1D|7D|1M|3M|6M|YTD|1Y|5Y|ALL)\b/;
 const LAYOUT_RE = /(\d)\s*[x×*]\s*(\d)/i;
+/** 「7 图」「12 个图」「4 张图」＋可选的「第 3 种」 */
+const LAYOUT_COUNT_RE = /(\d{1,2})\s*(?:个|张)?图(?!表|形|标)/;
+const LAYOUT_VARIANT_RE = /第\s*(\d+)\s*种/;
 
 let seq = 0;
 const nid = (p: string): string => p + '-' + Date.now().toString(36) + '-' + (seq++).toString(36);
@@ -30,8 +33,16 @@ export function planToolCalls(text: string): ToolCall[] {
   if (ticker) calls.push({ id: nid('call'), name: 'set_symbol', arguments: { symbol: ticker } });
 
   const lay = text.match(LAYOUT_RE);
+  const cnt = text.match(LAYOUT_COUNT_RE);
   if (lay) {
     calls.push({ id: nid('call'), name: 'set_layout', arguments: { rows: Number(lay[1]), cols: Number(lay[2]) } });
+  } else if (cnt && /布局|layout|分屏|多图|切成|改成|换成|设为|设置/i.test(text)) {
+    const v = text.match(LAYOUT_VARIANT_RE);
+    calls.push({
+      id: nid('call'),
+      name: 'set_layout',
+      arguments: v ? { count: Number(cnt[1]), variant: Number(v[1]) } : { count: Number(cnt[1]) },
+    });
   }
 
   const tf = text.match(TF_RE);

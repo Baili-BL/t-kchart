@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { ChartStyle } from '../engine/chart';
+import { DEFAULT_LAYOUT_ID, layoutById, uniformLayoutId } from '../engine/layouts';
 
 /** 主图样式 ↔ 顶栏样式下拉里的显示名 */
 export const STYLE_LABELS: Record<ChartStyle, string> = {
@@ -13,21 +14,6 @@ export function styleFromLabel(label: string): ChartStyle | null {
   const hit = (Object.keys(STYLE_LABELS) as ChartStyle[]).find((k) => STYLE_LABELS[k] === label);
   return hit ?? null;
 }
-
-export interface LayoutPreset {
-  key: string;
-  label: string;
-  rows: number;
-  cols: number;
-}
-
-export const LAYOUT_PRESETS: LayoutPreset[] = [
-  { key: '1x1', label: '单图', rows: 1, cols: 1 },
-  { key: '1x2', label: '左右 2 图', rows: 1, cols: 2 },
-  { key: '2x1', label: '上下 2 图', rows: 2, cols: 1 },
-  { key: '2x2', label: '4 图', rows: 2, cols: 2 },
-  { key: '2x3', label: '6 图', rows: 2, cols: 3 },
-];
 
 /** 顶栏周期下拉里能选的周期（标签 → 周期码） */
 export const TIMEFRAMES: { code: string; label: string }[] = [
@@ -46,6 +32,7 @@ export interface SyncState {
   symbol: boolean;
   interval: boolean;
   crosshair: boolean;
+  time: boolean;
   range: boolean;
 }
 
@@ -53,7 +40,8 @@ interface ChartState {
   symbol: string;
   /** 活动格的周期（顶栏显示的那个） */
   timeframe: string;
-  layout: { rows: number; cols: number };
+  /** 布局目录里的 id（见 engine/layouts.ts），如 `2-1`（左右两图）、`4-3` */
+  layoutId: string;
   layoutName: string;
   sync: SyncState;
   bbVisible: boolean;
@@ -66,7 +54,10 @@ interface ChartState {
 
   setSymbol: (s: string) => void;
   setTimeframe: (tf: string) => void;
-  setLayout: (rows: number, cols: number) => void;
+  /** 按目录 id 切换；id 不存在返回 false */
+  setLayoutId: (id: string) => boolean;
+  /** 均匀 rows × cols 入口；没有这种均匀布局返回 false */
+  setLayout: (rows: number, cols: number) => boolean;
   setLayoutName: (n: string) => void;
   setSync: (k: keyof SyncState, on: boolean) => void;
   setBb: (on: boolean) => void;
@@ -75,13 +66,13 @@ interface ChartState {
   setActiveTile: (i: number) => void;
 }
 
-export const useChartStore = create<ChartState>((set) => ({
+export const useChartStore = create<ChartState>((set, get) => ({
   symbol: 'TSLA',
   timeframe: '30m',
-  layout: { rows: 1, cols: 2 },
+  layoutId: DEFAULT_LAYOUT_ID,
   layoutName: 'Multi-timeframe copy',
   // 截图里左 30m / 右 1D，所以周期与范围默认不联动
-  sync: { symbol: true, interval: false, crosshair: true, range: false },
+  sync: { symbol: true, interval: false, crosshair: true, time: false, range: false },
   bbVisible: true,
   chartStyle: 'candles',
   lastPrice: null,
@@ -89,7 +80,15 @@ export const useChartStore = create<ChartState>((set) => ({
 
   setSymbol: (symbol) => set({ symbol }),
   setTimeframe: (timeframe) => set({ timeframe }),
-  setLayout: (rows, cols) => set({ layout: { rows, cols } }),
+  setLayoutId: (id) => {
+    if (!layoutById(id)) return false;
+    if (get().layoutId !== id) set({ layoutId: id });
+    return true;
+  },
+  setLayout: (rows, cols) => {
+    const id = uniformLayoutId(rows, cols);
+    return id ? get().setLayoutId(id) : false;
+  },
   setLayoutName: (layoutName) => set({ layoutName }),
   setSync: (k, on) => set((s) => ({ sync: { ...s.sync, [k]: on } })),
   setBb: (bbVisible) => set({ bbVisible }),

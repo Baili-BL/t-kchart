@@ -28,8 +28,7 @@ export function ChartGridView(): JSX.Element {
 
     const st0 = useChartStore.getState();
     const grid = new ChartGrid(host, {
-      rows: st0.layout.rows,
-      cols: st0.layout.cols,
+      layoutId: st0.layoutId,
       theme: useAppStore.getState().theme,
       timeframe: st0.timeframe,
       symbols: [st0.symbol],
@@ -137,7 +136,7 @@ export function ChartGridView(): JSX.Element {
       // 换标的 / 周期 / 布局会换掉数据：旧的回放位置没有意义，**先退出再动图表**
       if (
         replayController.state().active &&
-        (s.symbol !== prev.symbol || s.timeframe !== prev.timeframe || s.layout !== prev.layout)
+        (s.symbol !== prev.symbol || s.timeframe !== prev.timeframe || s.layoutId !== prev.layoutId)
       ) {
         replayController.stop();
       }
@@ -146,9 +145,9 @@ export function ChartGridView(): JSX.Element {
           if (s.sync[k] !== prev.sync[k]) grid.setSync(k, s.sync[k]);
         });
       }
-      if (s.layout !== prev.layout) {
+      if (s.layoutId !== prev.layoutId) {
         const oldTotal = grid.layoutInfo().total;
-        grid.setLayout(s.layout.rows, s.layout.cols);
+        grid.setLayoutId(s.layoutId);
         const total = grid.layoutInfo().total;
         if (!s.sync.interval) for (let i = oldTotal; i < total; i++) grid.setTileTimeframe(i, SECONDARY_TF);
         applyBb();

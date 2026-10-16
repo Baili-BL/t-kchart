@@ -30,7 +30,8 @@
 | 路径 | 内容 |
 | --- | --- |
 | `src/engine/chart.ts` | 单图：蜡烛/成交量、双轴、十字光标、光标锚定缩放、通道、主题、显示范围 |
-| `src/engine/grid.ts` | 多图网格 + 联动（1×1~4×4，按时间对齐）；可注入 `dataSource`、每格独立周期、`activechange` 事件 |
+| `src/engine/grid.ts` | 多图网格 + 联动（按时间对齐）；可注入 `dataSource`、每格独立周期、`activechange` 事件；布局来自目录，支持非均匀排法 |
+| `src/engine/layouts.ts` | 多图布局目录：1–16 张图、共 55 种排法（含非均匀），纯数据 + 栅格化函数 |
 | `src/engine/pine.ts` | Pine v5 子集解释器 |
 | `src/engine/draw.ts` | 绘图工具层（9 种工具） |
 | `src/engine/equity.ts` | 权益曲线 + 双均线回测口径 |
@@ -49,12 +50,12 @@ Pine 编辑器、权益曲线、统计组件目前**没有对应的 UI 入口**�
 
 ```
 npm run typecheck                          0 错误（strict）
-npm test (vitest)                          引擎 244 PASS（绘图 39 + Pine 49 + Pine 撮合 69 + 权益 26 + 统计 34 + 回放 27）
-                                           共 62 个 vitest 用例（含 Agent / 工作区 / 数据 / 回放）
+npm test (vitest)                          引擎 590 PASS（绘图 39 + Pine 49 + Pine 撮合 69 + 权益 26 + 统计 34 + 回放 27 + 布局目录 346）
+                                           共 70 个 vitest 用例（含 Agent / 工作区 / 数据 / 回放 / 布局）
 浏览器侧（dev 控制台 __app.runBrowserSelfTests()）
-                                           图表 76（改造前 48，新增 setRange 回归 1 条 + 图表样式 8 条 + revealSpan 4 条 + 回放 15 条）+ 网格 6
+                                           图表 76（改造前 48，新增 setRange 回归 1 条 + 图表样式 8 条 + revealSpan 4 条 + 回放 15 条）+ 网格 20（含 55 种布局抽样的像素位置、时间联动）
                                            + 权益 37 + 统计 50
-E2E（puppeteer 驱动 headless Chrome，未入库）  70 PASS / 0 FAIL
+E2E（puppeteer 驱动 headless Chrome，未入库）  79 PASS / 0 FAIL
 ```
 
 **任何改动之后这套数字必须只增不减。** 加功能要加断言，改逻辑不能让已有断言变红。
@@ -146,10 +147,12 @@ E2E（puppeteer 驱动 headless Chrome，未入库）  70 PASS / 0 FAIL
   窄屏时顶栏按容器宽度逐级收起次要按钮（`@container`），避免挤出右侧面板。
 - 遗留：
   1. ~~顶栏「图表样式」只有 K 线图可用~~ —— 已完成：K 线 / 美国线 / 线形图 / 面积图四种样式都在自有引擎里实现（`KChart.setStyle`、`ChartGrid.setChartStyle`），顶栏菜单与 Agent 工具 `set_chart_style` 走同一个 store 字段；Heikin Ashi、空心蜡烛、阶梯线等其余样式仍未做
-  2. 顶栏「回放」「保存」「警报」「比较」「快照」「设置」是占位提示，分别对应 2.2、2.9 与未排期项；撤销/重做按钮目前恒可点（未读取 DrawLayer 的栈深度）
-  3. 左侧绘图栏有很多菜单项（形态、仓位、笔刷、图标…）引擎没有对应工具，点击会 toast「暂未实现」，见 2.8
-  4. 右侧图标栏（`dom/rightbar.ts` 原稿）：只有「自选表」面板可用（点一行切换标的）；警报 / 对象树 / Pine Editor / 日历等点开是空态；「AI Copilot」展开左侧 Agent，「筛选器」跳转 Strategy Screener
-  5. 浅色是主稿；深色主题下左侧绘图栏是用 CSS `filter` 反相凑的，不是正经的深色皮肤
+  2. ~~顶栏「布局」只有 5 种均匀网格~~ —— 已完成：布局选择器改为 13 行（1–10、12、14、16 张）× 共 55 种排法，含「左大右小」「上 1 下 3」等非均匀切分；
+     「同步到所有图表」补齐为 商品代码 / 周期 / 十字线 / 时间 / 日期范围 五项（「时间」只对齐最新时刻、保留各格缩放；「日期范围」起止完全一致）；Agent 的 `set_layout` 新增 `count` + `variant` 写法
+  3. 顶栏「保存」「警报」「比较」「快照」「设置」是占位提示，分别对应 2.9 与未排期项（「回放」已在 2.2 完成）；撤销/重做按钮目前恒可点（未读取 DrawLayer 的栈深度）
+  4. 左侧绘图栏有很多菜单项（形态、仓位、笔刷、图标…）引擎没有对应工具，点击会 toast「暂未实现」，见 2.8
+  5. 右侧图标栏（`dom/rightbar.ts` 原稿）：只有「自选表」面板可用（点一行切换标的）；警报 / 对象树 / Pine Editor / 日历等点开是空态；「AI Copilot」展开左侧 Agent，「筛选器」跳转 Strategy Screener
+  6. 浅色是主稿；深色主题下左侧绘图栏是用 CSS `filter` 反相凑的，不是正经的深色皮肤
 
 ### P2 — 成本较大
 

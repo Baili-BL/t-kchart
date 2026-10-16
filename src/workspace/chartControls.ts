@@ -14,7 +14,8 @@ import { replayControl } from './replayActions';
 export const chartControls: ChartControls = {
   setSymbol: (s) => useChartStore.getState().setSymbol(s),
   setTimeframe: (tf) => useChartStore.getState().setTimeframe(tf),
-  setLayout: (rows, cols) => useChartStore.getState().setLayout(rows, cols),
+  setLayout: (rows, cols) => void useChartStore.getState().setLayout(rows, cols),
+  setLayoutId: (id) => void useChartStore.getState().setLayoutId(id),
   setChartStyle: (style) => useChartStore.getState().setChartStyle(style),
   replay: (action, value) => replayControl(action, value),
   setIndicator: (indicator, visible) => {

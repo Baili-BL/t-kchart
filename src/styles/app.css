@@ -272,7 +272,7 @@ input, textarea { font: inherit; color: inherit; }
   border: 1px solid var(--border); border-radius: var(--radius-m); box-shadow: var(--shadow-m);
 }
 .tb-float.symbol { left: 8px; }
-.tb-float.layout { right: 150px; }
+.tb-float.layout { right: 110px; }
 .tb-float.rename { right: 60px; }
 /* dom/toolbar.ts 是写死的浅色稿，深色主题下整体反相 */
 :root[data-theme='dark'] .topbar .kc-toolbar { filter: invert(0.9) hue-rotate(180deg); }
@@ -283,7 +283,17 @@ input, textarea { font: inherit; color: inherit; }
   border: 1px solid var(--border-strong); border-radius: var(--radius-s); color: var(--text-3);
 }
 .symbol-search input { flex: 1; border: 0; outline: 0; background: transparent; color: var(--text); }
-.layout-menu { width: 230px; }
+.layout-menu { width: 388px; max-height: calc(100vh - 80px); overflow-y: auto; }
+.layout-rows { display: flex; flex-direction: column; }
+.layout-row { display: flex; align-items: center; gap: 8px; padding: 3px 4px; border-bottom: 1px solid var(--border); }
+.layout-n { flex: 0 0 18px; font-size: 12px; font-weight: 600; color: var(--text-3); text-align: right; }
+.layout-opts { display: flex; flex-wrap: wrap; gap: 4px; }
+.layout-opt {
+  width: 30px; height: 26px; display: inline-flex; align-items: center; justify-content: center; padding: 0;
+  border: 0; border-radius: var(--radius-s); background: transparent; color: var(--text); cursor: pointer;
+}
+.layout-opt:hover { background: var(--bg-sunken); }
+.layout-opt.sel, .layout-opt.sel:hover { background: var(--text); color: var(--bg); }
 .sync-list { display: flex; flex-direction: column; }
 .rename { display: flex; flex-direction: column; gap: 8px; width: 230px; padding: 4px; }
 .rename input {
