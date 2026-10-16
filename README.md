@@ -1,104 +1,110 @@
-# tv-chart · TradingView 风格图表核心 + Pine v5 子集引擎（TypeScript，零依赖）
+# t-kchart · 三栏量化工作台（TypeScript）
 
-用纯 TypeScript 手写的图表核心与 Pine 解释器，**零运行时依赖**。
+左侧菜单 + 中间 Agent 面板 + 右侧类 TradingView 图表区。图表核心与 Pine v5 子集解释器是**零依赖**的纯 TypeScript 引擎（`src/engine`），外壳是 Vite + React + TypeScript。
 
-> **路线图见 [`TODO.md`](TODO.md)** —— TS 侧待办（带完成判据）+ Rust 移植计划 + 待确认的问题。
-> 本 README 讲的是「现在是什么」，TODO 讲的是「接下来做什么、怎么算做完」。
+> **路线图见 [`TODO.md`](TODO.md)**。本 README 讲「现在是什么」，TODO 讲「接下来做什么、怎么算做完」。
 
-五个页面：
+![三栏](docs/shot-home.png)
 
-| 页面 | 内容 |
-| --- | --- |
-| `index.html` | **多图工作区** —— 1×1~4×4 网格、联动、通道、显示范围条 |
-| `pine.html` | **Pine 编辑器** —— 左边写脚本，右边看图上输出 + 变量快照 |
-| `chart.html` | **单图 + 绘图工具** —— 左侧绘图工具栏、可拖动/磁吸/撤销的图形 |
-| `equity.html` | **权益曲线** —— Strategy Tester 那张图：折线 + 每根盈亏柱状 + 回撤统计 |
-| `analytics.html` | **统计组件** —— 收益分布直方图 / 交易环形图 / 季节性叠加线 |
-
-| 多图工作区 | Pine 编辑器 | 权益曲线 |
+| 区域 | 位置 | 说明 |
 | --- | --- | --- |
-| ![grid](shot-grid.png) | ![pine](shot-pine.png) | ![equity](shot-equity.png) |
+| 左侧菜单 | `src/sidebar` | Quant / Trading（Strategies、Alerts）/ Research（Strategy Screener）/ Quant chats 会话列表 / AI credits / 用户卡，可折叠 |
+| Agent 面板 | `src/agent` | 欢迎页、输入框（Teach mode、模型选择、Tab 补全）、Try 快捷建议、流式消息、工具调用展示；宽度可拖动 |
+| 图表区 | `src/workspace` | 顶栏（TradingView 稿原组件：品种胶囊 / 周期 / 图表样式 / 指标 / 警报 / 回放 / 撤销重做 / 布局 / 保存块）、左侧绘图栏、多图联动网格、PaperTrade 模拟下单、底部范围条、右侧图标栏（TradingView 稿原组件）与自选表面板 |
+| 引擎 | `src/engine` | `chart` 单图 · `grid` 多图联动 · `draw` 绘图 · `pine` Pine 引擎 · `equity` 权益曲线 · `analytics` 统计组件 |
 
-| 绘图工具 | 统计组件 |
-| --- | --- |
-| ![draw](shot-chart.png) | ![analytics](shot-analytics.png) |
+![Agent 驱动图表](docs/shot-agent.png)
 
-（五张图都是 headless Chrome 实际跑出来的，不是设计稿。）
+（截图是 headless Chrome 实际跑出来的。上图：在 Agent 里说「切到 NVDA」「用 1h 周期并打开 2x2 布局」，Agent 发起 `set_symbol` / `set_layout` / `set_timeframe` 工具调用，图表随之变化。）
 
 ---
 
 ## 1. 跑起来
 
-**直接双击 HTML 就能跑** —— `.js` 都是经典脚本（无 `import` / `export`），
-所以 `file://` 和 `http://` 都可以，不存在 ESM 的 CORS 问题。
-
-想走 http 也可以，自带一个最小静态服务：
-
 ```bash
-cd tv-chart
-node server.mjs
-# http://127.0.0.1:5180/index.html   多图工作区
-# http://127.0.0.1:5180/pine.html    Pine 编辑器
+npm install
+npm run dev          # http://127.0.0.1:5181/
+npm run typecheck    # tsc --noEmit（strict）
+npm test             # vitest：引擎自检 + Agent / 工作区 / 数据层单测
+npm run build        # tsc --noEmit && vite build
 ```
 
-`index.html` 界面：
+## 2. 目录
 
-- **左侧 LAYOUT** —— 4×4 方块选 1×1 ~ 4×4 布局（最多 16 图），像 TradingView 那样悬停高亮
-- **左侧 SYNC** —— 十字光标 / 时间轴范围 / 标的 / 周期，四个联动开关
-- **顶栏** —— 标的、**1D/1W/1M（K 线周期）**、BB 通道、圆圈规则、深浅主题、自检
-- **底部范围条** —— **1D / 7D / 1M / 3M / 6M / YTD / 1Y / 5Y | ALL（视口覆盖多长时间）**，
-  数据不够长的自动置灰，手动缩放后高亮会跟着走
-- **网格** —— 每格是独立图表；左上角编号徽章，**蓝框那格是活动图**
-  （关掉 SYNC 时，换标的/周期只改它）
-- **左下角运行日志** —— 点开看完整日志，含自检逐条 `PASS` / `FAIL`
+```
+src/
+  main.tsx  App.tsx
+  app/          AppShell（三栏 + 分隔条 + 标签栏）、pages（Strategies / Alerts / Screener）
+  sidebar/      Sidebar
+  agent/
+    types.ts          AgentProvider / AgentMessage / ToolCall / AgentEvent 接口
+    runner.ts         Agent 循环：流式输出 → 执行工具 → 结果回灌 → 直到无新调用（maxSteps 兜底）
+    tools.ts          图表工具集（set_symbol / set_timeframe / set_range / set_layout / add_indicator / run_pine）
+    registry.ts       模型下拉与 provider 选择（Auto：配了 harness 地址用 DeepSeek，否则 mock）
+    providers/mock.ts       本地演示（关键字 → 工具调用）
+    providers/deepseek.ts   DeepSeek harness 适配点（空壳）
+    AgentPanel / Composer / MessageList
+  workspace/
+    ChartWorkspace / TopBar / RangeBar / PaperTrade / RightPanel / RightRail
+    ChartGridView     ChartGrid 的 React 外壳（store ⇄ 引擎）
+    DrawToolbar       包装 dom/sidebar.ts，经 drawBus 驱动各格 DrawLayer
+    chartControls     Agent 工具的真实实现（ChartControls 接口）
+    TopBar / RightRail  包装 dom/toolbar.ts / dom/rightbar.ts：store ⇄ 组件句柄（createToolbarHandle / createRightbarHandle）
+    dom/              TradingView 稿原生 DOM 组件（顶栏、绘图栏、右侧栏、策略报告面板）与图标
+  engine/       chart grid draw pine equity analytics（ESM，零依赖）
+  data/         mockBars（TSLA/AAPL/NVDA/MSFT/SPY，分钟/小时/日/周/月）
+  store/        zustand：appStore / chartStore / chatStore
+  styles/       tokens.css（设计变量，浅/深两套）+ app.css
+  dev/          浏览器侧自检入口
+tests/          vitest
+docs/           截图
+```
 
-操作：滚轮缩放（锚定光标下那根）、拖拽平移、双击适配、十字光标吸附到 bar 中心并**联动到其它格**。
+数据流：**store 是单一数据源**。`ChartGridView` 订阅 `chartStore` 去驱动 `ChartGrid`；引擎的 `activechange` / `viewchange` 事件再回写 store 或刷新范围条。Agent 工具和顶栏按钮走同一条路径（写 store），所以两边永远一致。
 
-> ⚠️ 早期版本用的是 `<script type="module">` + `import './chart.js'`，**双击打开必然白屏**
-> —— 模块被 CORS 拦掉、页面却什么也不说。现在已改成经典脚本，并且**加载失败会大声报错**
-> （见 §16 排查）。
+## 3. 接入 DeepSeek harness
 
-直接操作图：
+UI、runner、图表工具都只依赖 `src/agent/types.ts`，接入只需要实现 `providers/deepseek.ts` 的 `send()`：
 
-| 操作 | 效果 |
-| --- | --- |
-| 滚轮 | 缩放，**锚定光标下的那根 bar**（它不会跑） |
-| 按住拖动 | 平移 |
-| 双击 | 适配全部 |
-| 鼠标移动 | 十字光标（吸附到 bar 中心）+ 双轴反色标签 + 图例切换到该根 |
+1. 把 `req.messages` / `req.tools` 转成 harness 的请求格式（`tools` 是 JSON Schema 子集，已按函数调用风格写好）；
+2. 流式调用 harness；
+3. 逐段翻译成 `AgentEvent`：`text-delta` / `tool-call`（`arguments` 必须是已解析的对象）/ `done` / `error`。
+
+配置走环境变量（`.env.local`）：
+
+```
+VITE_DEEPSEEK_BASE_URL=http://127.0.0.1:8787
+VITE_DEEPSEEK_API_KEY=...
+VITE_DEEPSEEK_MODEL=deepseek-chat
+```
+
+配置了 `VITE_DEEPSEEK_BASE_URL` 后，面板里的 **Auto** 会自动选 DeepSeek，否则用 mock。未实现 / 未配置时会**明确报错**（写进对话），不会静默返回空。
+
+> 注意：`VITE_` 前缀的变量会被打进浏览器包。生产环境不要把 API Key 放前端，应当由 harness 服务端持有密钥。
+
+## 4. 测试
+
+| 层 | 命令 | 内容 |
+| --- | --- | --- |
+| 类型 | `npm run typecheck` | `strict: true`，0 错误 |
+| 引擎（Node） | `npm test` | 绘图 39 + Pine 49 + 权益 24 + 统计 30 = 142（基线，只增不减） |
+| Agent / 工作区 / 数据 | `npm test` | 意图解析、工具校验、runner 循环（含报错/中断/死循环兜底）、模拟账户不变式、范围高亮、mock 数据不变式 |
+| 引擎（浏览器，需 canvas） | 开发模式下控制台 `await __app.runBrowserSelfTests()` | 图表 49 + 网格 6 + 权益 35 + 统计 46 |
+
+`__app` 只在 `npm run dev` 下挂到 `window`，生产包里没有。
 
 ---
 
-## 2. 文件
+## 引擎笔记
 
-| 文件 | 说明 |
-| --- | --- |
-| `chart.ts` | **唯一真相**。单个图表，约 1100 行 TypeScript。**全局脚本**（无 import/export） |
-| `grid.ts` | **唯一真相**。多图网格 + 联动，约 450 行 |
-| `pine.ts` | **唯一真相**。Pine v5 子集解释器，约 1100 行 |
-| `draw.ts` | **唯一真相**。绘图工具层，约 700 行 |
-| `equity.ts` | **唯一真相**。权益曲线 + 回测口径，约 900 行 |
-| `analytics.ts` | **唯一真相**。三个统计组件，约 1200 行 |
-| `chart.js` / `grid.js` / `pine.js` / `draw.js` / `equity.js` / `analytics.js` | `tsc` 生成的产物。**别手改**（见 §5） |
-| `index.html` | 多图工作区页面 |
-| `pine.html` | Pine 编辑器页面 |
-| `chart.html` | 单图 + 左侧绘图工具栏 |
-| `equity.html` | 权益曲线页面 |
-| `analytics.html` | 统计组件页面 |
-| `run-tests.js` | 在 Node 里跑绘图 / Pine / 权益图 / 统计组件自检（不需要浏览器） |
-| **`TODO.md`** | **路线图**：TS 侧待办（带完成判据）+ Rust 移植计划 + 需要你回答的问题 |
-| `server.mjs` | 最小静态服务，默认 `127.0.0.1:5180`（**可选**，双击 HTML 即可） |
-| `tsconfig.json` | `strict: true`，`target/module: ES2020`，include 六个 .ts |
+以下章节来自改造前的 README，讲的是引擎本身的设计与坑，**编号保持不变**（源码注释里引用了 `README §7` / `§9` / `§12` 等）。
 
-> **为什么是全局脚本而不是 ESM 模块？** 因为「单页 HTML + 无构建」这个目标下，
-> 双击打开是最自然的用法，而 ESM 的 `import` 在 `file://` 下会被 CORS 直接拦死。
-> 代价是 `TVChart` / `ChartGrid` / `PineEngine` 等成为全局名字。
-> 如果你要把它当模块用，把 `.ts` 里的声明重新加上 `export`、并把页面换回
-> `<script type="module">` + `import` 即可（那时就必须走 http）。
+> 与现状不一致的地方：
+> - 文中提到的 `index.html` / `pine.html` / `chart.html` / `equity.html` / `analytics.html` 等独立页面，以及「全局脚本、双击 HTML 就能跑、`tsc` 生成 `.js`」的做法，已在三栏改造中移除（引擎改为 ESM 模块，由 Vite 构建）。旧页面可在 git 历史里找到（改造前的提交）。
+> - 文中的 `chart.ts` 等路径现在位于 `src/engine/`。
 
----
 
-## 3. 已实现
+## 引擎 §3 已实现
 
 **图表（`chart.ts`）**
 
@@ -139,7 +145,7 @@ node server.mjs
 - 锚点存 **(时间, 价格)** 而不是像素 —— 缩放平移后图形不会飘
 - 自检 **39 条**，**纯几何，Node 里就能跑**（靠 `DrawHost` 接口塞假图）
 
-## 4. 刻意没做（T2 / T3 的边界）
+## 引擎 §4 刻意没做（T2 / T3 的边界）
 
 - **同一张图里的多副图（pane）** —— 上下叠在一个画布里、拖分隔条改高度。
   这和 §10 的多图网格不是一回事：网格是 N 个独立实例，副图是 1 个实例切 N 块。
@@ -150,155 +156,9 @@ node server.mjs
 
 ---
 
-## 5. 构建与测试
-
-`.ts` 是唯一真相，`.js` 全部由 `tsc` 生成 —— **不要手改 `.js`**。
-
-TypeScript 装在 `../.tools`（没有全局 tsc）：
-
-```powershell
-# 类型检查（不产出）
-cd tv-chart
-node ..\.tools\node_modules\typescript\bin\tsc -p tsconfig.json --noEmit
-
-# 正式编译：产出 chart.js / grid.js / pine.js
-node ..\.tools\node_modules\typescript\bin\tsc -p tsconfig.json
-
-# Pine 引擎自检（纯 Node，不需要浏览器）
-node run-tests.js
-```
-
-没装过的话：
-
-```powershell
-mkdir ..\.tools; cd ..\.tools
-'{"name":"tools","private":true}' | Out-File -Encoding ascii package.json
-npm install typescript@5.4.5 --no-audit --no-fund
-```
-
-> **踩过的坑**：`tsconfig.json` 里写 `"outDir": "."` 会让 tsc 自动排除输出目录
-> （也就是源码目录本身），报 `TS18003: No inputs were found`。
-> 不写 `outDir` 时 tsc 就在 `.ts` 旁边生成 `.js`，正好是我们要的。
->
-> 本机环境：Node 14.21.3 / npm 6.14.18 —— npm 6 下 `npx --yes` 不可用，
-> 直接调 `node <路径>/tsc` 最省事。
-
-### 为什么是全局脚本而不是 ESM 模块
-
-两个原因，都是实测出来的：
-
-1. **`file://` 双击就能跑。** `<script type="module">` 的 `import` 在 `file://` 下会被
-   CORS 拦死，页面白屏而且什么都不说。经典脚本没有这个问题。
-2. 代价是 `TVChart` / `ChartGrid` / `PineEngine` 等成为全局名字。
-
-因为不用 ESM，`.ts` 里也没有 `import`/`export`，所以还额外限制成
-**只使用可擦除类型语法**（无 `enum` / 装饰器 / `namespace` / 参数属性）。
-这条现在不是必需的，但保留着 —— 万一哪天要临时手改 `.js`，它保证类型一擦就没。
-
-### 能编译、能执行之后，抓到了这些真 bug
-
-这份代码的前几轮是在**跑不了 `tsc`、跑不了浏览器**的情况下写的，全靠通读。
-工具链一恢复，第一次 `tsc --noEmit` + 第一次执行就抓出 12 个问题：
-
-| # | 问题 | 性质 |
-| --- | --- | --- |
-| 1 | `tsconfig` 里 `"outDir": "."` 让 tsc 把自己排除了 → `TS18003` | 配置 |
-| 2 | `near()` 的 `eps` 忘了写默认值，22 处调用报 `TS2554` | 编译期 |
-| 3 | `catch (e)` 里 `e.message`，`strict` 下 `e` 是 `unknown` | 编译期 |
-| 4 | **`ta.change(src, 1)` 永远返回 na**（窗口只装了当前值） | **数值错误，静默** |
-| 5 | `input.int(3, "N")` 的**位置参数** title 不认，覆盖失效 | 功能失效，静默 |
-| 6 | **`indicator(title, overlay=…)` 存的是 AST 节点**，于是 `!!opts.overlay` **恒为 true** | **语义错误，静默** |
-| 7 | `bgcolor(na)` 也记账（Pine 里表示"这根不染色"） | 语义错误 |
-| 8 | `pine.html` 成功后没改 `statusEl.textContent`，看门狗误报"没启动起来" | UI |
-| 9 | 自检靠 `requestAnimationFrame` 驱动，headless/后台标签页里**根本不触发** | 测试基础设施 |
-| 10-12 | `ta.atr` / `bgcolor` / 自引用声明三条**是我的期望值算错了**，引擎是对的 | 测试写错 |
-
-**最值得看的是 4 和 6**：都是"不报错、只是数不对"的那一类。
-第 6 条尤其典型 —— 把 AST 节点当值存进元信息，`!!对象` 永远是 `true`，
-于是 `overlay=false` 的脚本照样被当成叠加图。这种错**通读很难发现**，
-因为代码看起来完全合理。
-
-> 结论：前面几轮"通读代替编译器"抓出了 2 个会白屏的硬错误（重复声明、模块 CORS），
-> 但**漏掉了至少 4 个静默数值错误**。静默错误才是这类代码真正的敌人。
-
 ---
 
-## 6. 无头验证（改完必跑）
-
-```powershell
-# 1) 起服务
-node tv-chart/server.mjs
-
-# 2) 截图 + 抓 DOM（日志和自检结果都在 HTML 里）
-& 'C:\Program Files\Google\Chrome\Application\chrome.exe' `
-  --headless=new --disable-gpu --enable-unsafe-swiftshader `
-  --window-size=1280,800 --virtual-time-budget=20000 `
-  --screenshot=tv-chart\shot.png --dump-dom "http://127.0.0.1:5180/" | Out-File -Encoding utf8 tv-chart\dom.html
-
-# 3) 判定：有没有 FAIL
-Select-String -Path tv-chart\dom.html -Pattern 'FAIL|SELFTEST|READY'
-```
-
-`--screenshot` **单独用不落盘**，必须和 `--dump-dom` 一起用并把 stdout 重定向出去。
-
-**判两条线**（别只看一条）：
-
-- **模型层** → `--dump-dom` 里的 `PASS/FAIL` 与 `debugInfo()`（`bars=/view.from=/visible=/scale=`）
-- **渲染层** → `--screenshot` 出来的图，人眼看蜡烛、坐标轴、十字光标、图例对不对
-
-模型层全绿但渲染层是空白/糊成一团，是这类代码最典型的失败模式——所以自检里专门有一条
-`画布上确实画了东西（背景之外有像素）`，它直接 `getImageData` 采样像素，不依赖任何模型状态。
-
-> ⚠️ **自检不能用 `requestAnimationFrame` 单独驱动。** 后台标签页和 headless 未合成页面里
-> rAF 可能根本不触发，表现为「页面启动了但自检没跑」——`index.html` 因此白跑了一轮。
-> 现在两页都是 `rAF` + `setTimeout(400)` 兜底，用 flag 去重。
-
-### 当前实测结果
-
-```
-node run-tests.js                                   → 绘图层 39 PASS / 0 FAIL
-                                                      Pine   49 PASS / 0 FAIL
-                                                      权益图 24 PASS / 0 FAIL（纯计算；另 11 条需要 canvas）
-                                                      统计  30 PASS / 0 FAIL（纯计算；另 16 条需要 canvas）
-chrome --dump-dom .../index.html                    → SELFTEST   54 PASS / 0 FAIL
-chrome --dump-dom .../pine.html                     → PINETEST   49 PASS / 0 FAIL
-chrome --dump-dom .../chart.html                    → CHARTTEST  87 PASS / 0 FAIL
-chrome --dump-dom .../equity.html                   → EQTEST     35 PASS / 0 FAIL
-chrome --dump-dom .../analytics.html                → ANATEST    46 PASS / 0 FAIL
-```
-
-（`SELFTEST 54` = 图表 48 + 网格 6；`CHARTTEST 87` = 绘图 39 + 图表 48；
-`EQTEST 35` = 纯计算 24 + canvas 11；`ANATEST 46` = 纯计算 30 + canvas 16。）
-
-### 自检覆盖了什么
-
-`selfTest(chart)` 共 48 条，其中**唯一一条真正的行为断言**是缩放不变量：
-
-> 在像素 `px` 处缩放 1.9 倍，`chart.iOf(px)` 在缩放前后必须**完全相等**（容差 1e-6）。
-
-这条挂了，手感一定是错的。其余覆盖：数据升序/去重/OHLC 合法性、`sma` 对朴素均值、
-BOLL 中轨 = sma(20) 且上下轨对称、**通道三条轨处处有序 + 填充按缺口切段 + 上下轨被算进自动缩放**、
-**`resample` 的 open/close/high/low/volume/time 五条合成规则 + `indexAtTime` 二分 + 时间轴范围同步**、
-**9 条显示范围断言（1Y≈365 天 / 1M≈30 天 / YTD 落在元旦 / 5Y 数据不够要置灰）**、
-`niceStep` 只产出 1/2/5×10^k、索引↔像素与价格↔像素的往返互逆、
-`barW` 夹紧、`fitContent`/`showLast` 的可见区间、`update()` 三种语义（覆盖/追加/拒绝乱序）。
-
-> 三条最容易写错成「假失败」的断言，都做了防御：
-> · 两条涉及 `barW` **1px 下限**（`fitContent` / `setViewTimes`）—— 4×4 布局每格只有约 90px，
->   装不下是**正确行为**，写成「首尾都必须可见」一换密集布局就红；
-> · 范围的跨度容差**按当前 bar 间距算**，不是写死 ±30 天 ——
->   月线一根就 30 天，写死的话切到 1M 再点自检必红。
-
-> 两条涉及 `barW` **1px 下限**的断言（`fitContent` / `setViewTimes`）都写成「装得下时才要求首尾覆盖」。
-> 4×4 布局下每格只有约 90px 绘图宽，装不下是**正确行为**——
-> 写成「首尾都必须可见」的话，一换成密集布局就假失败。
-
-> 自检跑完会把自己改过的状态还原（视图恢复、测试插入的那根 bar 弹出），
-> 所以「重跑自检」点多少次结果都一样。
-
----
-
-## 7. 设计说明（改代码前先看这几条）
+## 引擎 §7 设计说明（改代码前先看这几条）
 
 **① 全部渲染只经过四个函数。** 其余代码都不碰坐标系：
 
@@ -335,7 +195,7 @@ this.view.from = anchor - (px - this.plot.l) / this.view.barW;
 
 ---
 
-## 8. 通道（Channel）怎么写
+## 引擎 §8 通道（Channel）怎么写
 
 这就是你要的那个效果。接口：
 
@@ -379,7 +239,7 @@ chart.setTheme('light');          // 'dark' | 'light'
 
 ---
 
-## 9. 显示范围 ≠ K 线周期（最容易混的一件事）
+## 引擎 §9 显示范围 ≠ K 线周期（最容易混的一件事）
 
 底部那条 `1D 7D 1M 3M 6M YTD 1Y 5Y ALL` 和顶栏的 `1D 1W 1M` **是两个正交的维度**：
 
@@ -416,7 +276,7 @@ chart.viewSpan() / 86400000;   // 当前视口覆盖多少天
 
 ---
 
-## 10. 多图网格 + 联动
+## 引擎 §10 多图网格 + 联动
 
 左侧 Layout 选 1×1 ~ 4×4（最多 16 格），Sync 四个开关控制联动。
 每格左上角有编号徽章，**蓝框那一格是「活动图」**——关掉 SYNC 时，换标的/周期只改它。
@@ -463,7 +323,7 @@ grid.charts()[0].debugInfo();
 
 ---
 
-## 11. 绘图工具层（`draw.ts`）
+## 引擎 §11 绘图工具层（`draw.ts`）
 
 页面是 `chart.html`。左侧那排工具背后是这个层。
 
@@ -511,7 +371,7 @@ onDown(px, py, e): boolean   // 返回 true = 这次点击被图层接管，TVCh
 
 ---
 
-## 12. Pine v5 子集引擎（`pine.ts`）
+## 引擎 §12 Pine v5 子集引擎（`pine.ts`）
 
 **先说清楚它不是什么**：这是**子集**，不是 Pine 兼容实现。我不承诺、也不假装它能跑任意脚本。
 理由不是我懒 —— 是这件事本身就很难。**成熟的专用 Pine 引擎一样会翻车**：
@@ -583,7 +443,7 @@ TradingView 文档实现的，但**没有对着真实 TV 逐值核过**。你的
 
 ---
 
-## 13. T3 分解与进度
+## 引擎 §13 T3 分解与进度
 
 前面我说 T3「不承诺」，是因为它不是一件事，是四件难度差一个数量级的事：
 
@@ -594,19 +454,19 @@ TradingView 文档实现的，但**没有对着真实 TV 逐值核过**。你的
 | **权益曲线图** | ✅ 完成 | 折线 + 每根盈亏柱状 + 回撤填充 + 末端标签 + 统计；见 §14 |
 | **统计组件** | ✅ 完成 | 收益分布 / 交易环形图 / 季节性叠加线；见 §15 |
 | **绘图工具框架** | ✅ 框架完成 | `draw.ts`：9 种工具 + 命中/拖动/手柄/磁吸/撤销/持久化，39 条自检；**79 种全量不承诺** |
-| 左侧工具栏 UI | 🟡 暂行版 | 照 TradingView 做的；**未按设计稿**（链接打不开），等稿子改皮 |
-| 顶栏 / 右侧面板 | ⬜ | 等设计稿 |
+| 左侧工具栏 UI | ✅ 已接入 | 沿用 `src/workspace/dom/sidebar.ts`，经 `drawBus` 接到各格 `DrawLayer` |
+| 顶栏 / 右侧栏 | ✅ 已接入 | 沿用 `dom/toolbar.ts` / `dom/rightbar.ts`（TradingView 稿 1:1），经句柄与 store 双向同步；右侧面板目前只有自选表可用，其余是空态 |
 | **Bar Replay** | ⬜ | 便宜且价值高（~200 行）：截断序列 + 步进 + 自动播放 |
 | 告警面板 | ⬜ | ~150 行，价值低 |
 | **逐像素视觉对等** | ❌ 不做 | 需要参考截图逐帧比，我没有也不打算声称有 |
 | Pine **全兼容** | ❌ 不接 | 见 §12 开头，理由不是懒 |
 
 **下一步建议顺序**：Pine 撮合 `strategy.*`（权益图的输出端已经就绪，接上就能看到真实回测）
-→ 设计稿到位后定左侧工具栏的皮 → 顶栏 / 右侧面板 → Bar Replay。
+→ Bar Replay（顶栏回放按钮已留位）→ 接入 DeepSeek harness。
 
 ---
 
-## 14. 权益曲线图（`equity.ts`）
+## 引擎 §14 权益曲线图（`equity.ts`）
 
 页面是 `equity.html`。就是 TradingView Strategy Tester 那张图：折线权益曲线 + 每根盈亏柱状。
 
@@ -664,7 +524,7 @@ TVChart 是「蜡烛 + 多通道」的骨架，这张图有三处根本不同：
 
 ---
 
-## 15. 统计组件（`analytics.ts`）
+## 引擎 §15 统计组件（`analytics.ts`）
 
 页面是 `analytics.html`。三个组件共用一个文件，因为主题、圆角气泡、图例小圆点、DPR 样板是同一套。
 
@@ -701,24 +561,3 @@ TVChart 是「蜡烛 + 多通道」的骨架，这张图有三处根本不同：
 `seasonalSeries(bars)` 把日线按年拆成「年内累计收益」曲线（每年从该年首根收盘算起，所以每条线第 0 天都是 0）。
 
 ---
-
-## 16. 排查：页面卡在 `booting…`
-
-`booting…` 是 `#status` 的初始文本，只有 `report()` 会改写它。它一直不变 = **业务脚本压根没执行**。
-最常见的原因按概率排序：
-
-| 现象（看 `#log`） | 原因 | 处理 |
-| --- | --- | --- |
-| `✗ 资源加载失败：<script> …/chart.js` 或 `typeof TVChart = undefined` | `chart.js` 不在 `index.html` 同级目录，或文件名被改 | 确认两个文件在同一目录 |
-| `✗ JS 错误：… @行:列` | `chart.js` 被改坏 / 复制时截断 | 重新生成（§5） |
-| `✗ 2 秒内没启动起来。protocol=file:` | 早期 ESM 版本的 CORS 问题 | 本版本已改经典脚本，不该再出现 |
-
-页面现在有三层保险，**任何一层触发都会把原因写进 `#log` 并把 `#status` 染红**：
-
-1. **`window.addEventListener('error', …, true)`** —— 捕获 JS 错误 *和* 资源加载失败
-   （资源错误只在**捕获阶段**冒泡到 window，所以第三个参数必须是 `true`，这是关键）
-2. **`typeof TVChart !== 'function'` 前置检查** —— `<script src>` 失败不会抛异常，
-   只会在 window 上留一个 `error` 事件，所以必须显式检查标识符在不在
-3. **2 秒看门狗** —— 什么都没发生也要说话，并且把 `location.protocol` 打出来
-
-> 教训：**"什么都没发生" 是最差的失败模式。** 一个静默白屏比一个红色报错难查十倍。

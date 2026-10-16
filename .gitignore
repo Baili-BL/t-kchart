@@ -1,13 +1,13 @@
-# 依赖（本仓库不需要任何运行时依赖；只有装 tsc 时才会产生）
 node_modules/
+dist/
 
 # 无头验证的临时产物
 dom-*.html
 _d*.html
 *-final.png
+.shots/
 
 # 本地产物
 *.log
-
-# WorkBuddy 工作区数据
+.DS_Store
 .workbuddy/
