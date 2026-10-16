@@ -49,8 +49,8 @@ Pine 编辑器、权益曲线、统计组件目前**没有对应的 UI 入口**�
 
 ```
 npm run typecheck                          0 错误（strict）
-npm test (vitest)                          引擎 142 PASS（绘图 39 + Pine 49 + 权益 24 + 统计 30）
-                                           + Agent 21 + 工作区 15 + 数据 13 = 共 53 个用例
+npm test (vitest)                          引擎 208 PASS（绘图 39 + Pine 49 + Pine 撮合 66 + 权益 24 + 统计 30）
+                                           + Agent 21 + 工作区 15 + 数据 13 = 共 54 个用例
 浏览器侧（dev 控制台 __app.runBrowserSelfTests()）
                                            图表 57（改造前 48，新增 setRange 回归 1 条 + 图表样式 8 条）+ 网格 6
                                            + 权益 35 + 统计 46
@@ -77,7 +77,7 @@ E2E（puppeteer 驱动 headless Chrome，未入库）  51 PASS / 0 FAIL
 
 #### 2.1 Pine 撮合 `strategy.*`（T3 Phase 2）
 
-- 状态：⬜（但**输出端已就绪** —— `equity.ts` 的渲染和统计都好了，只缺撮合本身）
+- 状态：✅ 已完成（`src/engine/strategy.ts` 撮合 + `pine.ts` 里的 `strategy.*` 内置 + `strategyTest.ts` 66 条自检；口径见 README §12.1）
 - 内容：`strategy.entry/close/exit`、仓位计算（`percent_of_equity` / `fixed` / `cash`）、
   手续费、滑点、保证金、`pyramiding`、`process_orders_on_close`、权益曲线、
   交易列表、绩效指标（净利/回撤/Sharpe/盈亏比）
@@ -94,6 +94,18 @@ E2E（puppeteer 驱动 headless Chrome，未入库）  51 PASS / 0 FAIL
      有真实盈亏、会系统性扭曲笔数/胜率/盈亏比
 - 这两条的**完成判据**：造出上面两种输入，引擎要么给出正确结果，要么**明确报错**，
   绝不能静默返回全零
+- 完成情况（实跑）：
+  - ✅ 判据 1：`strategy.*` 版双均线与 `simulateMaCross()` 在 400 根上**逐点一致**。
+    比对时发现旧版 `simulateMaCross` 有前视偏差（用当根收盘均线、按当根开盘价成交），已修正为用上一根收盘的信号；
+    把旧逻辑改回去，这条断言立刻失败（做过变异验证）
+  - ✅ 判据 2：66 条断言（≥ 20），覆盖仓位公式 / 手续费方向 / 滑点方向 / pyramiding / 平仓后权益守恒 / 退出单 / 反手 / 绩效指标
+  - ✅ 判据 3：150% 权益、显式 qty 超限、空头超限都**抛「保证金不足」**；非法声明头参数、不支持的参数同样抛错
+  - ✅ 两个静默归零坑：100% 权益（含手续费）正常成交；空头只记 1 笔成交
+- 遗留（不在 2.1 范围，传了会明确报错而不是被忽略）：limit / stop 入场单、点数止盈止损（`profit` / `loss`）、
+  移动止损、部分平仓（`qty` / `qty_percent`）、`strategy.risk.*`、`calc_on_order_fills`、`use_bar_magnifier`；
+  同一根里止损与止盈都够得着时没有逐笔数据，固定按止损先成交
+- 回测结果目前只在代码里（`PineEngine.strategyResult()`，Agent 的 `run_pine` 会把笔数 / 净利 / 回撤 / 胜率带回去，
+  成交标记画到图上）；权益曲线与交易列表在界面里的入口见 2.13
 
 #### 2.2 Bar Replay
 

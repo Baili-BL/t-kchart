@@ -87,7 +87,7 @@ VITE_DEEPSEEK_MODEL=deepseek-chat
 | 层 | 命令 | 内容 |
 | --- | --- | --- |
 | 类型 | `npm run typecheck` | `strict: true`，0 错误 |
-| 引擎（Node） | `npm test` | 绘图 39 + Pine 49 + 权益 24 + 统计 30 = 142（基线，只增不减） |
+| 引擎（Node） | `npm test` | 绘图 39 + Pine 49 + Pine 撮合 66 + 权益 24 + 统计 30 = 208（基线，只增不减） |
 | Agent / 工作区 / 数据 | `npm test` | 意图解析、工具校验、runner 循环（含报错/中断/死循环兜底）、模拟账户不变式、范围高亮、mock 数据不变式 |
 | 引擎（浏览器，需 canvas） | 开发模式下控制台 `await __app.runBrowserSelfTests()` | 图表 57 + 网格 6 + 权益 35 + 统计 46 |
 
@@ -399,7 +399,7 @@ Pine 的语法很浅，真正决定数值对不对的是执行模型。这三条
 ### 支持
 
 ```
-//@version=5 / indicator() / strategy()（仅声明，不撮合） / input.*
+//@version=5 / indicator() / strategy() / input.*
 变量：x =   x :=   var x =   [a, b] = f()
 控制：if / else / if 当表达式 / for [to] [by] / while / 三元
 函数：f(a, b) => expr   和   多行缩进体（最后一条表达式的值即返回值）
@@ -409,10 +409,27 @@ Pine 的语法很浅，真正决定数值对不对的是执行模型。这三条
        crossover,crossunder,barssince,valuewhen,macd,bb}
       math.* / nz / na / fixnan / str.tostring / str.length / color.*
       plot / plotshape / plotchar / bgcolor / hline
+      strategy.{entry,close,close_all,exit,cancel,cancel_all}
+      strategy.{position_size,position_avg_price,equity,netprofit,openprofit,
+                initial_capital,opentrades,closedtrades}（只读变量）
 ```
 
-**明确不支持**（遇到就抛错，不静默给 na）：`strategy.*` 撮合、数组/矩阵/map、
+**明确不支持**（遇到就抛错，不静默给 na）：`strategy.*` 里除上面之外的（limit/stop 入场单、`risk.*`、`order` …）、数组/矩阵/map、
 `request.*` / `table.*` / `label.*` / `line.*` / `box.*`、`fill()`、`barstate.*`。
+
+### 12.1 `strategy.*` 撮合口径（`strategy.ts`）
+
+写清楚，免得数字对不上时互相猜：
+
+- **成交时机**：脚本在一根 bar 收盘后运行，下的单在**下一根开盘价**成交；`process_orders_on_close=true` 时当根收盘价成交。
+- **只做市价入场**。`entry` 带 `limit` / `stop`、`exit` 带 `profit` / `loss` / `trail_*` / `qty`，**直接抛错**，不会被悄悄忽略。
+- **反手**：反向 `entry` = 先平掉全部反向持仓，再开新仓。**pyramiding**：同方向最多 `max(1, pyramiding)` 笔；同 id 已持仓时再次 `entry` 被忽略。
+- **stop / limit 退出**：绝对价格，下一根起生效；跳空越过价位按**开盘价**成交；同一根里止损、止盈都够得着时**止损先成交**（悲观）。
+- **手续费**（`percent` / `cash_per_order` / `cash_per_contract`）进出各收一次，从权益里扣；**滑点**（`slippage × mintick`）永远对自己不利。
+- **仓位**：`fixed` / `percent_of_equity` / `cash`；后两者**预留手续费**，所以 100% 权益不会被自己的手续费挤成「保证金不足」。
+- **保证金**：持仓名义价值 × margin% 不得超过扣完手续费后的权益；**不足时抛错**，不静默不下单；`margin=0` 不检查。
+- **权益** = 初始资金 + 已实现盈亏 − 手续费 + 持仓浮盈，按收盘价盯市。结果与 `simulateMaCross()` 同构，权益图 / 统计组件直接吃。
+- 两个历史坑做成了回归自检（`strategyTest.ts`）：① 100% 权益被判保证金不足 → 0 笔成交且不报错；② 空头凭空多出「同日进同出」的幽灵成交。
 
 ### 用法
 
@@ -451,7 +468,7 @@ ta.* 的递推公式（EMA/RMA 的 SMA 播种、RSI、ATR、BOLL、MACD）、元
 | T3 工作流 | 状态 | 说明 |
 | --- | --- | --- |
 | **Pine 引擎** | ✅ Phase 1 完成 | 词法+语法+序列运行时+45 内置+plot 输出，49 条自检 |
-| Pine 撮合（`strategy.*`） | 🟡 输出端已就绪 | `equity.ts` 的渲染和统计已完成；缺的是 `strategy.*` 撮合本身 |
+| **Pine 撮合（`strategy.*`）** | ✅ Phase 2 完成 | `strategy.ts`：市价入场 / 反手 / pyramiding / stop·limit 退出 / 手续费 / 滑点 / 保证金，66 条自检；口径见 §12.1 |
 | **权益曲线图** | ✅ 完成 | 折线 + 每根盈亏柱状 + 回撤填充 + 末端标签 + 统计；见 §14 |
 | **统计组件** | ✅ 完成 | 收益分布 / 交易环形图 / 季节性叠加线；见 §15 |
 | **绘图工具框架** | ✅ 框架完成 | `draw.ts`：9 种工具 + 命中/拖动/手柄/磁吸/撤销/持久化，39 条自检；**79 种全量不承诺** |
@@ -462,8 +479,7 @@ ta.* 的递推公式（EMA/RMA 的 SMA 播种、RSI、ATR、BOLL、MACD）、元
 | **逐像素视觉对等** | ❌ 不做 | 需要参考截图逐帧比，我没有也不打算声称有 |
 | Pine **全兼容** | ❌ 不接 | 见 §12 开头，理由不是懒 |
 
-**下一步建议顺序**：Pine 撮合 `strategy.*`（权益图的输出端已经就绪，接上就能看到真实回测）
-→ Bar Replay（顶栏回放按钮已留位）→ 接入 DeepSeek harness。
+**下一步建议顺序**：Bar Replay（顶栏回放按钮已留位）→ 接入 DeepSeek harness。
 
 ---
 
@@ -515,7 +531,10 @@ KChart 是「蜡烛 + 多通道」的骨架，这张图有三处根本不同：
 - 权益按**收盘价盯市**，所以每根都有盈亏，柱状才是连续的
 
 这正是 Pine 撮合（T3 Phase 2）将来要接的口：`strategy.*` 跑完吐同样的
-`{ points, trades, positions, netProfit, maxDrawdown, winRate }` 结构，上面这套渲染一行都不用改。
+`{ points, trades, positions, netProfit, maxDrawdown, winRate }` 结构（`PineEngine.strategyResult()`），上面这套渲染一行都不用改。
+
+> 修正：旧版 `simulateMaCross` 用的是**当根**收盘的均线、却按当根开盘价成交（偷看了一根的未来），
+> 与上面「下一根开盘」的口径不符。现已改为用上一根收盘的信号。用 `strategy.*` 重写同一策略做逐点比对时发现的。
 
 ### 关于参考图底部那条色带
 

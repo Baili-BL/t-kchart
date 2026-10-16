@@ -10,6 +10,7 @@ import { drawSelfTest } from '../src/engine/draw';
 import { pineSelfTest } from '../src/engine/pine';
 import { equitySelfTest } from '../src/engine/equity';
 import { analyticsSelfTest } from '../src/engine/analytics';
+import { strategySelfTest } from '../src/engine/strategyTest';
 
 interface SelfTestResult {
   pass: number;
@@ -34,6 +35,13 @@ describe('引擎自检', () => {
     expect(failures(r)).toEqual([]);
     expect(r.fail).toBe(0);
     expect(r.pass).toBeGreaterThanOrEqual(49);
+  });
+
+  it('Pine 撮合（strategy.*）≥ 50 条且全部通过', () => {
+    const r = strategySelfTest() as SelfTestResult;
+    expect(failures(r)).toEqual([]);
+    expect(r.fail).toBe(0);
+    expect(r.pass).toBeGreaterThanOrEqual(50);
   });
 
   it('权益曲线（纯计算部分）≥ 24 条且全部通过', () => {

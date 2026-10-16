@@ -169,7 +169,8 @@ export interface BacktestResult extends EquitySeries {
 
 /**
  * 一个最小可用的双均线策略回测，只用来喂演示数据。
- * 这正是 Pine 撮合（T3 Phase 2）将来要接的口：`strategy.*` 跑完吐同样的结构。
+ * Pine 撮合（strategy.ts）吐同样的结构；在无手续费无滑点下，
+ * 它跑 `ta.crossover(fast, slow)` 入场 / `ta.crossunder` 平仓的脚本，权益曲线与本函数逐点一致。
  *
  * 口径（写清楚，免得数字对不上时互相猜）：
  *   · 只做多，满仓，不加杠杆，不含手续费和滑点
@@ -197,12 +198,14 @@ export function simulateMaCross(bars: Bar[], fastLen: number, slowLen: number, s
   let maxDD = 0;
 
   for (let i = 0; i < n; i++) {
-    const f = fast[i];
-    const s = slow[i];
-    const pf = i > 0 ? fast[i - 1] : null;
-    const ps = i > 0 ? slow[i - 1] : null;
+    // 信号取自**上一根收盘**（i-1 相对 i-2），这一根开盘执行。
+    // ⚠️ 旧版这里用的是 fast[i] / slow[i]：均线里含了当根收盘价，却按当根开盘价成交，
+    //    等于偷看了一根的未来，注释里写的「避免前视」其实没做到。
+    const f = i >= 1 ? fast[i - 1] : null;
+    const s = i >= 1 ? slow[i - 1] : null;
+    const pf = i >= 2 ? fast[i - 2] : null;
+    const ps = i >= 2 ? slow[i - 2] : null;
 
-    // 信号在上一根收盘产生，这一根开盘执行（避免前视）
     if (pf != null && ps != null && f != null && s != null) {
       const up = pf <= ps && f > s;
       const dn = pf >= ps && f < s;

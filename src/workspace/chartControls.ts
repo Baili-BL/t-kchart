@@ -29,11 +29,19 @@ export const chartControls: ChartControls = {
     if (!g) return { ok: false, message: '图表尚未就绪' };
     const chart = g.charts()[g.activeIndex()];
     if (!chart) return { ok: false, message: '没有活动图' };
-    const eng = new PineEngine(code, chart.bars);
-    eng.run();
-    if (eng.error) return { ok: false, message: 'Pine 运行失败：' + eng.error };
-    eng.applyTo(chart);
-    return { ok: true, message: `Pine 已运行：${eng.plots.length} 条线，${eng.marks.length} 个标记` };
+    // 解析错误、未实现的语法、策略的保证金不足等都是抛出来的，必须带回给调用方（Agent 要看见才能自我修正）
+    try {
+      const eng = new PineEngine(code, chart.bars);
+      eng.run();
+      eng.applyTo(chart);
+      const r = eng.strategyResult();
+      const strat = r
+        ? `；策略回测：${r.tradeCount} 笔，净利 ${r.netProfit.toFixed(2)}，最大回撤 ${r.maxDrawdown.toFixed(2)}，胜率 ${(r.winRate * 100).toFixed(1)}%`
+        : '';
+      return { ok: true, message: `Pine 已运行：${eng.plots.length} 条线，${eng.marks.length} 个标记${strat}` };
+    } catch (e) {
+      return { ok: false, message: 'Pine 运行失败：' + (e instanceof Error ? e.message : String(e)) };
+    }
   },
 
   knownSymbols: () => MOCK_SYMBOLS.map((s) => s.ticker),
