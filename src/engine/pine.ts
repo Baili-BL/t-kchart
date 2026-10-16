@@ -1,5 +1,5 @@
 /**
- * tv-chart / pine.ts
+ * kc-chart / pine.ts
  * ---------------------------------------------------------------------------
  * Pine Script v5 **子集** 解释器（T3 Phase 1）。
  *
@@ -34,7 +34,7 @@
  * ===========================================================================
  */
 
-import { Bar, TVChart, log } from './chart';
+import { Bar, KChart, log } from './chart';
 
 /* ===========================================================================
  * 1. NA 与基础类型
@@ -852,7 +852,7 @@ export const PINE_BUILTINS: { [k: string]: (ctx: PBuiltinCtx, node: any, a: any[
 
   /**
    * ta.ema：前 len-1 根为 na，第 len 根用 SMA 播种，之后 alpha = 2/(len+1)。
-   * ⚠️ 播种方式是我按 TradingView 文档实现的；这个引擎**没有**对 TV 逐值验证过。
+   * ⚠️ 播种方式是我按公开文档实现的；这个引擎**没有**对参考实现逐值验证过。
    */
   'ta.ema': (ctx, node, a) => {
     const len = Math.max(1, Math.round(toNum(a[1])));
@@ -1503,8 +1503,8 @@ export class PineEngine {
     return p.values[p.values.length - 1];
   }
 
-  /** 把 plot / plotshape 的输出灌进 TVChart */
-  applyTo(chart: TVChart): void {
+  /** 把 plot / plotshape 的输出灌进 KChart */
+  applyTo(chart: KChart): void {
     chart.clearLines();
     chart.clearMarks();
     for (const p of this.plots) {

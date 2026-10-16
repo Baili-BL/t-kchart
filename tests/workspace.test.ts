@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { applyFill, markToMarket, EMPTY_POSITION } from '../src/workspace/paperAccount';
 import type { Position } from '../src/workspace/paperAccount';
 import { matchRange } from '../src/workspace/rangeMatch';
+import { STYLE_LABELS, styleFromLabel, useChartStore } from '../src/store/chartStore';
 
 describe('paperAccount · 持仓计算', () => {
   it('开多 → 加仓：均价是加权平均，无已实现盈亏', () => {
@@ -100,5 +101,21 @@ describe('rangeMatch · 范围按钮高亮', () => {
   it('空视口 / 非法跨度 → null', () => {
     expect(matchRange({ ...base, spanDays: 0 })).toBeNull();
     expect(matchRange({ ...base, spanDays: NaN })).toBeNull();
+  });
+});
+
+describe('chartStore · 主图样式', () => {
+  it('默认是蜡烛，setChartStyle 写入 store', () => {
+    expect(useChartStore.getState().chartStyle).toBe('candles');
+    useChartStore.getState().setChartStyle('area');
+    expect(useChartStore.getState().chartStyle).toBe('area');
+    useChartStore.getState().setChartStyle('candles');
+  });
+
+  it('顶栏标签与样式一一对应、可互相还原', () => {
+    for (const k of Object.keys(STYLE_LABELS) as (keyof typeof STYLE_LABELS)[]) {
+      expect(styleFromLabel(STYLE_LABELS[k])).toBe(k);
+    }
+    expect(styleFromLabel('不存在')).toBeNull();
   });
 });

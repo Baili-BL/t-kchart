@@ -1,5 +1,5 @@
-// TradingView 左侧纵向绘图工具栏图标（CARET 为 10×16 子菜单右向箭头）
-// 提取自 magicpatterns 导入的 cn.tradingview.com 设计稿
+// 左侧纵向绘图工具栏图标（CARET 为 10×16 子菜单右向箭头）
+// 提取自设计稿
 
 export const CROSS = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\"><g fill=\"currentColor\">      <path d=\"M18 15h8v-1h-8z\"></path>      <path d=\"M14 18v8h1v-8zM14 3v8h1v-8zM3 15h8v-1h-8z\"></path>    </g></svg>";
 

@@ -169,7 +169,7 @@ export function Icon({ name, size = 16, className, style, strokeWidth = 1.6 }: I
   );
 }
 
-/** 渲染来自 *-icons.ts 的内联 SVG 字符串（TradingView 抠出来的那批）。 */
+/** 渲染来自 *-icons.ts 的内联 SVG 字符串（设计稿里抠出来的那批）。 */
 export function RawIcon({ html, className }: { html: string; className?: string }): ReactElement {
   return <span className={className} style={{ display: 'inline-flex' }} dangerouslySetInnerHTML={{ __html: html }} />;
 }

@@ -1,5 +1,5 @@
-// TradingView 右侧边栏工具条图标（44×44 整幅按钮图标）
-// 提取自 magicpatterns 导入的 cn.tradingview.com 设计稿
+// 右侧边栏工具条图标（44×44 整幅按钮图标）
+// 提取自设计稿
 
 export const WATCHLIST = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 44 44\" width=\"44\" height=\"44\" fill=\"none\"><path fill=\"currentColor\" d=\"M31 11a1 1 0 0 1 1 1v22l-10-4-10 4V12a1 1 0 0 1 1-1zM13 32.523l9-3.6 9 3.6V12H13zM28 23H16v-1h12zm0-6H16v-1h12z\"></path></svg>";
 

@@ -1,7 +1,7 @@
 /**
- * tv-chart / chart.ts
+ * kc-chart / chart.ts
  * ---------------------------------------------------------------------------
- * 一个不依赖任何第三方库的 TradingView 风格图表核心（Tier-1 范围）。
+ * 一个不依赖任何第三方库的 专业图表风格的图表核心（Tier-1 范围）。
  *
  *   ✓ 蜡烛图（A 股习惯：涨红跌绿）+ 成交量副条
  *   ✓ 价格轴 / 时间轴，nice ticks 自适应刻度
@@ -33,6 +33,11 @@ export interface Bar {
   volume: number;
 }
 
+/** 主图样式：蜡烛 / 美国线（OHLC 竖线+左右短线）/ 收盘价折线 / 面积 */
+export type ChartStyle = 'candles' | 'bars' | 'line' | 'area';
+
+export const CHART_STYLES: ChartStyle[] = ['candles', 'bars', 'line', 'area'];
+
 export interface ChartOptions {
   /** 图例里显示的标的 */
   symbol?: string;
@@ -42,6 +47,10 @@ export interface ChartOptions {
   upColor?: string;
   /** 下跌颜色。默认 A 股习惯 #26a69a（绿） */
   downColor?: string;
+  /** 主图样式，默认蜡烛 */
+  style?: ChartStyle;
+  /** 折线 / 面积的线色 */
+  lineColor?: string;
   bgColor?: string;
   gridColor?: string;
   axisTextColor?: string;
@@ -103,7 +112,7 @@ export type MarkerMode = 'none' | 'touch' | 'extremum';
 
 /**
  * 一条「通道」——上下轨 + 中轨 + 中间那片半透明填充。
- * TradingView 里 BB / 肯特纳 / 唐奇安 用的是同一套画法，所以抽象成一个东西。
+ * 主流图表软件里 BB / 肯特纳 / 唐奇安 用的是同一套画法，所以抽象成一个东西。
  */
 export interface Channel {
   id: string;
@@ -124,7 +133,7 @@ export interface Channel {
 
 /**
  * 外部图层的接入点（绘图层走这里）。
- * `onDown` 返回 true = 这次点击被图层接管，**TVChart 不再平移**。
+ * `onDown` 返回 true = 这次点击被图层接管，**KChart 不再平移**。
  * 这条约定很重要：没有它，选个绘图工具就没法拖动画布了。
  */
 export interface ChartHooks {
@@ -155,7 +164,7 @@ export const THEMES: { [k: string]: { bg: string; grid: string; axisText: string
   },
 };
 
-/** 用 BOLL(20,2) 的结果造一条 TradingView 风格的通道。 */
+/** 用 BOLL(20,2) 的结果造一条 专业图表风格的通道。 */
 export function makeBBChannel(bb: Band): Channel {
   return {
     id: 'bb',
@@ -180,6 +189,8 @@ export const DEFAULTS: Required<ChartOptions> = {
   timeframe: '1D',
   upColor: '#ef5350',
   downColor: '#26a69a',
+  style: 'candles',
+  lineColor: '#2962ff',
   bgColor: '#0e1116',
   gridColor: 'rgba(255,255,255,0.055)',
   axisTextColor: '#9aa4b2',
@@ -194,6 +205,14 @@ export const DEFAULTS: Required<ChartOptions> = {
   onCrosshair: function (_i: number | null): void { /* 默认不做事 */ },
   onView: function (_t0: number, _t1: number): void { /* 默认不做事 */ },
 };
+
+/** '#rrggbb' → 'rgba(r,g,b,a)'；不是 6 位十六进制就原样返回（渐变会退化为纯色） */
+export function withAlpha(hex: string, a: number): string {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
 
 export function clamp(v: number, lo: number, hi: number): number {
   return v < lo ? lo : v > hi ? hi : v;
@@ -415,7 +434,7 @@ export function decimalsFor(step: number): number {
  * 3. 图表核心
  * ========================================================================= */
 
-export class TVChart {
+export class KChart {
   readonly canvas: HTMLCanvasElement;
   bars: Bar[];
 
@@ -462,11 +481,11 @@ export class TVChart {
   constructor(target: HTMLCanvasElement | string, bars: Bar[], options: ChartOptions = {}) {
     const el = typeof target === 'string' ? document.querySelector(target) : target;
     if (!(el instanceof HTMLCanvasElement)) {
-      throw new Error('TVChart: 第一个参数必须是 <canvas> 或其选择器');
+      throw new Error('KChart: 第一个参数必须是 <canvas> 或其选择器');
     }
     this.canvas = el;
     const ctx = el.getContext('2d');
-    if (!ctx) throw new Error('TVChart: 无法获取 2d context');
+    if (!ctx) throw new Error('KChart: 无法获取 2d context');
     this.ctx = ctx;
     this.o = Object.assign({}, DEFAULTS, options);
     this.bars = normalizeBars(bars);
@@ -481,11 +500,11 @@ export class TVChart {
     this.resize();
     this.showLast(180);
     if (this.bars.length) {
-      log('TVChart 初始化：' + this.bars.length + ' 根 bar，' +
+      log('KChart 初始化：' + this.bars.length + ' 根 bar，' +
           new Date(this.bars[0].time).toISOString().slice(0, 10) + ' → ' +
           new Date(this.bars[this.bars.length - 1].time).toISOString().slice(0, 10));
     } else {
-      log('TVChart 初始化：数据为空');
+      log('KChart 初始化：数据为空');
     }
   }
 
@@ -601,6 +620,28 @@ export class TVChart {
     let n = 0;
     for (const ch of this.channels) if (ch.visible) n++;
     return n;
+  }
+
+  /* ---------------------------------------------------------------- 主图样式 */
+
+  setStyle(style: ChartStyle): void {
+    if (!CHART_STYLES.includes(style) || style === this.o.style) return;
+    this.o.style = style;
+    this.invalidate();
+  }
+
+  style(): ChartStyle {
+    return this.o.style;
+  }
+
+  /** 当前涨跌色（自检与外部图层用） */
+  colors(): { up: string; down: string } {
+    return { up: this.o.upColor, down: this.o.downColor };
+  }
+
+  /** 折线 / 面积只看收盘价，价格轴也只按收盘价取范围 */
+  private closeOnly(): boolean {
+    return this.o.style === 'line' || this.o.style === 'area';
   }
 
   /* ---------------------------------------------------------------- 主题 */
@@ -1011,8 +1052,10 @@ export class TVChart {
     let max = -Infinity;
     for (let i = lo; i <= hi; i++) {
       const b = this.bars[i];
-      if (b.low < min) min = b.low;
-      if (b.high > max) max = b.high;
+      const lowV = this.closeOnly() ? b.close : b.low;
+      const highV = this.closeOnly() ? b.close : b.high;
+      if (lowV < min) min = lowV;
+      if (highV > max) max = highV;
     }
     for (const ln of this.activeLines()) {
       for (let i = lo; i <= hi; i++) {
@@ -1047,7 +1090,7 @@ export class TVChart {
     ctx.clip();
     this.drawChannelFills(i0, i1);   // 最底层：通道填充
     this.drawVolume(i0, i1);         // 成交量压在填充上，不然会被染上一层
-    this.drawCandles(i0, i1);
+    this.drawSeries(i0, i1);
     this.drawLines(i0, i1);          // MA
     this.drawChannelLines(i0, i1);   // 通道线在 K 线上面
     this.drawMarks();                // Pine plotshape 打点
@@ -1281,6 +1324,69 @@ export class TVChart {
     ctx.stroke();
   }
 
+  /** 按主图样式分发 */
+  private drawSeries(i0: number, i1: number): void {
+    switch (this.o.style) {
+      case 'bars': return this.drawBars(i0, i1);
+      case 'line': return this.drawCloseLine(i0, i1, false);
+      case 'area': return this.drawCloseLine(i0, i1, true);
+      default: return this.drawCandles(i0, i1);
+    }
+  }
+
+  /** 美国线：竖线连接最高最低；左短线 = 开盘，右短线 = 收盘；颜色按涨跌 */
+  private drawBars(i0: number, i1: number): void {
+    const ctx = this.ctx;
+    const lw = this.view.barW >= 10 ? 2 : 1;
+    const tick = Math.max(1, Math.floor(this.view.barW * 0.35));
+    const lo = Math.max(0, i0);
+    const hi = Math.min(this.bars.length - 1, i1);
+    for (let i = lo; i <= hi; i++) {
+      const b = this.bars[i];
+      ctx.fillStyle = b.close >= b.open ? this.o.upColor : this.o.downColor;
+      const xc = Math.round(this.xCenter(i));
+      const yH = Math.round(this.yOf(b.high));
+      const yL = Math.round(this.yOf(b.low));
+      ctx.fillRect(Math.round(xc - lw / 2), yH, lw, Math.max(1, yL - yH));
+      ctx.fillRect(xc - tick, Math.round(this.yOf(b.open) - lw / 2), tick, lw);
+      ctx.fillRect(Math.round(xc + lw / 2), Math.round(this.yOf(b.close) - lw / 2), tick, lw);
+    }
+  }
+
+  /** 收盘价折线；`fill` 为 true 时在线下做自上而下的渐变填充（面积图） */
+  private drawCloseLine(i0: number, i1: number, fill: boolean): void {
+    const ctx = this.ctx;
+    const lo = Math.max(0, i0);
+    const hi = Math.min(this.bars.length - 1, i1);
+    if (hi < lo) return;
+    const p = this.plot;
+    const path = new Path2D();
+    let top = Infinity;
+    for (let i = lo; i <= hi; i++) {
+      const x = this.xCenter(i);
+      const y = this.yOf(this.bars[i].close);
+      if (y < top) top = y;
+      if (i === lo) path.moveTo(x, y); else path.lineTo(x, y);
+    }
+    if (fill) {
+      const area = new Path2D(path);
+      area.lineTo(this.xCenter(hi), p.b);
+      area.lineTo(this.xCenter(lo), p.b);
+      area.closePath();
+      const g = ctx.createLinearGradient(0, Math.min(top, p.b), 0, p.b);
+      g.addColorStop(0, withAlpha(this.o.lineColor, 0.28));
+      g.addColorStop(1, withAlpha(this.o.lineColor, 0.02));
+      ctx.fillStyle = g;
+      ctx.fill(area);
+    }
+    ctx.save();
+    ctx.strokeStyle = this.o.lineColor;
+    ctx.lineWidth = 2;
+    ctx.lineJoin = 'round';
+    ctx.stroke(path);
+    ctx.restore();
+  }
+
   private drawCandles(i0: number, i1: number): void {
     const ctx = this.ctx;
     const bw = Math.max(1, Math.floor(this.view.barW * 0.7));
@@ -1382,7 +1488,7 @@ export class TVChart {
     const y = Math.round(this.yOf(b.close)) + 0.5;
     const p = this.plot;
     if (y < p.t || y > p.b) return;
-    const color = b.close >= b.open ? this.o.upColor : this.o.downColor;
+    const color = this.closeOnly() ? this.o.lineColor : b.close >= b.open ? this.o.upColor : this.o.downColor;
     ctx.save();
     ctx.strokeStyle = color;
     ctx.lineWidth = 1;
@@ -1450,7 +1556,7 @@ export class TVChart {
   }
 
   /**
-   * 图例。TradingView 是**每个指标一行**堆叠的，这里照做：
+   * 图例。主流图表软件是**每个指标一行**堆叠的，这里照做：
    *   ① 标的 · 周期 · OHLC · 涨跌幅
    *   ② MA5/10/20
    *   ③ 每条通道一行：名字 + 参数 + 上/中/下轨当前值
@@ -1548,7 +1654,7 @@ export interface TestResult {
   names: string[];
 }
 
-export function selfTest(chart: TVChart): TestResult {
+export function selfTest(chart: KChart): TestResult {
   let pass = 0;
   let fail = 0;
   const names: string[] = [];
@@ -1599,7 +1705,7 @@ export function selfTest(chart: TVChart): TestResult {
     near(mid, sma(closes, 20)[k] as number, 1e-12));
   t('BOLL 上轨 > 中轨 > 下轨', up > mid && mid > dn);
 
-  // --- 通道（TradingView 那种「上下轨 + 中轨 + 半透明填充」）---
+  // --- 通道（那种「上下轨 + 中轨 + 半透明填充」）---
   chart.drawNow();
   const chs = chart.channels;
   t('默认带一条 BB 通道', chs.length >= 1 && chs[0].id === 'bb', 'n=' + chs.length);
@@ -1799,6 +1905,64 @@ export function selfTest(chart: TVChart): TestResult {
     log('WARN  getImageData 不可用（画布被污染？）：' + String(e));
   }
   t('画布上确实画了东西（背景之外有像素）', painted);
+
+  // --- 主图样式：蜡烛 / 美国线 / 折线 / 面积 ---
+  const candleScale = { min: chart.scale.min, max: chart.scale.max };
+  t('默认样式是蜡烛', chart.style() === 'candles');
+  chart.setStyle('nope' as ChartStyle);
+  t('非法样式被忽略', chart.style() === 'candles');
+
+  /** 在某根 bar 的收盘价附近取一块像素（css 偏移，返回 RGBA 数组；取不到返回 null） */
+  const regionAt = (i: number, dx: number, dy: number, w: number, h: number): Uint8ClampedArray | null => {
+    try {
+      const x = Math.round((chart.xCenter(i) + dx) * chart.dpr);
+      const y = Math.round((chart.yOf(chart.bars[i].close) + dy) * chart.dpr);
+      return chart.ctx.getImageData(x, y, Math.max(1, Math.round(w * chart.dpr)), Math.max(1, Math.round(h * chart.dpr))).data;
+    } catch (e) {
+      return null;
+    }
+  };
+  /** 区域内是否存在满足条件的像素（抗锯齿 / 均线压在上面时，单点取样不可靠） */
+  const anyPx = (d: Uint8ClampedArray | null, pred: (r: number, g: number, b: number) => boolean): boolean => {
+    if (!d) return true; // 取不到像素（如跨域污染）时不判失败
+    for (let k = 0; k < d.length; k += 4) if (pred(d[k], d[k + 1], d[k + 2])) return true;
+    return false;
+  };
+  const isBlue = (r: number, g: number, b: number): boolean => b - r > 60 && b - g > 40;
+
+  chart.setStyle('line');
+  chart.drawNow();
+  t('折线：价格轴只按收盘价取范围（不宽于蜡烛的高低价范围）',
+    chart.scale.min >= candleScale.min - 1e-9 && chart.scale.max <= candleScale.max + 1e-9,
+    '[' + chart.scale.min.toFixed(2) + ',' + chart.scale.max.toFixed(2) + '] vs [' +
+      candleScale.min.toFixed(2) + ',' + candleScale.max.toFixed(2) + ']');
+  t('折线：收盘价附近画了线色像素', anyPx(regionAt(probe, -3, -3, 7, 7), isBlue));
+  const belowLine = regionAt(probe, 0, 8, 1, 1);
+
+  chart.setStyle('area');
+  chart.drawNow();
+  const belowArea = regionAt(probe, 0, 8, 1, 1);
+  t('面积：线下方有渐变填充（与折线同位置的像素不同）',
+    belowLine === null || belowArea === null || Math.abs(belowArea[2] - belowLine[2]) + Math.abs(belowArea[0] - belowLine[0]) > 4,
+    'line=' + (belowLine ? Array.from(belowLine).join(',') : '') + ' area=' + (belowArea ? Array.from(belowArea).join(',') : ''));
+
+  chart.setStyle('bars');
+  chart.drawNow();
+  t('美国线：价格轴回到按最高最低价取范围',
+    near(chart.scale.min, candleScale.min, 1e-9) && near(chart.scale.max, candleScale.max, 1e-9));
+  {
+    // 右短线 = 收盘：中线右侧 1~3 个 css 像素、收盘高度附近应有涨跌色像素
+    const bb = chart.bars[probe];
+    const wn = parseInt((bb.close >= bb.open ? chart.colors().up : chart.colors().down).slice(1), 16);
+    const wr = (wn >> 16) & 255, wg = (wn >> 8) & 255, wb = wn & 255;
+    t('美国线：收盘价处右短线为涨跌色',
+      anyPx(regionAt(probe, 1, -2, 3, 4), (r, g, b) => Math.abs(r - wr) < 50 && Math.abs(g - wg) < 50 && Math.abs(b - wb) < 50));
+  }
+
+  chart.setStyle('candles');
+  chart.drawNow();
+  t('切回蜡烛后价格轴与最初一致',
+    near(chart.scale.min, candleScale.min, 1e-9) && near(chart.scale.max, candleScale.max, 1e-9));
 
   // --- 真正的行为断言：光标锚定缩放 ---
   const px = chart.plot.l + chart.plot.w * 0.37;

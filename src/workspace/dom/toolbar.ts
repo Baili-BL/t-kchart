@@ -1,5 +1,5 @@
-// tv-toolbar —— TradingView 图表页顶部横排工具栏
-// 依据 magicpatterns 导入稿（cn.tradingview.com）1:1 还原：
+// kc-toolbar —— 图表页顶部横排工具栏
+// 依据设计稿 1:1 还原：
 // 高 38px、白底、文字 rgb(15,15,15)、分隔线 rgb(235,235,235)、
 // 悬停底 rgb(242,242,242)、强调色 rgb(41,98,255)。
 // 用法：createToolbar(document.getElementById('mount'));
@@ -18,100 +18,100 @@ function el<K extends keyof HTMLElementTagNameMap>(
 
 /* --------------------------------------------------------------- 样式注入 */
 const CSS = `
-.tv-toolbar {
+.kc-toolbar {
   display: flex; align-items: stretch; width: 100%; height: 38px;
   background: #fff; color: rgb(15,15,15); user-select: none; position: relative; z-index: 100;
   font: 400 14px/normal -apple-system, "system-ui", "Trebuchet MS", Roboto, Ubuntu, sans-serif;
   font-feature-settings: "lnum","tnum";
 }
-.tv-toolbar svg { display: block; }
-.tv-tb-group { display: flex; align-items: center; height: 38px; flex: 0 0 auto; }
-.tv-tb-spacer { flex: 1 1 100%; min-width: 0; }
-.tv-tb-div {
+.kc-toolbar svg { display: block; }
+.kc-tb-group { display: flex; align-items: center; height: 38px; flex: 0 0 auto; }
+.kc-tb-spacer { flex: 1 1 100%; min-width: 0; }
+.kc-tb-div {
   flex: 0 0 auto; width: 0; height: 22px; margin: 0 4px;
   border-left: 1px solid rgb(235,235,235);
 }
 /* —— 通用按钮 —— */
-.tv-tb-btn {
+.kc-tb-btn {
   display: flex; align-items: center; justify-content: center; height: 38px;
   border: 0; background: transparent; color: rgb(15,15,15); padding: 0 5px;
   font: inherit; cursor: pointer; border-radius: 0; position: relative;
   transition: background-color .06s ease, color .06s ease; white-space: nowrap;
 }
-.tv-tb-btn:hover { background: rgb(242,242,242); }
-.tv-tb-btn:active { background: rgb(235,235,235); }
-.tv-tb-btn[disabled] { opacity: .5; cursor: default; pointer-events: none; }
-.tv-tb-btn.tv-on { background: rgb(231,240,255); color: rgb(41,98,255); }
-.tv-tb-label { margin-inline-start: 4px; }
-.tv-tb-caret { margin: 0 8px; display: flex; align-items: center; }
-.tv-tb-caret svg { width: 8px; height: 4px; }
+.kc-tb-btn:hover { background: rgb(242,242,242); }
+.kc-tb-btn:active { background: rgb(235,235,235); }
+.kc-tb-btn[disabled] { opacity: .5; cursor: default; pointer-events: none; }
+.kc-tb-btn.kc-on { background: rgb(231,240,255); color: rgb(41,98,255); }
+.kc-tb-label { margin-inline-start: 4px; }
+.kc-tb-caret { margin: 0 8px; display: flex; align-items: center; }
+.kc-tb-caret svg { width: 8px; height: 4px; }
 /* —— 品种胶囊 —— */
-.tv-tb-symbol-wrap { position: relative; width: 128px; height: 28px; margin: 0 4px; }
-.tv-tb-symbol {
+.kc-tb-symbol-wrap { position: relative; width: 128px; height: 28px; margin: 0 4px; }
+.kc-tb-symbol {
   display: flex; align-items: center; justify-content: space-between; width: 128px; height: 28px;
   padding: 0 34px 0 12px; border: 0; border-radius: 14px; background: rgb(235,235,235);
   font: 600 14px/18px -apple-system, "system-ui", "Trebuchet MS", Roboto, Ubuntu, sans-serif;
   color: rgb(15,15,15); cursor: pointer; position: relative; overflow: hidden;
 }
-.tv-tb-symbol:hover { background: rgb(228,228,228); }
-.tv-tb-symbol .fade {
+.kc-tb-symbol:hover { background: rgb(228,228,228); }
+.kc-tb-symbol .fade {
   position: absolute; inset-inline-end: 0; top: 0; width: 18px; height: 18px;
   background: linear-gradient(90deg, rgba(235,235,235,0) 0%, rgb(235,235,235) 100%);
   pointer-events: none;
 }
-.tv-tb-symbol:hover .fade { background: linear-gradient(90deg, rgba(228,228,228,0) 0%, rgb(228,228,228) 100%); }
-.tv-tb-symbol .name { max-width: 82px; overflow: hidden; }
-.tv-tb-datatype {
+.kc-tb-symbol:hover .fade { background: linear-gradient(90deg, rgba(228,228,228,0) 0%, rgb(228,228,228) 100%); }
+.kc-tb-symbol .name { max-width: 82px; overflow: hidden; }
+.kc-tb-datatype {
   position: absolute; top: 0; inset-inline-end: 0; width: 28px; height: 24px;
   padding: 2px; border: 0; border-radius: 999px; background: transparent; cursor: pointer;
 }
-.tv-tb-datatype span {
+.kc-tb-datatype span {
   display: flex; align-items: center; justify-content: center; width: 24px; height: 20px;
   background: #fff; border-radius: 999px; color: rgb(15,15,15);
 }
-.tv-tb-datatype:hover span { background: rgb(242,242,242); }
+.kc-tb-datatype:hover span { background: rgb(242,242,242); }
 /* —— 周期激活态 —— */
-.tv-tb-interval { padding: 0 10px; }
-.tv-tb-interval.tv-on { background: rgb(242,242,242); border-radius: 6px; }
+.kc-tb-interval { padding: 0 10px; }
+.kc-tb-interval.kc-on { background: rgb(242,242,242); border-radius: 6px; }
 /* —— 保存块 —— */
-.tv-tb-save { display: flex; flex-direction: column; align-items: center; line-height: 14px; }
-.tv-tb-save .name { max-width: 100px; overflow: hidden; text-overflow: ellipsis; }
-.tv-tb-save .state {
+.kc-tb-save { display: flex; flex-direction: column; align-items: center; line-height: 14px; }
+.kc-tb-save .name { max-width: 100px; overflow: hidden; text-overflow: ellipsis; }
+.kc-tb-save .state {
   color: rgb(41,98,255); font-size: 10px; line-height: 10px; height: 10px;
   overflow: hidden; max-width: 100px;
 }
 /* —— 下拉菜单 —— */
-.tv-tb-menu {
+.kc-tb-menu {
   position: absolute; top: 40px; min-width: 132px; padding: 6px 0; margin: 0; list-style: none;
   background: #fff; border-radius: 6px; box-shadow: 0 4px 10px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.04);
   font-size: 13px; z-index: 110; display: none;
 }
-.tv-tb-menu.open { display: block; }
-.tv-tb-menu li {
+.kc-tb-menu.open { display: block; }
+.kc-tb-menu li {
   display: flex; align-items: center; gap: 8px; padding: 6px 14px; cursor: pointer;
   transition: background-color .06s ease;
 }
-.tv-tb-menu li:hover { background: rgb(242,242,242); }
-.tv-tb-menu li .check { width: 14px; visibility: hidden; }
-.tv-tb-menu li.sel .check { visibility: visible; }
-.tv-tb-menu li svg { flex: 0 0 auto; color: rgb(15,15,15); }
+.kc-tb-menu li:hover { background: rgb(242,242,242); }
+.kc-tb-menu li .check { width: 14px; visibility: hidden; }
+.kc-tb-menu li.sel .check { visibility: visible; }
+.kc-tb-menu li svg { flex: 0 0 auto; color: rgb(15,15,15); }
 /* —— 窄屏降级：按容器宽度（而非视口）逐级收起次要按钮，避免挤出右侧面板 —— */
-.tv-toolbar { container-type: inline-size; container-name: tvtb; }
+.kc-toolbar { container-type: inline-size; container-name: tvtb; }
 @container tvtb (max-width: 1000px) {
-  .tv-tb-label, .tv-p1 { display: none; }
+  .kc-tb-label, .kc-p1 { display: none; }
 }
 @container tvtb (max-width: 800px) {
-  .tv-p2 { display: none; }
+  .kc-p2 { display: none; }
 }
 @container tvtb (max-width: 640px) {
-  .tv-p3 { display: none; }
+  .kc-p3 { display: none; }
 }
 `;
 
 function injectStyle(): void {
-  if (document.getElementById('tv-toolbar-css')) return;
+  if (document.getElementById('kc-toolbar-css')) return;
   const s = document.createElement('style');
-  s.id = 'tv-toolbar-css';
+  s.id = 'kc-toolbar-css';
   s.textContent = CSS;
   document.head.appendChild(s);
 }
@@ -174,7 +174,7 @@ export function createToolbar(mount: HTMLElement, cb: ToolbarCallbacks = {}): HT
 export function createToolbarHandle(mount: HTMLElement, cb: ToolbarCallbacks = {}): ToolbarHandle {
   injectStyle();
 
-  const root = el('div', 'tv-toolbar');
+  const root = el('div', 'kc-toolbar');
   root.setAttribute('role', 'toolbar');
   root.setAttribute('aria-label', '图表顶部工具栏');
 
@@ -189,7 +189,7 @@ export function createToolbarHandle(mount: HTMLElement, cb: ToolbarCallbacks = {
     onPick: (label: string) => void,
     initialSel = 0,
   ): HTMLElement {
-    const menu = el('ul', 'tv-tb-menu');
+    const menu = el('ul', 'kc-tb-menu');
     items.forEach(([label, payload], i) => {
       const li = el('li', i === initialSel ? 'sel' : '');
       li.innerHTML = CHECK + (isIcon ? payload : '') + `<span>${label}</span>`;
@@ -218,9 +218,9 @@ export function createToolbarHandle(mount: HTMLElement, cb: ToolbarCallbacks = {
   }
 
   /* ================= 左侧：品种 ================= */
-  const gSymbol = el('div', 'tv-tb-group');
-  const symWrap = el('div', 'tv-tb-symbol-wrap');
-  const symBtn = el('button', 'tv-tb-symbol') as HTMLButtonElement;
+  const gSymbol = el('div', 'kc-tb-group');
+  const symWrap = el('div', 'kc-tb-symbol-wrap');
+  const symBtn = el('button', 'kc-tb-symbol') as HTMLButtonElement;
   symBtn.type = 'button';
   symBtn.id = 'header-toolbar-symbol-search';
   const symName = el('span', 'name');
@@ -228,7 +228,7 @@ export function createToolbarHandle(mount: HTMLElement, cb: ToolbarCallbacks = {
   symName.appendChild(el('span', 'fade'));
   symBtn.appendChild(symName);
   symBtn.addEventListener('click', () => cb.onSymbol?.());
-  const dtype = el('button', 'tv-tb-datatype') as HTMLButtonElement;
+  const dtype = el('button', 'kc-tb-datatype') as HTMLButtonElement;
   dtype.type = 'button';
   dtype.id = 'header-toolbar-switch-data-type';
   dtype.title = '切换数据类型';
@@ -236,7 +236,7 @@ export function createToolbarHandle(mount: HTMLElement, cb: ToolbarCallbacks = {
   dtype.addEventListener('click', () => cb.onDataType?.());
   symWrap.append(symBtn, dtype);
 
-  const compare = el('button', 'tv-tb-btn tv-p3') as HTMLButtonElement;
+  const compare = el('button', 'kc-tb-btn kc-p3') as HTMLButtonElement;
   compare.type = 'button';
   compare.id = 'header-toolbar-compare';
   compare.title = '比较商品';
@@ -246,9 +246,9 @@ export function createToolbarHandle(mount: HTMLElement, cb: ToolbarCallbacks = {
   root.appendChild(gSymbol);
 
   /* ================= 周期 ================= */
-  root.appendChild(Object.assign(el('span', 'tv-tb-div')));
-  const gInt = el('div', 'tv-tb-group');
-  const intBtn = el('button', 'tv-tb-btn tv-tb-interval tv-on') as HTMLButtonElement;
+  root.appendChild(Object.assign(el('span', 'kc-tb-div')));
+  const gInt = el('div', 'kc-tb-group');
+  const intBtn = el('button', 'kc-tb-btn kc-tb-interval kc-on') as HTMLButtonElement;
   intBtn.type = 'button';
   intBtn.id = 'header-toolbar-intervals';
   const intLabel = el('div', '', '天');
@@ -261,9 +261,9 @@ export function createToolbarHandle(mount: HTMLElement, cb: ToolbarCallbacks = {
   root.appendChild(gInt);
 
   /* ================= 图表样式 ================= */
-  root.appendChild(Object.assign(el('span', 'tv-tb-div')));
-  const gStyle = el('div', 'tv-tb-group');
-  const styleBtn = el('button', 'tv-tb-btn') as HTMLButtonElement;
+  root.appendChild(Object.assign(el('span', 'kc-tb-div')));
+  const gStyle = el('div', 'kc-tb-group');
+  const styleBtn = el('button', 'kc-tb-btn') as HTMLButtonElement;
   styleBtn.type = 'button';
   styleBtn.id = 'header-toolbar-chart-styles';
   styleBtn.title = 'K线图';
@@ -285,19 +285,19 @@ export function createToolbarHandle(mount: HTMLElement, cb: ToolbarCallbacks = {
   root.appendChild(gStyle);
 
   /* ================= 指标 ================= */
-  root.appendChild(Object.assign(el('span', 'tv-tb-div')));
-  const gInd = el('div', 'tv-tb-group');
-  const indBtn = el('button', 'tv-tb-btn') as HTMLButtonElement;
+  root.appendChild(Object.assign(el('span', 'kc-tb-div')));
+  const gInd = el('div', 'kc-tb-group');
+  const indBtn = el('button', 'kc-tb-btn') as HTMLButtonElement;
   indBtn.type = 'button';
   indBtn.id = 'header-toolbar-indicators';
   indBtn.title = '指标、衡量标准和策略';
-  indBtn.innerHTML = `${INDICATORS}<div class="tv-tb-label">指标</div>`;
+  indBtn.innerHTML = `${INDICATORS}<div class="kc-tb-label">指标</div>`;
   indBtn.addEventListener('click', () => cb.onIndicators?.());
-  const indCaret = el('button', 'tv-tb-btn tv-p1') as HTMLButtonElement;
+  const indCaret = el('button', 'kc-tb-btn kc-p1') as HTMLButtonElement;
   indCaret.type = 'button';
   indCaret.title = '收藏指标';
-  indCaret.innerHTML = `<span class="tv-tb-caret">${CARET_INDICATORS}</span>`;
-  const tplBtn = el('button', 'tv-tb-btn tv-p1') as HTMLButtonElement;
+  indCaret.innerHTML = `<span class="kc-tb-caret">${CARET_INDICATORS}</span>`;
+  const tplBtn = el('button', 'kc-tb-btn kc-p1') as HTMLButtonElement;
   tplBtn.type = 'button';
   tplBtn.id = 'header-toolbar-study-templates';
   tplBtn.title = '指标模板';
@@ -306,25 +306,25 @@ export function createToolbarHandle(mount: HTMLElement, cb: ToolbarCallbacks = {
   root.appendChild(gInd);
 
   /* ================= 警报 / 回放 ================= */
-  root.appendChild(Object.assign(el('span', 'tv-tb-div')));
-  const gAlert = el('div', 'tv-tb-group');
-  const alertBtn = el('button', 'tv-tb-btn tv-p3') as HTMLButtonElement;
+  root.appendChild(Object.assign(el('span', 'kc-tb-div')));
+  const gAlert = el('div', 'kc-tb-group');
+  const alertBtn = el('button', 'kc-tb-btn kc-p3') as HTMLButtonElement;
   alertBtn.type = 'button';
   alertBtn.id = 'header-toolbar-alerts';
   alertBtn.title = '创建警报';
-  alertBtn.innerHTML = `${ALERT}<div class="tv-tb-label">警报</div>`;
+  alertBtn.innerHTML = `${ALERT}<div class="kc-tb-label">警报</div>`;
   alertBtn.addEventListener('click', () => {
-    const on = alertBtn.classList.toggle('tv-on');
+    const on = alertBtn.classList.toggle('kc-on');
     cb.onAlert?.(on);
   });
-  const replayBtn = el('button', 'tv-tb-btn') as HTMLButtonElement;
+  const replayBtn = el('button', 'kc-tb-btn') as HTMLButtonElement;
   replayBtn.type = 'button';
   replayBtn.id = 'header-toolbar-replay';
   replayBtn.title = 'K线回放';
   replayBtn.setAttribute('aria-pressed', 'false');
-  replayBtn.innerHTML = `${REPLAY}<div class="tv-tb-label">回放</div>`;
+  replayBtn.innerHTML = `${REPLAY}<div class="kc-tb-label">回放</div>`;
   replayBtn.addEventListener('click', () => {
-    const on = replayBtn.classList.toggle('tv-on');
+    const on = replayBtn.classList.toggle('kc-on');
     replayBtn.setAttribute('aria-pressed', String(on));
     cb.onReplay?.(on);
   });
@@ -332,13 +332,13 @@ export function createToolbarHandle(mount: HTMLElement, cb: ToolbarCallbacks = {
   root.appendChild(gAlert);
 
   /* ================= 撤销 / 重做 ================= */
-  root.appendChild(Object.assign(el('span', 'tv-tb-div')));
-  const gUndo = el('div', 'tv-tb-group tv-p2');
-  const undo = el('button', 'tv-tb-btn') as HTMLButtonElement;
+  root.appendChild(Object.assign(el('span', 'kc-tb-div')));
+  const gUndo = el('div', 'kc-tb-group kc-p2');
+  const undo = el('button', 'kc-tb-btn') as HTMLButtonElement;
   undo.type = 'button'; undo.disabled = true; undo.title = '撤销';
   undo.addEventListener('click', () => cb.onUndo?.());
   undo.innerHTML = `<span style="padding:5px">${UNDO}</span>`;
-  const redo = el('button', 'tv-tb-btn') as HTMLButtonElement;
+  const redo = el('button', 'kc-tb-btn') as HTMLButtonElement;
   redo.type = 'button'; redo.disabled = true; redo.title = '重做';
   redo.addEventListener('click', () => cb.onRedo?.());
   redo.innerHTML = `<span style="padding:5px">${REDO}</span>`;
@@ -346,50 +346,50 @@ export function createToolbarHandle(mount: HTMLElement, cb: ToolbarCallbacks = {
   root.appendChild(gUndo);
 
   /* ================= 弹性占位 ================= */
-  root.appendChild(el('div', 'tv-tb-spacer'));
+  root.appendChild(el('div', 'kc-tb-spacer'));
 
   /* ================= 布局 / 保存 ================= */
-  const gRight = el('div', 'tv-tb-group');
-  const layoutBtn = el('button', 'tv-tb-btn') as HTMLButtonElement;
+  const gRight = el('div', 'kc-tb-group');
+  const layoutBtn = el('button', 'kc-tb-btn') as HTMLButtonElement;
   layoutBtn.type = 'button';
   layoutBtn.id = 'header-toolbar-layouts';
   layoutBtn.title = '布局设置';
   layoutBtn.style.width = '38px';
   layoutBtn.innerHTML = `<span style="display:block">${LAYOUT}</span>`;
   layoutBtn.addEventListener('click', () => cb.onLayout?.());
-  const save = el('button', 'tv-tb-btn') as HTMLButtonElement;
+  const save = el('button', 'kc-tb-btn') as HTMLButtonElement;
   save.type = 'button';
   save.id = 'header-toolbar-save-load';
   save.title = '所有更改已保存';
   save.style.minWidth = '65px';
   save.style.padding = '0 6px 0 5px';
-  save.innerHTML = `<div class="tv-tb-save"><span class="name">Unnamed</span><span class="state">保存</span></div>`;
+  save.innerHTML = `<div class="kc-tb-save"><span class="name">Unnamed</span><span class="state">保存</span></div>`;
   const saveName = save.querySelector('.name') as HTMLElement;
   save.addEventListener('click', () => cb.onSave?.());
-  const saveCaret = el('button', 'tv-tb-btn tv-p3') as HTMLButtonElement;
+  const saveCaret = el('button', 'kc-tb-btn kc-p3') as HTMLButtonElement;
   saveCaret.type = 'button';
   saveCaret.title = '管理布局';
   saveCaret.addEventListener('click', () => cb.onManageLayouts?.());
-  saveCaret.innerHTML = `<span class="tv-tb-caret">${CARET_LAYOUT}</span>`;
+  saveCaret.innerHTML = `<span class="kc-tb-caret">${CARET_LAYOUT}</span>`;
   gRight.append(layoutBtn, save, saveCaret);
   root.appendChild(gRight);
 
   /* ================= 搜索 / 设置 / 全屏 / 快照 ================= */
-  root.appendChild(Object.assign(el('span', 'tv-tb-div')));
-  const gUtil = el('div', 'tv-tb-group');
-  const quick = el('button', 'tv-tb-btn tv-p2') as HTMLButtonElement;
+  root.appendChild(Object.assign(el('span', 'kc-tb-div')));
+  const gUtil = el('div', 'kc-tb-group');
+  const quick = el('button', 'kc-tb-btn kc-p2') as HTMLButtonElement;
   quick.type = 'button';
   quick.id = 'header-toolbar-quick-search';
   quick.title = '快速搜索';
   quick.innerHTML = QUICK_SEARCH;
   quick.addEventListener('click', () => cb.onQuickSearch?.());
-  const props = el('button', 'tv-tb-btn tv-p2') as HTMLButtonElement;
+  const props = el('button', 'kc-tb-btn kc-p2') as HTMLButtonElement;
   props.type = 'button';
   props.id = 'header-toolbar-properties';
   props.title = '设置';
   props.innerHTML = SETTINGS;
   props.addEventListener('click', () => cb.onSettings?.());
-  const full = el('button', 'tv-tb-btn') as HTMLButtonElement;
+  const full = el('button', 'kc-tb-btn') as HTMLButtonElement;
   full.type = 'button';
   full.id = 'header-toolbar-fullscreen';
   full.title = '全屏模式';
@@ -398,7 +398,7 @@ export function createToolbarHandle(mount: HTMLElement, cb: ToolbarCallbacks = {
     if (document.fullscreenElement) void document.exitFullscreen();
     else void document.documentElement.requestFullscreen();
   });
-  const shot = el('button', 'tv-tb-btn tv-p1') as HTMLButtonElement;
+  const shot = el('button', 'kc-tb-btn kc-p1') as HTMLButtonElement;
   shot.type = 'button';
   shot.title = '生成快照';
   shot.innerHTML = `<div id="header-toolbar-screenshot" style="padding:0 5px">${SNAPSHOT}</div>`;
@@ -430,10 +430,10 @@ export function createToolbarHandle(mount: HTMLElement, cb: ToolbarCallbacks = {
       saveName.textContent = name;
       save.title = name;
     },
-    setIndicatorsOn(on) { indBtn.classList.toggle('tv-on', on); },
-    setAlertOn(on) { alertBtn.classList.toggle('tv-on', on); },
+    setIndicatorsOn(on) { indBtn.classList.toggle('kc-on', on); },
+    setAlertOn(on) { alertBtn.classList.toggle('kc-on', on); },
     setReplayOn(on) {
-      replayBtn.classList.toggle('tv-on', on);
+      replayBtn.classList.toggle('kc-on', on);
       replayBtn.setAttribute('aria-pressed', String(on));
     },
     setUndoRedo(canUndo, canRedo) {

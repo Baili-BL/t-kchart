@@ -6,7 +6,7 @@ import { RightPanel } from './RightPanel';
 import { RightRail } from './RightRail';
 import { TopBar } from './TopBar';
 
-/** 右侧类 TradingView 图表区：顶栏 / 绘图栏 / 多图网格 / 范围条 / 右侧面板 / 右侧图标栏 */
+/** 右侧专业图表软件风格的图表区：顶栏 / 绘图栏 / 多图网格 / 范围条 / 右侧面板 / 右侧图标栏 */
 export function ChartWorkspace(): JSX.Element {
   return (
     <div className="workspace">

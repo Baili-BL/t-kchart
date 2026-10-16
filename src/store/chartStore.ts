@@ -1,4 +1,18 @@
 import { create } from 'zustand';
+import type { ChartStyle } from '../engine/chart';
+
+/** 主图样式 ↔ 顶栏样式下拉里的显示名 */
+export const STYLE_LABELS: Record<ChartStyle, string> = {
+  candles: 'K线图',
+  bars: '美国线',
+  line: '线形图',
+  area: '面积图',
+};
+
+export function styleFromLabel(label: string): ChartStyle | null {
+  const hit = (Object.keys(STYLE_LABELS) as ChartStyle[]).find((k) => STYLE_LABELS[k] === label);
+  return hit ?? null;
+}
 
 export interface LayoutPreset {
   key: string;
@@ -43,6 +57,8 @@ interface ChartState {
   layoutName: string;
   sync: SyncState;
   bbVisible: boolean;
+  /** 主图样式（所有格共用） */
+  chartStyle: ChartStyle;
   /** 活动格最新价（给 PaperTrade 用） */
   lastPrice: number | null;
   /** 活动格序号 */
@@ -54,6 +70,7 @@ interface ChartState {
   setLayoutName: (n: string) => void;
   setSync: (k: keyof SyncState, on: boolean) => void;
   setBb: (on: boolean) => void;
+  setChartStyle: (style: ChartStyle) => void;
   setLastPrice: (p: number | null) => void;
   setActiveTile: (i: number) => void;
 }
@@ -66,6 +83,7 @@ export const useChartStore = create<ChartState>((set) => ({
   // 截图里左 30m / 右 1D，所以周期与范围默认不联动
   sync: { symbol: true, interval: false, crosshair: true, range: false },
   bbVisible: true,
+  chartStyle: 'candles',
   lastPrice: null,
   activeTile: 0,
 
@@ -75,6 +93,7 @@ export const useChartStore = create<ChartState>((set) => ({
   setLayoutName: (layoutName) => set({ layoutName }),
   setSync: (k, on) => set((s) => ({ sync: { ...s.sync, [k]: on } })),
   setBb: (bbVisible) => set({ bbVisible }),
+  setChartStyle: (chartStyle) => set({ chartStyle }),
   setLastPrice: (lastPrice) => set({ lastPrice }),
   setActiveTile: (activeTile) => set({ activeTile }),
 }));

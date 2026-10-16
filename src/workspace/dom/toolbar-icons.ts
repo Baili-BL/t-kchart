@@ -1,5 +1,5 @@
-// TradingView 图表顶部工具栏图标
-// 提取自 magicpatterns 导入的 cn.tradingview.com 设计稿
+// 图表顶部工具栏图标
+// 提取自设计稿
 
 export const DATA_TYPE = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 18 18\" width=\"18\" height=\"18\" fill=\"none\"><path fill=\"currentColor\" d=\"M6 5h1a1 1 0 0 1 1 1v7a1 1 0 0 1-.897.995L7 14H6v2H5v-2H4l-.103-.005a1 1 0 0 1-.892-.893L3 13V6a1 1 0 0 1 1-1h1V3h1zm7 1h1a1 1 0 0 1 1 1v5l-.005.102a1 1 0 0 1-.893.893L14 13h-1v2h-1v-2h-1l-.102-.005a1 1 0 0 1-.893-.893L10 12V7a1 1 0 0 1 1-1h1V4h1zm-9 7h3V6H4zm7-1h3V7h-3z\"></path></svg>";
 

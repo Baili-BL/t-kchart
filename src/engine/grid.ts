@@ -1,13 +1,13 @@
 /**
- * tv-chart / grid.ts
+ * kc-chart / grid.ts
  * ---------------------------------------------------------------------------
- * 多图网格 + 联动（TradingView 的 Layout + Sync）。
+ * 多图网格 + 联动（专业图表软件常见的 Layout + Sync）。
  *
  * 依赖 chart.ts（ESM `import`）。
  *
  * 设计要点（这几条是这个文件存在的理由）：
  *
- *   ① 每格是**独立的 TVChart 实例**，不是一个画布切几块。
+ *   ① 每格是**独立的 KChart 实例**，不是一个画布切几块。
  *      所以每格有自己的坐标轴、图例、缩放、指标 —— 这才叫「多个图表」。
  *
  *   ② 联动一律**按时间对齐，不按像素**。
@@ -19,7 +19,7 @@
  * ---------------------------------------------------------------------------
  */
 
-import { Bar, ChartOptions, RANGES, TVChart, clamp, log, makeBars, resample } from './chart';
+import { Bar, ChartOptions, ChartStyle, RANGES, KChart, clamp, log, makeBars, resample } from './chart';
 
 export interface SymbolDef {
   ticker: string;
@@ -41,7 +41,7 @@ export type DataSource = (ticker: string, timeframe: string) => Bar[];
 export interface GridOptions {
   /** 注入数据源；不传则使用内置的 A 股演示数据 */
   dataSource?: DataSource;
-  /** 透传给每格 TVChart 的选项（如美股习惯的涨绿跌红） */
+  /** 透传给每格 KChart 的选项（如美股习惯的涨绿跌红） */
   chartOptions?: Partial<ChartOptions>;
   /** 每格的初始标的（按格序号轮流取）；不传则用内置演示标的 */
   symbols?: string[];
@@ -59,7 +59,7 @@ export interface Tile {
   el: HTMLDivElement;
   canvas: HTMLCanvasElement;
   badge: HTMLDivElement;
-  chart: TVChart;
+  chart: KChart;
   symbol: string;
   /** 每格自己的周期（sync.interval 关闭时各格可以不同） */
   timeframe: string;
@@ -120,6 +120,7 @@ export class ChartGrid {
   private source: DataSource = barsFor;
   private chartOptions: Partial<ChartOptions> = {};
   private initialSymbols: string[] = [];
+  private styleName: ChartStyle = 'candles';
 
   constructor(target: HTMLElement | string, options?: GridOptions) {
     const el = typeof target === 'string' ? document.querySelector(target) : target;
@@ -128,6 +129,7 @@ export class ChartGrid {
     const o: GridOptions = options || {};
     if (o.dataSource) this.source = o.dataSource;
     if (o.chartOptions) this.chartOptions = o.chartOptions;
+    this.styleName = this.chartOptions.style ?? 'candles';
     if (o.symbols && o.symbols.length) this.initialSymbols = o.symbols.slice();
     this.rows = clamp(o.rows == null ? 2 : o.rows, 1, 4);
     this.cols = clamp(o.cols == null ? 2 : o.cols, 1, 4);
@@ -141,7 +143,7 @@ export class ChartGrid {
       if (o.sync.range != null) this.sync.range = !!o.sync.range;
     }
 
-    this.el.classList.add('tv-grid');
+    this.el.classList.add('kc-grid');
     this.applyGridCss();
     this.ensureTiles(this.rows * this.cols);
     this.ready = true;
@@ -170,10 +172,10 @@ export class ChartGrid {
     while (this.tiles.length < n) {
       const i = this.tiles.length;
       const el = document.createElement('div');
-      el.className = 'tv-tile';
+      el.className = 'kc-tile';
       const canvas = document.createElement('canvas');
       const badge = document.createElement('div');
-      badge.className = 'tv-badge';
+      badge.className = 'kc-badge';
       badge.textContent = String(i + 1);
       el.appendChild(canvas);
       el.appendChild(badge);
@@ -186,7 +188,7 @@ export class ChartGrid {
         : this.initialSymbols.length
           ? this.initialSymbols[i % this.initialSymbols.length]
           : SYMBOLS[i % SYMBOLS.length].ticker;
-      const chart = new TVChart(canvas, this.source(ticker, this.timeframe), {
+      const chart = new KChart(canvas, this.source(ticker, this.timeframe), {
         ...this.chartOptions,
         symbol: ticker,
         timeframe: this.timeframe,
@@ -195,6 +197,7 @@ export class ChartGrid {
         onView: (t0: number, t1: number) => this.onView(i, t0, t1),
       });
       chart.setTheme(this.themeName);
+      chart.setStyle(this.styleName);
 
       const tile: Tile = { el, canvas, badge, chart, symbol: ticker, timeframe: this.timeframe };
       el.addEventListener('pointerdown', () => this.setActive(i), { passive: true });
@@ -414,6 +417,18 @@ export class ChartGrid {
     for (const t of this.tiles) t.chart.setTheme(name);
   }
 
+  /* ------------------------------------------------------------- 主图样式 */
+
+  /** 所有格同时切换样式（蜡烛 / 美国线 / 折线 / 面积）；新增的格子沿用当前样式 */
+  setChartStyle(style: ChartStyle): void {
+    this.styleName = style;
+    for (const t of this.tiles) t.chart.setStyle(style);
+  }
+
+  chartStyleNow(): ChartStyle {
+    return this.styleName;
+  }
+
   themeNow(): string {
     return this.themeName;
   }
@@ -421,7 +436,7 @@ export class ChartGrid {
   /* --------------------------------------------------------- 批量操作 */
 
   /** 对每一格执行（比如切换 BB 通道、圆圈规则） */
-  eachTile(fn: (chart: TVChart, i: number) => void): void {
+  eachTile(fn: (chart: KChart, i: number) => void): void {
     for (let i = 0; i < this.tiles.length; i++) fn(this.tiles[i].chart, i);
   }
 
@@ -447,7 +462,7 @@ export class ChartGrid {
     this.emitView();
   }
 
-  charts(): TVChart[] {
+  charts(): KChart[] {
     return this.tiles.map((t) => t.chart);
   }
 

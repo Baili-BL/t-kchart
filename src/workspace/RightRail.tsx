@@ -6,7 +6,7 @@ import { useToast } from '../ui/toast';
 
 /**
  * 右侧图标栏。
- * 视觉沿用 dom/rightbar.ts（TradingView 稿 1:1 还原），这里把「选中」接到 appStore.rightPanel：
+ * 视觉沿用 dom/rightbar.ts（设计稿 1:1 还原），这里把「选中」接到 appStore.rightPanel：
  * 点按钮 → 打开对应面板；再点 / 面板右上角关闭 → 收起，按钮选中态由 store 反推。
  */
 export function RightRail(): JSX.Element {

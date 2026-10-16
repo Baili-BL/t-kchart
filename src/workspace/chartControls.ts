@@ -14,6 +14,7 @@ export const chartControls: ChartControls = {
   setSymbol: (s) => useChartStore.getState().setSymbol(s),
   setTimeframe: (tf) => useChartStore.getState().setTimeframe(tf),
   setLayout: (rows, cols) => useChartStore.getState().setLayout(rows, cols),
+  setChartStyle: (style) => useChartStore.getState().setChartStyle(style),
   setIndicator: (indicator, visible) => {
     if (indicator === 'bb') useChartStore.getState().setBb(visible);
   },

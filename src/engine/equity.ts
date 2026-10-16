@@ -1,18 +1,18 @@
 /**
- * tv-chart / equity.ts
+ * kc-chart / equity.ts
  * ---------------------------------------------------------------------------
- * 权益曲线图（TradingView Strategy Tester 那张图）。
+ * 权益曲线图（策略测试器那张图）。
  *
  * 依赖 chart.ts（ESM `import`）：
  * 复用 clamp / niceStep / fmtTime / log / RANGES / rangeStart / THEMES / Bar。 *
  * ============================ 为什么单独一个组件 ============================
- * TVChart 是「蜡烛 + 多通道」的骨架，权益图是另一种图：
+ * KChart 是「蜡烛 + 多通道」的骨架，权益图是另一种图：
  *   ① 没有蜡烛，是「折线 + 柱状」两层序列
  *   ② **数值轴必须包含 0**，因为柱状是从 0 轴上下生长的 —— 这是硬约束，
  *      不是自动缩放的副产物。轴一旦把 0 排除在外，整张图的语义就崩了。
  *   ③ 折线和柱状是**两个不同量纲**叠在一个轴上（累计权益 vs 单根盈亏），
  *      所以轴范围要同时装下两者的极值。
- * 硬塞进 TVChart 会把它变成一坨 if，所以拆开；共用的只有刻度/时间格式那几个纯函数。
+ * 硬塞进 KChart 会把它变成一坨 if，所以拆开；共用的只有刻度/时间格式那几个纯函数。
  * ===========================================================================
  */
 
@@ -51,7 +51,7 @@ export interface EquityOptions {
   axisHeight?: number;
   /** 数值小数位 */
   decimals?: number;
-  /** 数值轴是否显示千分位（TradingView 是显示的：-70,000.00） */
+  /** 数值轴是否显示千分位（主流图表软件是显示的：-70,000.00） */
   thousands?: boolean;
   /** 柱状宽度占单根宽度的比例 */
   barRatio?: number;
@@ -645,7 +645,7 @@ export class EquityChart {
     ctx.save();
     ctx.strokeStyle = this.o.gridColor;
     ctx.lineWidth = 1;
-    ctx.setLineDash([1, 3]);            // TradingView 那张图是点线网格
+    ctx.setLineDash([1, 3]);            // 那张参考图是点线网格
     ctx.beginPath();
     for (const v of r.ticks) {
       const y = Math.round(this.yOf(v)) + 0.5;
@@ -885,7 +885,7 @@ export class EquityChart {
       const t = this.points[i].time;
       const d = new Date(t);
       let label: string;
-      // TradingView 的时间轴是「跨年时打年份，其余打月/日」
+      // 参考图的时间轴是「跨年时打年份，其余打月/日」
       if (d.getFullYear() !== lastYear) { label = String(d.getFullYear()); lastYear = d.getFullYear(); }
       else if (spanDays > 400) label = String(d.getFullYear());
       else label = fmtTime(t, spanDays > 75 ? 100 : 0);

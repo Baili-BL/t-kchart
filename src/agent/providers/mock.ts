@@ -44,6 +44,18 @@ export function planToolCalls(text: string): ToolCall[] {
     calls.push({ id: nid('call'), name: 'set_range', arguments: { range: rg[1] } });
   }
 
+  // 样式：先判面积/折线/美国线，最后才是「K线」
+  const styleKey = /面积/.test(text)
+    ? 'area'
+    : /线形|折线|line\s*chart/i.test(text)
+      ? 'line'
+      : /美国线|\bbars?\b/i.test(text)
+        ? 'bars'
+        : /k\s*线|蜡烛|candle/i.test(text)
+          ? 'candles'
+          : null;
+  if (styleKey) calls.push({ id: nid('call'), name: 'set_chart_style', arguments: { style: styleKey } });
+
   if (/布林|bollinger|\bbb\b/i.test(text)) {
     const off = /关|隐藏|hide|off|remove/i.test(text);
     calls.push({ id: nid('call'), name: 'add_indicator', arguments: { indicator: 'bb', visible: !off } });
@@ -99,7 +111,7 @@ export function createMockProvider(opts: { delayMs?: number } = {}): AgentProvid
       if (calls.length === 0) {
         yield* streamText(
           '我是 Quant 助手（mock 模式）。试试:\n' +
-            '- "切到 NVDA"\n- "用 1h 周期"\n- "显示 1Y 范围"\n- "布局 2x2"\n- "打开布林带"\n\n' +
+            '- "切到 NVDA"\n- "用 1h 周期"\n- "显示 1Y 范围"\n- "布局 2x2"\n- "打开布林带"\n- "切成面积图"\n\n' +
             '接入 DeepSeek harness 后，这里会换成真实的推理与工具调用。',
           req.signal,
           delay,

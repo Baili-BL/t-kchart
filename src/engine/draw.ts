@@ -1,5 +1,5 @@
 /**
- * tv-chart / draw.ts
+ * kc-chart / draw.ts
  * ---------------------------------------------------------------------------
  * 绘图工具层（左侧工具栏背后的引擎）。
  *
@@ -11,8 +11,8 @@
  *    存像素的话，你一缩放/平移，画的东西就飘了 —— 同一个错误在十字光标联动
  *    那里踩过一次（见 README §10）。像素只在渲染的那一刻算。
  *
- * ② **依赖的是 `DrawHost` 接口，不是 `TVChart` 类。**
- *    TVChart 结构化地满足这个接口，所以真图能直接用；测试里塞一个假图
+ * ② **依赖的是 `DrawHost` 接口，不是 `KChart` 类。**
+ *    KChart 结构化地满足这个接口，所以真图能直接用；测试里塞一个假图
  *    （只有 bars/plot/scale 和几个变换函数）就能在 Node 里跑几何自检，
  *    不需要浏览器。`drawSelfTest()` 就是这么实现的。
  * ===========================================================================
@@ -50,7 +50,7 @@ export interface Drawing {
 
 /**
  * 绘图层需要的「宿主」能力。
- * TVChart 天然满足；测试里可以用一个几十行的假对象。
+ * KChart 天然满足；测试里可以用一个几十行的假对象。
  */
 export interface DrawHost {
   bars: Bar[];
@@ -451,8 +451,8 @@ export class DrawLayer {
   /* ======================================================== 事件接管 */
 
   /**
-   * 给 TVChart 用的三个钩子。
-   * onDown 返回 true = 这次点击被绘图层接管，TVChart **不要平移**。
+   * 给 KChart 用的三个钩子。
+   * onDown 返回 true = 这次点击被绘图层接管，KChart **不要平移**。
    */
   onDown(px: number, py: number): boolean {
     const def = toolDef(this.tool);
@@ -495,7 +495,7 @@ export class DrawLayer {
       return true;
     }
 
-    // ③ 光标模式：命中就拖，没命中就让 TVChart 平移
+    // ③ 光标模式：命中就拖，没命中就让 KChart 平移
     const hit = this.hitTest(px, py);
     if (!hit) {
       if (this.activeId != null) this.select(null);
@@ -590,7 +590,7 @@ export class DrawLayer {
 
   /* ======================================================== 渲染 */
 
-  /** 由 TVChart 的 onDraw 钩子调用（已经在绘图区裁剪内） */
+  /** 由 KChart 的 onDraw 钩子调用（已经在绘图区裁剪内） */
   render(ctx: CanvasRenderingContext2D): void {
     if (this.hidden) return;
     for (const d of this.drawings) {
@@ -805,7 +805,7 @@ export function drawSelfTest(): DrawTestResult {
   t('点远离线不命中', L.hitTest(mx, my + 60) === null);
   t('命中部位是 body', L.hitTest(mx, my)!.part === 'body');
 
-  // add() 会自动选中新图形（TradingView 也是这样），所以这里要先取消选中
+  // add() 会自动选中新图形（参考实现也是这样），所以这里要先取消选中
   L.select(null);
   t('未选中时端点不算手柄（part 是 body）', L.hitTest(pa[0].x, pa[0].y)!.part === 'body');
   L.select(d1.id);
@@ -917,10 +917,10 @@ export function drawSelfTest(): DrawTestResult {
   L.onDown(300, 250);
   t('两点工具第二次点击才成型', L.drawings.length === n1 + 1);
 
-  // --- 光标模式下空点不接管（要留给 TVChart 平移）---
+  // --- 光标模式下空点不接管（要留给 KChart 平移）---
   L.setTool('cursor');
   L.select(null);
-  t('光标模式点空白返回 false（让 TVChart 平移）', L.onDown(650, 380) === false);
+  t('光标模式点空白返回 false（让 KChart 平移）', L.onDown(650, 380) === false);
   t('光标模式点已有图形返回 true（接管，不平移）', L.onDown(300, 250) === true);
   L.onUp();
 
