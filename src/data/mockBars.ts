@@ -1,5 +1,5 @@
 /**
- * 演示数据源（TSLA / AAPL / NVDA / MSFT / SPY）。
+ * 演示数据源。标的目录见 symbols.ts（核心 5 个 TSLA / AAPL / NVDA / MSFT / SPY + 各类别演示标的）。
  *
  * 铁律（README §7④）：`bar.time` 必须是该 bar 的**开盘时间**、**epoch 毫秒**。
  * 这里全部走 `Date#getTime()`，不会出现秒级时间戳。
@@ -9,6 +9,7 @@
 import type { Bar } from '../engine/chart';
 import { resample } from '../engine/chart';
 import type { DataSource } from '../engine/grid';
+import { SYMBOL_BY_TICKER, SYMBOL_CATALOG } from './symbols';
 
 export interface MockSymbol {
   ticker: string;
@@ -19,13 +20,8 @@ export interface MockSymbol {
   last: number;
 }
 
-export const MOCK_SYMBOLS: MockSymbol[] = [
-  { ticker: 'TSLA', exchange: 'NASDAQ', name: 'Tesla, Inc.', seed: 7001, last: 362.46 },
-  { ticker: 'AAPL', exchange: 'NASDAQ', name: 'Apple Inc.', seed: 7002, last: 231.8 },
-  { ticker: 'NVDA', exchange: 'NASDAQ', name: 'NVIDIA Corporation', seed: 7003, last: 188.2 },
-  { ticker: 'MSFT', exchange: 'NASDAQ', name: 'Microsoft Corporation', seed: 7004, last: 512.4 },
-  { ticker: 'SPY', exchange: 'AMEX', name: 'SPDR S&P 500 ETF', seed: 7005, last: 668.9 },
-];
+/** 自选表 / 欢迎页用的核心 5 个（目录里 `core: true` 的那些，顺序不变） */
+export const MOCK_SYMBOLS: MockSymbol[] = SYMBOL_CATALOG.filter((s) => s.core);
 
 /** 周期 → 单根 bar 的分钟数（日线及以上不在此表） */
 export const INTRADAY_MINUTES: Record<string, number> = {
@@ -51,11 +47,11 @@ const SESSION_MIN = 390; // 09:30–16:00
 const DAILY_COUNT = 1000;
 
 export function symbolInfo(ticker: string): MockSymbol {
-  return MOCK_SYMBOLS.find((s) => s.ticker === ticker) ?? MOCK_SYMBOLS[0];
+  return SYMBOL_BY_TICKER.get(ticker) ?? MOCK_SYMBOLS[0];
 }
 
 export function isKnownTicker(ticker: string): boolean {
-  return MOCK_SYMBOLS.some((s) => s.ticker === ticker);
+  return SYMBOL_BY_TICKER.has(ticker);
 }
 
 function lcg(seed: number): () => number {

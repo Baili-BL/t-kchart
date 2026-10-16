@@ -193,7 +193,11 @@ export function createChartTools(ctl: ChartControls): ToolRuntime {
         case 'set_symbol': {
           const s = str(a.symbol)?.toUpperCase();
           if (!s) return fail('缺少参数 symbol');
-          if (!ctl.knownSymbols().includes(s)) return fail(`未知标的 ${s}，可选：${ctl.knownSymbols().join(', ')}`);
+          const known = ctl.knownSymbols();
+          if (!known.includes(s)) {
+            const head = known.slice(0, 12).join(', ');
+            return fail(`未知标的 ${s}，可选（共 ${known.length} 个，仅列前 12 个；也可让用户用顶栏的商品代码搜索）：${head}`);
+          }
           ctl.setSymbol(s);
           return ok(`标的已切换为 ${s}`);
         }

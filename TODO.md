@@ -33,6 +33,7 @@
 | `src/engine/grid.ts` | 多图网格 + 联动（按时间对齐）；可注入 `dataSource`、每格独立周期、`activechange` 事件；布局来自目录，支持非均匀排法 |
 | `src/engine/layouts.ts` | 多图布局目录：1–16 张图、共 55 种排法（含非均匀），纯数据 + 栅格化函数 |
 | `src/engine/pine.ts` | Pine v5 / v6 子集解释器 |
+| `src/data/symbols.ts`、`src/workspace/SymbolSearchDialog.tsx` | 商品代码目录（9 类 97 个演示标的）+ 屏幕正中的「商品代码搜索」弹窗 |
 | `src/engine/studies.ts`、`src/indicators/` | 指标（study）模型与画法（副图 / 叠加 / fill）+ 内置指标库（全部 Pine v6 脚本）+ 浏览器自检 |
 | `src/engine/draw.ts` | 绘图工具层（9 种工具） |
 | `src/engine/equity.ts` | 权益曲线 + 双均线回测口径 |
@@ -52,7 +53,7 @@ Pine 编辑器、权益曲线、统计组件目前**没有对应的 UI 入口**�
 ```
 npm run typecheck                          0 错误（strict）
 npm test (vitest)                          引擎 615 PASS（绘图 39 + Pine 74 + Pine 撮合 69 + 权益 26 + 统计 34 + 回放 27 + 布局目录 346）
-                                           共 95 个 vitest 用例（含 Agent / 工作区 / 数据 / 回放 / 布局 / 指标库 15 / 图表样式 8）
+                                           共 105 个 vitest 用例（含 Agent / 工作区 / 数据 / 回放 / 布局 / 指标库 15 / 图表样式 8 / 商品代码 10）
 浏览器侧（dev 控制台 __app.runBrowserSelfTests()）
                                            图表 76（改造前 48，新增 setRange 回归 1 条 + 图表样式 8 条 + revealSpan 4 条 + 回放 15 条）+ 网格 20（含 55 种布局抽样的像素位置、时间联动）
                                            + 权益 37 + 统计 50 + 指标 19 + 样式 52

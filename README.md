@@ -45,6 +45,7 @@ src/
     providers/deepseek.ts   DeepSeek harness 适配点（空壳）
     AgentPanel / Composer / MessageList
   workspace/
+    SymbolSearchDialog  商品代码搜索（屏幕正中的弹窗：搜索 / 10 个分类 / 国家·类型·板块过滤 / ↑↓ Enter Esc）
     ChartWorkspace / TopBar / RangeBar / PaperTrade / RightPanel / RightRail
     ChartGridView     ChartGrid 的 React 外壳（store ⇄ 引擎）
     DrawToolbar       包装 dom/sidebar.ts，经 drawBus 驱动各格 DrawLayer
@@ -54,7 +55,7 @@ src/
   engine/       chart grid draw pine equity analytics studies layouts replay（ESM，零依赖）
   engine/styleTest.ts   图表样式的浏览器自检（像素）
   indicators/   内置指标库：catalog（全部是 Pine v6 脚本）/ runner（脚本 → 画得出的输出）/ studyTest（浏览器自检）
-  data/         mockBars（TSLA/AAPL/NVDA/MSFT/SPY，分钟/小时/日/周/月）
+  data/         symbols（商品代码目录：9 类共 97 个演示标的 + 搜索 / 过滤）/ mockBars（按 seed 生成的演示行情，分钟/小时/日/周/月）
   store/        zustand：appStore / chartStore / chatStore / studyStore（图上的指标 + 收藏 + 对话框状态）
   styles/       tokens.css（设计变量，浅/深两套）+ app.css
   dev/          浏览器侧自检入口
@@ -90,6 +91,7 @@ VITE_DEEPSEEK_MODEL=deepseek-chat
 | --- | --- | --- |
 | 类型 | `npm run typecheck` | `strict: true`，0 错误 |
 | 引擎（Node） | `npm test` | 绘图 39 + Pine 74 + Pine 撮合 69 + 权益 26 + 统计 34 + 回放 27 + 布局目录 346 = 615（基线，只增不减） |
+| 商品代码目录（Node） | `npm test` | ticker / seed 唯一、9 类都有、每个标的都能出日线与小时线、搜索排序 / 中文 / `交易所:代码` / 过滤叠加、Agent 认代码与中文名（10 条） |
 | 图表样式（Node） | `npm test` | 平均K线手算对数、成交量蜡烛宽度、关键词 → 样式、不可用样式的原因、带标记线渐变色（8 条） |
 | 指标库（Node） | `npm test` | 36 个 v6 脚本全部跑通；约 30 个指标的数值与**独立 TS 参考实现**逐根对数；搜索 / 清单 / store / Agent 控制 |
 | Agent / 工作区 / 数据 | `npm test` | 意图解析、工具校验、runner 循环（含报错/中断/死循环兜底）、模拟账户不变式、范围高亮、mock 数据不变式 |

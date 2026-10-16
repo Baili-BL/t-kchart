@@ -6,6 +6,7 @@ import { ReplayBar } from './ReplayBar';
 import { RangeBar } from './RangeBar';
 import { RightPanel } from './RightPanel';
 import { RightRail } from './RightRail';
+import { SymbolSearchDialog } from './SymbolSearchDialog';
 import { TopBar } from './TopBar';
 
 /** 右侧专业图表软件风格的图表区：顶栏 / 绘图栏 / 多图网格 / 范围条 / 右侧面板 / 右侧图标栏 */
@@ -26,6 +27,7 @@ export function ChartWorkspace(): JSX.Element {
       </div>
       <RightPanel />
       <RightRail />
+      <SymbolSearchDialog />
       <IndicatorDialog />
       <StudySettingsDialog />
     </div>

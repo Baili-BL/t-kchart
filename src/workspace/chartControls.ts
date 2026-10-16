@@ -1,7 +1,7 @@
 import type { ChartControls } from '../agent/tools';
 import { RANGES } from '../engine/chart';
 import { PineEngine } from '../engine/pine';
-import { MOCK_SYMBOLS } from '../data/mockBars';
+import { SYMBOL_CATALOG } from '../data/symbols';
 import { TIMEFRAMES, useChartStore } from '../store/chartStore';
 import { getGrid } from './gridRegistry';
 import { replayControl } from './replayActions';
@@ -66,7 +66,7 @@ export const chartControls: ChartControls = {
     }
   },
 
-  knownSymbols: () => MOCK_SYMBOLS.map((s) => s.ticker),
+  knownSymbols: () => SYMBOL_CATALOG.map((s) => s.ticker),
   knownTimeframes: () => TIMEFRAMES.map((t) => t.code),
   knownRanges: () => RANGES.map((r) => r.key),
 };

@@ -1,11 +1,12 @@
 import type { AgentEvent, AgentMessage, AgentProvider, AgentRequest, ToolCall } from '../types';
+import { SYMBOL_CATALOG } from '../../data/symbols';
 
 /**
  * 本地 mock provider：不联网，用关键字规则模拟「模型 → 工具调用 → 总结」。
  * 只用来在没有 DeepSeek harness 的时候把整条链路跑通。
  */
 
-const TICKERS = ['TSLA', 'AAPL', 'NVDA', 'MSFT', 'SPY'];
+
 const TF_RE = /\b(1m|5m|15m|30m|1h|4h|1d|1w|1M)\b/i;
 const RANGE_RE = /\b(1D|7D|1M|3M|6M|YTD|1Y|5Y|ALL)\b/;
 const LAYOUT_RE = /(\d)\s*[x×*]\s*(\d)/i;
@@ -82,11 +83,29 @@ export function pickStyle(text: string): string | null {
   return null;
 }
 
+/**
+ * 文字 → 标的代码：先认代码（字母数字，整词匹配；纯数字至少 4 位、字母至少 3 位，免得把「回放前进 10 根」里的数字、普通英文短词当成标的），
+ * 再认中文名（如「贵州茅台」「腾讯控股」，至少 2 个字）。核心 5 个排在目录最前，同一句话里出现多个时它们优先。
+ */
+export function pickTicker(text: string): string | null {
+  const upper = text.toUpperCase();
+  for (const s of SYMBOL_CATALOG) {
+    const t = s.ticker.toUpperCase();
+    if (!/^[A-Z0-9]+$/.test(t)) continue;                 // ES1! / BTCUSDT.P 这类带符号的不走整词匹配
+    if (/^\d+$/.test(t) ? t.length < 4 : t.length < 3) continue;   // 纯数字至少 4 位；字母代码至少 3 位（BA / KO 这种两位的太容易撞上普通单词）
+    if (new RegExp('(^|[^A-Z0-9])' + t + '($|[^A-Z0-9])').test(upper)) return s.ticker;
+  }
+  for (const s of SYMBOL_CATALOG) {
+    if (/[\u4e00-\u9fa5]{2,}/.test(s.name) && text.includes(s.name.replace(/-W$/, ''))) return s.ticker;
+  }
+  return null;
+}
+
 export function planToolCalls(text: string): ToolCall[] {
   const calls: ToolCall[] = [];
   const upper = text.toUpperCase();
 
-  const ticker = TICKERS.find((t) => new RegExp('\\b' + t + '\\b').test(upper));
+  const ticker = pickTicker(text);
   if (ticker) calls.push({ id: nid('call'), name: 'set_symbol', arguments: { symbol: ticker } });
 
   const lay = text.match(LAYOUT_RE);
