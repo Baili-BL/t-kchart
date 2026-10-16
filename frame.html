@@ -70,16 +70,10 @@
     });
 
     createBottom(document.getElementById('bottom'), {
+      onStrategy: () => log('底部: 策略标签 MACD strategy'),
       onCollapse: (c) => log(`底部: 面板${c ? '折叠' : '展开'}`),
       onMaximize: () => log('底部: 最大化面板'),
-      onSnapshot: () => log('底部: 生成快照'),
-      onExpand: () => log('底部: 展开图表'),
-      onDateRange: () => log('底部: 日期范围'),
-      onInterval: () => log('底部: 周期'),
-      onPrecision: () => log('底部: 精度'),
-      onScript: () => log('底部: 脚本执行'),
-      onSettings: () => log('底部: 设置'),
-      onAlert: () => log('底部: 添加警报'),
+      onChartTool: (l) => log(`底部: 图表工具 ${l}`),
     });
   </script>
 </body>
