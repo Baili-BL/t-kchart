@@ -152,3 +152,40 @@ export const TIMECYC_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\
 
 // 正弦线：两个整周期的正弦曲线
 export const SINE_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\"><path d=\"M3 14 C5.5 5 8.5 5 11 14 C13.5 23 16.5 23 19 14 C20.4 9.4 22.5 7.5 25 10\"></path></svg>";
+
+/* —— 设计稿「预测/基于成交量/测量」子菜单（多头仓位按钮）图标 —— */
+// 多头仓位：上下双价位线 + 向上箭头
+export const LONGPOS_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 21 h20 M4 7 h20 M4 7 v14 M8 14 L13 9 M13 9 L10.2 9.4 M13 9 L13.4 11.8\"></path></svg>";
+
+// 空头仓位：上下双价位线 + 向下箭头
+export const SHORTPOS_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 7 h20 M4 21 h20 M4 7 v14 M13 10 L13 18 M13 18 L10.2 16.6 M13 18 L15.8 16.6\"></path></svg>";
+
+// 仓位预测：折线 + 箭头
+export const FORECAST_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 22 L11 12 L18 17 M15.5 16.2 L18 17 L17.2 14.4\"></path></svg>";
+
+// K线形态：三根迷你K线
+export const KPATTERN_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\"><path d=\"M6 20 V12 M4.5 13.5 h3 v5 h-3 Z M13 17 V9 M11.5 11 h3 v4.5 h-3 Z M20 9 V18 M18.5 12.5 h3 v4 h-3 Z\"></path></svg>";
+
+// 模拟K线：四根排布的假K线
+export const SIMCANDLE_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\"><path d=\"M5 6 V21 M3.5 8 h3 v9 h-3 Z M11 9 V20 M9.5 11 h3 v6 h-3 Z M17 4 V18 M15.5 6 h3 v9 h-3 Z M23 8 V19 M21.5 10 h3 v6 h-3 Z\"></path></svg>";
+
+// 扇形：从圆心出发的三条射线 + 连接弧
+export const FAN_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\"><path d=\"M5 22 V5 M5 22 L19 8 M5 22 L23 22 M5 5 A17 17 0 0 1 23 22\"></path></svg>";
+
+// 锚定VWAP：曲线 + 锚点竖线
+export const AVWAP_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\"><path d=\"M6 20 C9 12 12 16 16 12 C19 9 21 12 24 9 M6 6 V22\"></path></svg>";
+
+// 固定范围成交量分布图：竖线 + 四根水平条
+export const VPROFILE_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\"><path d=\"M5 4 V24 M8 20 h5 M8 15.5 h8 M8 11 h10 M8 6.5 h6\"></path></svg>";
+
+// 锚定成交量分布图：双竖线夹水平条
+export const AVPROFILE_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\"><path d=\"M5 4 V24 M21 8 V20 M8 20 h5 M8 15.5 h8 M8 11 h10 M8 6.5 h6\"></path></svg>";
+
+// 价格范围：竖线双端帽 + 右侧百分比箭头
+export const PRANGE_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M8 4 V24 M4.5 4 h7 M4.5 24 h7 M19 22 V9 M16 12 L19 8.5 L22 12\"></path></svg>";
+
+// 日期范围：横线双端帽 + 顶部日历刻度
+export const DRANGE_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\"><path d=\"M4 18 h20 M4 14.5 v7 M24 14.5 v7 M9 6 v4 M19 6 v4 M5 8 h18 v10 H5 Z\"></path></svg>";
+
+// 日期和价格范围：虚线框 + 内部双箭头
+export const DPRANGE_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 4 h20 v20 h-20 Z M4 10 h20 M14 14 v6 M11 17.5 L14 20.5 L17 17.5 M4 20 h4 M20 20 h4\"></path></svg>";

@@ -183,6 +183,31 @@ export const DRAW_TOOLS: DrawToolDef[] = [
     icon: 'M3 4 L3 14 M7 4 L7 14 M11 4 L11 14 M15 4 L15 14' },
   { key: 'sine', label: '正弦线', points: 2,
     icon: 'M2 9 C4 4 6 4 8 9 C10 14 12 14 14 9 C15 6.5 16 6 16 7' },
+  // —— 设计稿「预测/基于成交量/测量」子菜单（多头仓位按钮）新增的十二种 ——
+  { key: 'longpos', label: '多头仓位', points: 2,
+    icon: 'M2 12 L16 12 M2 5 L16 5 M2 5 L2 12 M6 8 L9 5 M6 8 L9 11' },
+  { key: 'shortpos', label: '空头仓位', points: 2,
+    icon: 'M2 8 L16 8 M2 15 L16 15 M2 8 L2 15 M9 5 L12 8 M12 8 L9 11' },
+  { key: 'forecast', label: '仓位预测', points: 3,
+    icon: 'M2 14 L8 6 L14 10 M11 9 L15 10 L14 6' },
+  { key: 'kpattern', label: 'K线形态', points: 1,
+    icon: 'M3 13 L4 5 L4 13 Z M8 12 L9 7 L9 12 Z M13 5 L14 12 L13 5 Z' },
+  { key: 'simcandle', label: '模拟K线', points: 2,
+    icon: 'M3 6 L3 13 M4.5 7 L4.5 11 M2.5 7 L6.5 7 L6.5 12 L2.5 12 Z M8 5 L8 12 M9.5 6 L9.5 10 M7.5 6 L11.5 6 L11.5 10 L7.5 10 Z M13 4 L13 11 M14.5 5 L14.5 9 M12.5 5 L16.5 5 L16.5 9 L12.5 9 Z' },
+  { key: 'fan', label: '扇形', points: 2,
+    icon: 'M3 14 L3 4 M3 14 L12 5 M3 14 L15 14 M3 4 A11 11 0 0 1 15 14' },
+  { key: 'avwap', label: '锚定VWAP', points: 1,
+    icon: 'M2 6 C5 4 7 8 10 6 C13 4 15 7 17 5 M4 5 L4 3 M4 4 L4 7' },
+  { key: 'vprofile', label: '固定范围成交量分布图', points: 2,
+    icon: 'M3 3 L3 15 M5 13 L8 13 M5 10 L11 10 M5 7 L13 7 M5 4 L9 4' },
+  { key: 'avprofile', label: '锚定成交量分布图', points: 1,
+    icon: 'M3 3 L3 15 M5 13 L8 13 M5 10 L11 10 M5 7 L13 7 M5 4 L9 4 M13 3 L13 15' },
+  { key: 'prange', label: '价格范围', points: 2,
+    icon: 'M8 3 L8 14 M5 3 L11 3 M5 14 L11 14 M13 4 L13 8 M11 6 L13 4 L15 6' },
+  { key: 'drange', label: '日期范围', points: 2,
+    icon: 'M3 8 L14 8 M3 5 L3 11 M14 5 L14 11 M13 3 L13 5 M15 3 L15 5 M13 2 L15 2' },
+  { key: 'dprange', label: '日期和价格范围', points: 2,
+    icon: 'M3 3 L15 3 L15 14 L3 14 Z M3 3 L3 14 M8 8 L8 11 M15 8 L15 11 M8 11 L15 11' },
 ];
 
 export const FIB_LEVELS: { l: number; c: string }[] = [
@@ -228,6 +253,32 @@ export const CYCLE_PAIR_OFF: number = 0.18;
 /** 时间循环：绘制的垂直线根数（每个周期一根，带序号标签） */
 export const TIMECYCLE_COUNT: number = 8;
 
+/* —— 设计稿「预测/基于成交量/测量」子菜单（多头仓位按钮）常量 —— */
+/** 多/空仓位：目标价 = 入场价 + (入场价 − 止损价) × 盈亏比（空头同样成立：风险为负即向下） */
+export const POS_RR: number = 2;
+
+/** K线形态：锚点处绘制的启明星三根迷你K线（数值为相对比例，1 ≈ 锚点价） */
+export const CANDLE_PATTERN: { o: number; h: number; l: number; c: number }[] = [
+  { o: 1.0, h: 1.006, l: 0.972, c: 0.98 },    // 大阴线
+  { o: 0.974, h: 0.98, l: 0.952, c: 0.968 },  // 十字星
+  { o: 0.964, h: 1.002, l: 0.958, c: 0.996 }, // 大阳线
+];
+
+/** K线形态：迷你K线区总高（px） */
+export const KPATTERN_H: number = 48;
+
+/** 模拟K线：延长段生成的假K线根数 */
+export const SIM_CANDLES: number = 8;
+
+/** 扇形：相对基线方向的射线角度（度，0 = 基线方向） */
+export const FAN_DEG: number[] = [-45, 0, 45];
+
+/** 成交量分布图：价格分箱数 */
+export const VP_BINS: number = 24;
+
+/** 锚定成交量分布图：直方图区宽（px） */
+export const VP_WIDTH: number = 140;
+
 /**
  * 形态/波浪类工具的锚点字母标签（渲染与自检共用；键 = 工具 key）。
  * 锚点按 zigzag 顺序放置，峰顶（屏幕 y 更小）标签画在点上方，谷底画在下方。
@@ -261,6 +312,74 @@ export function sinePts(
     });
   }
   return out;
+}
+
+/** K线形态：锚点右侧绘制的迷你K线（像素空间；ay = 基准价所在 y，屏幕坐标 y 向下） */
+export function kpatternCandles(
+  ax: number, ay: number,
+): { x: number; w: number; o: number; h: number; l: number; c: number }[] {
+  const cw = 7;
+  const gap = 4;
+  let mn = Infinity;
+  let mx = -Infinity;
+  for (const k of CANDLE_PATTERN) { mn = Math.min(mn, k.l); mx = Math.max(mx, k.h); }
+  const s = KPATTERN_H / (mx - mn);
+  const y = (v: number) => ay - (v - mn) * s; // 价高 → y 小
+  return CANDLE_PATTERN.map((k, i) => ({ x: ax + i * (cw + gap), w: cw, o: y(k.o), h: y(k.h), l: y(k.l), c: y(k.c) }));
+}
+
+/** 模拟K线：从 (ax,ay) 到 (bx,by) 生成 n 根确定性假K线（线性漂移 + 正弦扰动，像素空间） */
+export function simCandlePx(
+  ax: number, ay: number, bx: number, by: number, n: number = SIM_CANDLES,
+): { x: number; w: number; o: number; h: number; l: number; c: number }[] {
+  const out: { x: number; w: number; o: number; h: number; l: number; c: number }[] = [];
+  const w = (bx - ax) / n;
+  const drift = (by - ay) / n;
+  const wob = Math.abs(by - ay) * 0.08 + 4;
+  let price = ay;
+  for (let i = 0; i < n; i++) {
+    const o = price;
+    const c = o + drift + Math.sin(i * 2.7) * wob;
+    const h = Math.min(o, c) - Math.abs(Math.sin(i * 1.3)) * wob - 1.5;
+    const l = Math.max(o, c) + Math.abs(Math.cos(i * 1.7)) * wob + 1.5;
+    out.push({ x: ax + i * w + w / 2 - w * 0.3, w: w * 0.6, o, h, l, c });
+    price = c;
+  }
+  return out;
+}
+
+/** 锚定 VWAP：从 from 起逐根累计 (典型价×成交量)/累计成交量 的序列 */
+export function vwapSeries(bars: Bar[], from: number): number[] {
+  let pv = 0;
+  let vv = 0;
+  const out: number[] = [];
+  for (let i = Math.max(0, from); i < bars.length; i++) {
+    const b = bars[i];
+    const tp = (b.high + b.low + b.close) / 3;
+    pv += tp * b.volume;
+    vv += b.volume;
+    out.push(vv ? pv / vv : tp);
+  }
+  return out;
+}
+
+/** 成交量分布：bars[from..to] 的典型价按 [lo,hi] 分 bins 箱累计成交量；返回每箱量与 POC 箱号 */
+export function volumeProfile(
+  bars: Bar[], from: number, to: number, bins: number, lo: number, hi: number,
+): { vol: number[]; poc: number } {
+  const vol = new Array<number>(bins).fill(0);
+  const step = (hi - lo) / bins || 1;
+  for (let i = Math.max(0, from); i <= to && i < bars.length; i++) {
+    const b = bars[i];
+    const tp = (b.high + b.low + b.close) / 3;
+    let k = Math.floor((tp - lo) / step);
+    if (k < 0) k = 0;
+    if (k >= bins) k = bins - 1;
+    vol[k] += b.volume;
+  }
+  let poc = 0;
+  for (let k = 1; k < bins; k++) if (vol[k] > vol[poc]) poc = k;
+  return { vol, poc };
 }
 
 export function drawStyle(color?: string): DrawStyle {
@@ -696,6 +815,75 @@ export class DrawLayer {
         }
       } else if (d.type === 'sine') {
         if (distToPolyline(px, py, sinePts(a.x, a.y, b.x, b.y)) <= tol) return { d, part: 'body' };
+      } else if (d.type === 'longpos' || d.type === 'shortpos') {
+        // 双箱：目标箱（入场→目标）与止损箱（入场→止损），时间跨度取 p0..p1
+        const x0 = Math.min(a.x, b.x);
+        const x1 = Math.max(a.x, b.x);
+        const tgtY = ch.yOf(d.pts[0].price + (d.pts[0].price - d.pts[1].price) * POS_RR);
+        if (inRect(px, py, x0, a.y, x1, tgtY) || inRect(px, py, x0, a.y, x1, b.y)) return { d, part: 'body' };
+      } else if (d.type === 'forecast') {
+        if (distToPolyline(px, py, p) <= tol) return { d, part: 'body' };
+      } else if (d.type === 'kpattern') {
+        const cs = kpatternCandles(a.x, a.y);
+        const last = cs[cs.length - 1];
+        if (inRect(px, py, a.x - 6, a.y - KPATTERN_H - 6, last.x + last.w + 6, a.y + 8)) return { d, part: 'body' };
+      } else if (d.type === 'simcandle') {
+        const cs = simCandlePx(a.x, a.y, b.x, b.y);
+        let mnY = Infinity;
+        let mxY = -Infinity;
+        for (const k of cs) { mnY = Math.min(mnY, k.h); mxY = Math.max(mxY, k.l); }
+        if (inRect(px, py, Math.min(a.x, b.x), mnY, Math.max(a.x, b.x), mxY)) return { d, part: 'body' };
+      } else if (d.type === 'fan') {
+        // 基线 ± FAN_DEG 的射线 + 同半径连接弧
+        const th = Math.atan2(b.y - a.y, b.x - a.x);
+        const R = ch.plot.w + ch.plot.h;
+        for (const deg of FAN_DEG) {
+          const a2 = th + (deg * Math.PI) / 180;
+          if (distToSeg(px, py, a.x, a.y, a.x + R * Math.cos(a2), a.y + R * Math.sin(a2)) <= tol) {
+            return { d, part: 'body' };
+          }
+        }
+        const r = Math.hypot(b.x - a.x, b.y - a.y);
+        if (r > 2) {
+          const degs = FAN_DEG.map((v) => (v * Math.PI) / 180);
+          const arc = arcPts(a.x, a.y, r, th + Math.min(...degs), th + Math.max(...degs));
+          if (distToPolyline(px, py, arc) <= tol) return { d, part: 'body' };
+        }
+      } else if (d.type === 'avwap') {
+        // 锚点 → 最后一根 bar 的 VWAP 曲线
+        const i0 = ch.indexAtTime(d.pts[0].time);
+        const series = vwapSeries(ch.bars, i0);
+        const poly = series.map((v, i) => ({ x: ch.xCenter(i0 + i), y: ch.yOf(v) }));
+        if (distToPolyline(px, py, poly) <= tol) return { d, part: 'body' };
+      } else if (d.type === 'vprofile' || d.type === 'dprange') {
+        // 直方图区 / 双范围框：矩形边框或内部
+        const onEdge =
+          distToSeg(px, py, a.x, a.y, b.x, a.y) <= tol ||
+          distToSeg(px, py, b.x, a.y, b.x, b.y) <= tol ||
+          distToSeg(px, py, b.x, b.y, a.x, b.y) <= tol ||
+          distToSeg(px, py, a.x, b.y, a.x, a.y) <= tol;
+        if (onEdge || inRect(px, py, a.x, a.y, b.x, b.y)) return { d, part: 'body' };
+      } else if (d.type === 'avprofile') {
+        const i0 = ch.indexAtTime(d.pts[0].time);
+        let mn = Infinity;
+        let mx = -Infinity;
+        for (let i = i0; i < ch.bars.length; i++) {
+          if (ch.bars[i].low < mn) mn = ch.bars[i].low;
+          if (ch.bars[i].high > mx) mx = ch.bars[i].high;
+        }
+        if (inRect(px, py, a.x, ch.yOf(mx), Math.min(a.x + VP_WIDTH, ch.plot.r), ch.yOf(mn))) {
+          return { d, part: 'body' };
+        }
+      } else if (d.type === 'prange') {
+        // 竖线 + 上下端帽
+        if (distToSeg(px, py, a.x, a.y, a.x, b.y) <= tol) return { d, part: 'body' };
+        if (distToSeg(px, py, a.x - 8, a.y, a.x + 8, a.y) <= tol) return { d, part: 'body' };
+        if (distToSeg(px, py, a.x - 8, b.y, a.x + 8, b.y) <= tol) return { d, part: 'body' };
+      } else if (d.type === 'drange') {
+        // 横线 + 左右端帽
+        if (distToSeg(px, py, a.x, a.y, b.x, a.y) <= tol) return { d, part: 'body' };
+        if (distToSeg(px, py, a.x, a.y - 8, a.x, a.y + 8) <= tol) return { d, part: 'body' };
+        if (distToSeg(px, py, b.x, a.y - 8, b.x, a.y + 8) <= tol) return { d, part: 'body' };
       } else if (d.type === 'text') {
         const w = Math.max(24, d.style.text.length * 7);
         if (inRect(px, py, a.x - 2, a.y - 10, a.x + w, a.y + 6)) return { d, part: 'body' };
@@ -1428,6 +1616,198 @@ export class DrawLayer {
       ctx.moveTo(poly[0].x, poly[0].y);
       for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i].x, poly[i].y);
       ctx.stroke();
+    } else if (d.type === 'longpos' || d.type === 'shortpos') {
+      // 多/空仓位：目标箱（绿）+ 止损箱（红）+ 三条价位线 + 标签
+      const x0 = Math.min(a.x, b.x);
+      const x1 = Math.max(a.x, b.x);
+      const tgt = d.pts[0].price + (d.pts[0].price - d.pts[1].price) * POS_RR;
+      const tgtY = ch.yOf(tgt);
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(8,153,129,0.25)';
+      ctx.fillRect(x0, Math.min(a.y, tgtY), x1 - x0, Math.abs(tgtY - a.y));
+      ctx.fillStyle = 'rgba(242,54,69,0.25)';
+      ctx.fillRect(x0, Math.min(a.y, b.y), x1 - x0, Math.abs(b.y - a.y));
+      ctx.setLineDash([4, 3]);
+      ctx.strokeStyle = '#089981';
+      ctx.beginPath(); ctx.moveTo(x0, tgtY); ctx.lineTo(x1, tgtY); ctx.stroke();
+      ctx.strokeStyle = '#f23645';
+      ctx.beginPath(); ctx.moveTo(x0, b.y); ctx.lineTo(x1, b.y); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.strokeStyle = col;
+      ctx.beginPath(); ctx.moveTo(x0, a.y); ctx.lineTo(x1, a.y); ctx.stroke();
+      this.label(ctx, '目标 ' + tgt.toFixed(2), x1 + 4, tgtY - 4, '#089981');
+      this.label(ctx, (d.type === 'longpos' ? '多单 ' : '空单 ') + d.pts[0].price.toFixed(2), x0 + 4, a.y - 4, '#d1d4dc');
+      this.label(ctx, '止损 ' + d.pts[1].price.toFixed(2), x1 + 4, b.y - 4, '#f23645');
+    } else if (d.type === 'forecast') {
+      // 仓位预测：两段折线 + 箭头 + 各段涨跌幅
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.moveTo(p[0].x, p[0].y);
+      for (let i = 1; i < p.length; i++) ctx.lineTo(p[i].x, p[i].y);
+      ctx.stroke();
+      const th = Math.atan2(p[2].y - p[1].y, p[2].x - p[1].x);
+      ctx.beginPath();
+      ctx.moveTo(p[2].x, p[2].y);
+      ctx.lineTo(p[2].x - 9 * Math.cos(th - Math.PI / 6), p[2].y - 9 * Math.sin(th - Math.PI / 6));
+      ctx.moveTo(p[2].x, p[2].y);
+      ctx.lineTo(p[2].x - 9 * Math.cos(th + Math.PI / 6), p[2].y - 9 * Math.sin(th + Math.PI / 6));
+      ctx.stroke();
+      for (let i = 0; i < 2 && i + 1 < d.pts.length; i++) {
+        const pct = d.pts[i].price ? ((d.pts[i + 1].price - d.pts[i].price) / d.pts[i].price) * 100 : 0;
+        this.label(ctx, (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%',
+          (p[i].x + p[i + 1].x) / 2 + 4, (p[i].y + p[i + 1].y) / 2 - 6, col);
+      }
+    } else if (d.type === 'kpattern') {
+      // K线形态：锚点右侧三根迷你K线（启明星）+ 基准虚线
+      ctx.setLineDash([3, 3]);
+      ctx.strokeStyle = '#787b86';
+      ctx.beginPath(); ctx.moveTo(a.x - 24, a.y); ctx.lineTo(a.x + 34, a.y); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.lineWidth = 1;
+      for (const k of kpatternCandles(a.x, a.y)) {
+        const bull = k.c < k.o; // 屏幕 y 向下：收盘 y 更小 = 阳线
+        ctx.strokeStyle = ctx.fillStyle = bull ? '#089981' : '#f23645';
+        ctx.beginPath();
+        ctx.moveTo(k.x + k.w / 2, k.h);
+        ctx.lineTo(k.x + k.w / 2, k.l);
+        ctx.stroke();
+        ctx.fillRect(k.x, Math.min(k.o, k.c), k.w, Math.max(1, Math.abs(k.c - k.o)));
+      }
+    } else if (d.type === 'simcandle') {
+      // 模拟K线：p0→p1 之间 8 根确定性假K线
+      ctx.setLineDash([]);
+      ctx.lineWidth = 1;
+      for (const k of simCandlePx(a.x, a.y, b.x, b.y)) {
+        const bull = k.c < k.o;
+        ctx.strokeStyle = '#787b86';
+        ctx.beginPath();
+        ctx.moveTo(k.x + k.w / 2, k.h);
+        ctx.lineTo(k.x + k.w / 2, k.l);
+        ctx.stroke();
+        ctx.fillStyle = bull ? 'rgba(8,153,129,0.85)' : 'rgba(242,54,69,0.85)';
+        ctx.fillRect(k.x, Math.min(k.o, k.c), k.w, Math.max(1, Math.abs(k.c - k.o)));
+      }
+    } else if (d.type === 'fan') {
+      // 扇形：基线 ± FAN_DEG 射线 + 同半径连接弧
+      const th = Math.atan2(b.y - a.y, b.x - a.x);
+      const r = Math.hypot(b.x - a.x, b.y - a.y);
+      ctx.setLineDash([]);
+      if (r > 2) {
+        const degs = FAN_DEG.map((v) => (v * Math.PI) / 180);
+        const arc = arcPts(a.x, a.y, r, th + Math.min(...degs), th + Math.max(...degs));
+        ctx.strokeStyle = '#787b86';
+        ctx.beginPath();
+        ctx.moveTo(arc[0].x, arc[0].y);
+        for (let i = 1; i < arc.length; i++) ctx.lineTo(arc[i].x, arc[i].y);
+        ctx.stroke();
+      }
+      const R = ch.plot.w + ch.plot.h;
+      ctx.strokeStyle = col;
+      for (const deg of FAN_DEG) {
+        const a2 = th + (deg * Math.PI) / 180;
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(a.x + R * Math.cos(a2), a.y + R * Math.sin(a2));
+        ctx.stroke();
+      }
+    } else if (d.type === 'avwap') {
+      // 锚定 VWAP：锚点 → 最后一根 bar 的橙色曲线
+      const i0 = ch.indexAtTime(d.pts[0].time);
+      const series = vwapSeries(ch.bars, i0);
+      ctx.strokeStyle = '#ff9800';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.moveTo(ch.xCenter(i0), ch.yOf(series[0]));
+      for (let i = 1; i < series.length; i++) ctx.lineTo(ch.xCenter(i0 + i), ch.yOf(series[i]));
+      ctx.stroke();
+      this.label(ctx, 'VWAP', ch.xCenter(i0) + 4, ch.yOf(series[0]) - 6, '#ff9800');
+    } else if (d.type === 'vprofile' || d.type === 'avprofile') {
+      // 成交量分布图：区间价格分箱水平直方图，POC 箱高亮
+      let i0: number;
+      let i1: number;
+      let l: number;
+      let t: number;
+      let w: number;
+      let lo: number;
+      let hi: number;
+      if (d.type === 'vprofile') {
+        i0 = ch.indexAtTime(Math.min(d.pts[0].time, d.pts[1].time));
+        i1 = ch.indexAtTime(Math.max(d.pts[0].time, d.pts[1].time));
+        l = Math.min(a.x, b.x);
+        t = Math.min(a.y, b.y);
+        w = Math.abs(b.x - a.x);
+        lo = Math.min(d.pts[0].price, d.pts[1].price);
+        hi = Math.max(d.pts[0].price, d.pts[1].price);
+      } else {
+        i0 = ch.indexAtTime(d.pts[0].time);
+        i1 = ch.bars.length - 1;
+        l = a.x;
+        lo = Infinity;
+        hi = -Infinity;
+        for (let i = i0; i < ch.bars.length; i++) {
+          if (ch.bars[i].low < lo) lo = ch.bars[i].low;
+          if (ch.bars[i].high > hi) hi = ch.bars[i].high;
+        }
+        t = ch.yOf(hi);
+        w = Math.min(VP_WIDTH, ch.plot.r - a.x);
+      }
+      const { vol, poc } = volumeProfile(ch.bars, i0, i1, VP_BINS, lo, hi);
+      const bh = (ch.yOf(lo) - ch.yOf(hi)) / VP_BINS;
+      const maxV = Math.max(...vol, 1);
+      const yBot = ch.yOf(lo);
+      ctx.setLineDash([]);
+      ctx.lineWidth = 1;
+      for (let k = 0; k < VP_BINS; k++) {
+        if (!vol[k]) continue;
+        const len = (vol[k] / maxV) * w * 0.7;
+        ctx.fillStyle = k === poc ? 'rgba(242,54,69,0.55)' : 'rgba(41,98,255,0.45)';
+        ctx.fillRect(l, yBot - (k + 1) * bh, len, Math.max(1, bh - 0.5));
+      }
+      ctx.strokeStyle = '#787b86';
+      ctx.setLineDash([4, 3]);
+      ctx.strokeRect(l, t, w, ch.yOf(lo) - ch.yOf(hi));
+      const pocY = yBot - (poc + 0.5) * bh;
+      this.label(ctx, 'POC', l + (vol[poc] / maxV) * w * 0.7 + 4, pocY, '#f23645');
+    } else if (d.type === 'prange') {
+      // 价格范围：竖线 + 上下端帽 + 涨跌标签
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y); ctx.lineTo(a.x, b.y);
+      ctx.moveTo(a.x - 8, a.y); ctx.lineTo(a.x + 8, a.y);
+      ctx.moveTo(a.x - 8, b.y); ctx.lineTo(a.x + 8, b.y);
+      ctx.stroke();
+      const dp = d.pts[1].price - d.pts[0].price;
+      const pct = d.pts[0].price ? (dp / d.pts[0].price) * 100 : 0;
+      this.label(ctx, (dp >= 0 ? '+' : '') + dp.toFixed(2) + '  (' + (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%)',
+        a.x + 12, (a.y + b.y) / 2, col);
+    } else if (d.type === 'drange') {
+      // 日期范围：横线 + 左右端帽 + bar 数标签
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, a.y);
+      ctx.moveTo(a.x, a.y - 8); ctx.lineTo(a.x, a.y + 8);
+      ctx.moveTo(b.x, a.y - 8); ctx.lineTo(b.x, a.y + 8);
+      ctx.stroke();
+      const n = Math.abs(ch.indexAtTime(d.pts[1].time) - ch.indexAtTime(d.pts[0].time));
+      this.label(ctx, n + ' 根', (a.x + b.x) / 2 - 12, a.y - 12, col);
+    } else if (d.type === 'dprange') {
+      // 日期和价格范围：虚线框 + 价格标签（右上）+ bar 数标签（底部居中）
+      const l = Math.min(a.x, b.x);
+      const t = Math.min(a.y, b.y);
+      ctx.setLineDash([4, 3]);
+      ctx.fillStyle = 'rgba(120,123,134,0.14)';
+      ctx.beginPath();
+      ctx.rect(l, t, Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+      ctx.fill();
+      ctx.stroke();
+      ctx.setLineDash([]);
+      const dp = d.pts[1].price - d.pts[0].price;
+      const pct = d.pts[0].price ? (dp / d.pts[0].price) * 100 : 0;
+      const n = Math.abs(ch.indexAtTime(d.pts[1].time) - ch.indexAtTime(d.pts[0].time));
+      this.label(ctx, (dp >= 0 ? '+' : '') + dp.toFixed(2) + '  (' + (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%)',
+        Math.max(a.x, b.x) + 6, Math.min(a.y, b.y) + 10, col);
+      this.label(ctx, n + ' 根', (a.x + b.x) / 2 - 12, Math.max(a.y, b.y) + 18, col);
     } else if (d.type === 'text') {
       ctx.setLineDash([]);
       this.label(ctx, d.style.text || '文字', a.x, a.y, col, d.style.fontSize);
@@ -1820,8 +2200,8 @@ export function drawSelfTest(): DrawTestResult {
     const dd = Ld.add('dot', [{ time: host.bars[20].time, price: 105 }]);
     const pd = Ld.pixelPts(dd)[0];
     t('圆点：圆心命中 / 40px 外不命中', !!Ld.hitTest(pd.x, pd.y) && Ld.hitTest(pd.x + 40, pd.y) === null);
-    t('光标组：工具表 48 种且新三项就位',
-      DRAW_TOOLS.length === 48 &&
+    t('光标组：工具表 60 种且新三项就位',
+      DRAW_TOOLS.length === 60 &&
       toolDef('dot').points === 1 && toolDef('highlight').points === 0 && toolDef('eraser').points === 0);
     t('线组：信息线/趋势角度/横线 就位',
       toolDef('infoline').points === 2 && toolDef('angle').points === 2 && toolDef('crossline').points === 1 &&
@@ -1957,6 +2337,149 @@ export function drawSelfTest(): DrawTestResult {
     const erased = Lr.drawings.length === 1;
     Lr.undo();
     t('橡皮擦：点中删除且 undo 复原', erased && Lr.drawings.length === 2);
+
+    // --- 设计稿「预测/基于成交量/测量」子菜单（多头仓位按钮）：12 种新工具 ---
+    t('预测组：多/空仓位 2 锚点、仓位预测 3 锚点、K线形态 1 锚点',
+      toolDef('longpos').points === 2 && toolDef('shortpos').points === 2 &&
+      toolDef('forecast').points === 3 && toolDef('kpattern').points === 1 &&
+      toolDef('simcandle').points === 2 && toolDef('fan').points === 2);
+    t('成交量/测量组：VWAP 与锚定分布 1 锚点、范围类 2 锚点',
+      toolDef('avwap').points === 1 && toolDef('avprofile').points === 1 &&
+      toolDef('vprofile').points === 2 && ['prange', 'drange', 'dprange'].every((k) => toolDef(k).points === 2));
+
+    const Llp = new DrawLayer(host);
+    const dlp = Llp.add('longpos', [
+      { time: host.bars[10].time, price: 104 },
+      { time: host.bars[30].time, price: 100 },
+    ]);
+    const plp = Llp.pixelPts(dlp);
+    t('多头仓位：目标箱（104+4×2=112）/ 止损箱内能命中，箱外不命中',
+      !!Llp.hitTest((plp[0].x + plp[1].x) / 2, host.yOf(108)) &&
+      !!Llp.hitTest((plp[0].x + plp[1].x) / 2, host.yOf(101)) &&
+      Llp.hitTest((plp[0].x + plp[1].x) / 2, host.yOf(95)) === null);
+
+    const Lsp = new DrawLayer(host);
+    const dsp = Lsp.add('shortpos', [
+      { time: host.bars[10].time, price: 100 },
+      { time: host.bars[30].time, price: 104 },
+    ]);
+    const psp = Lsp.pixelPts(dsp);
+    t('空头仓位：目标箱（100−4×2=92）/ 止损箱内能命中，上方箱外不命中',
+      !!Lsp.hitTest((psp[0].x + psp[1].x) / 2, host.yOf(96)) &&
+      !!Lsp.hitTest((psp[0].x + psp[1].x) / 2, host.yOf(103)) &&
+      Lsp.hitTest((psp[0].x + psp[1].x) / 2, host.yOf(109)) === null);
+
+    const Lfc = new DrawLayer(host);
+    const dfc = Lfc.add('forecast', [
+      { time: host.bars[8].time, price: 100 },
+      { time: host.bars[20].time, price: 108 },
+      { time: host.bars[34].time, price: 104 },
+    ]);
+    const pfc = Lfc.pixelPts(dfc);
+    t('仓位预测：两段折线中点能命中，线外不命中',
+      !!Lfc.hitTest((pfc[0].x + pfc[1].x) / 2, (pfc[0].y + pfc[1].y) / 2) &&
+      !!Lfc.hitTest((pfc[1].x + pfc[2].x) / 2, (pfc[1].y + pfc[2].y) / 2) &&
+      Lfc.hitTest((pfc[1].x + pfc[2].x) / 2, (pfc[1].y + pfc[2].y) / 2 + 50) === null);
+
+    const Lkp = new DrawLayer(host);
+    const dkp = Lkp.add('kpattern', [{ time: host.bars[15].time, price: 105 }]);
+    const pkp = Lkp.pixelPts(dkp)[0];
+    t('K线形态：迷你K线区内能命中，下方不命中',
+      !!Lkp.hitTest(pkp.x + 12, pkp.y - KPATTERN_H / 2) &&
+      Lkp.hitTest(pkp.x + 12, pkp.y + 40) === null);
+
+    const Lsc = new DrawLayer(host);
+    const dsc = Lsc.add('simcandle', [
+      { time: host.bars[10].time, price: 100 },
+      { time: host.bars[24].time, price: 108 },
+    ]);
+    const psc = Lsc.pixelPts(dsc);
+    t('模拟K线：K线区间内能命中，区间外不命中',
+      !!Lsc.hitTest((psc[0].x + psc[1].x) / 2, (psc[0].y + psc[1].y) / 2) &&
+      Lsc.hitTest((psc[0].x + psc[1].x) / 2 + 300, (psc[0].y + psc[1].y) / 2) === null);
+
+    const Lfn = new DrawLayer(host);
+    const dfn = Lfn.add('fan', [
+      { time: host.bars[10].time, price: 100 },
+      { time: host.bars[30].time, price: 110 },
+    ]);
+    const pfn = Lfn.pixelPts(dfn);
+    t('扇形：0° 基线方向射线能命中，垂直偏移远处不命中',
+      !!Lfn.hitTest(pfn[0].x + (pfn[1].x - pfn[0].x) * 0.5, pfn[0].y + (pfn[1].y - pfn[0].y) * 0.5) &&
+      Lfn.hitTest(pfn[0].x + (pfn[1].x - pfn[0].x) * 0.5, pfn[0].y + (pfn[1].y - pfn[0].y) * 0.5 + 40) === null);
+
+    const Lav = new DrawLayer(host);
+    const dav = Lav.add('avwap', [{ time: host.bars[10].time, price: 105 }]);
+    const iav = host.indexAtTime(dav.pts[0].time);
+    const vav = vwapSeries(host.bars, iav);
+    t('锚定VWAP：曲线上（锚点处）能命中，曲线上方远处不命中',
+      !!Lav.hitTest(host.xCenter(iav), host.yOf(vav[0])) &&
+      Lav.hitTest(host.xCenter(iav), host.yOf(vav[0]) - 80) === null);
+
+    const Lvp = new DrawLayer(host);
+    const dvp = Lvp.add('vprofile', [
+      { time: host.bars[10].time, price: 98 },
+      { time: host.bars[34].time, price: 112 },
+    ]);
+    const pvp = Lvp.pixelPts(dvp);
+    t('成交量分布图：框内能命中，框外不命中',
+      !!Lvp.hitTest((pvp[0].x + pvp[1].x) / 2, (pvp[0].y + pvp[1].y) / 2) &&
+      Lvp.hitTest((pvp[0].x + pvp[1].x) / 2, Math.max(pvp[0].y, pvp[1].y) + 30) === null);
+
+    const Lap = new DrawLayer(host);
+    const dap = Lap.add('avprofile', [{ time: host.bars[10].time, price: 105 }]);
+    const pap = Lap.pixelPts(dap)[0];
+    let amn = Infinity;
+    let amx = -Infinity;
+    for (let i = 10; i < host.bars.length; i++) {
+      if (host.bars[i].low < amn) amn = host.bars[i].low;
+      if (host.bars[i].high > amx) amx = host.bars[i].high;
+    }
+    t('锚定成交量分布图：区间内能命中，锚点左侧不命中',
+      !!Lap.hitTest(pap.x + VP_WIDTH / 2, host.yOf((amn + amx) / 2)) &&
+      Lap.hitTest(Math.max(4, pap.x - 60), host.yOf((amn + amx) / 2)) === null);
+
+    const Lpr = new DrawLayer(host);
+    const dpr = Lpr.add('prange', [
+      { time: host.bars[12].time, price: 100 },
+      { time: host.bars[12].time, price: 112 },
+    ]);
+    const ppr = Lpr.pixelPts(dpr);
+    t('价格范围：竖线中点与端帽能命中，右侧远处不命中',
+      !!Lpr.hitTest(ppr[0].x, (ppr[0].y + ppr[1].y) / 2) &&
+      !!Lpr.hitTest(ppr[0].x + 5, ppr[0].y) &&
+      Lpr.hitTest(ppr[0].x + 40, (ppr[0].y + ppr[1].y) / 2) === null);
+
+    const Ldr = new DrawLayer(host);
+    const ddr = Ldr.add('drange', [
+      { time: host.bars[10].time, price: 105 },
+      { time: host.bars[30].time, price: 105 },
+    ]);
+    const pdr = Ldr.pixelPts(ddr);
+    t('日期范围：横线中点与端帽能命中，下方远处不命中',
+      !!Ldr.hitTest((pdr[0].x + pdr[1].x) / 2, pdr[0].y) &&
+      !!Ldr.hitTest(pdr[0].x, pdr[0].y - 5) &&
+      Ldr.hitTest((pdr[0].x + pdr[1].x) / 2, pdr[0].y + 40) === null);
+
+    const Ldp = new DrawLayer(host);
+    const ddp = Ldp.add('dprange', [
+      { time: host.bars[10].time, price: 100 },
+      { time: host.bars[30].time, price: 112 },
+    ]);
+    const pdp = Ldp.pixelPts(ddp);
+    t('日期和价格范围：框内与边框能命中，框外不命中',
+      !!Ldp.hitTest((pdp[0].x + pdp[1].x) / 2, (pdp[0].y + pdp[1].y) / 2) &&
+      !!Ldp.hitTest((pdp[0].x + pdp[1].x) / 2, pdp[0].y) &&
+      Ldp.hitTest((pdp[0].x + pdp[1].x) / 2, Math.max(pdp[0].y, pdp[1].y) + 30) === null);
+
+    t('几何：vwapSeries 首值 = 首 bar 典型价；volumeProfile 总量守恒且 POC 为最大箱',
+      near(vwapSeries(host.bars, 5)[0], (host.bars[5].high + host.bars[5].low + host.bars[5].close) / 3, 1e-9) &&
+      (() => {
+        const vp = volumeProfile(host.bars, 0, 59, 24, host.scale.min, host.scale.max);
+        const total = host.bars.reduce((s, b) => s + b.volume, 0);
+        return Math.abs(vp.vol.reduce((s, v) => s + v, 0) - total) < 1e-9 &&
+          vp.vol[vp.poc] === Math.max(...vp.vol);
+      })());
   }
 
   log('绘图层自检：' + pass + ' PASS / ' + fail + ' FAIL');

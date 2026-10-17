@@ -18,6 +18,9 @@ import {
   XABCD_ICON, SHARK_ICON, HS_ICON, ABCD_ICON, TRIPAT_ICON, DRV3_ICON,
   EW_IMP_ICON, EW_CORR_ICON, EW_TRI_ICON, EW_WXY_ICON, EW_WXYZ_ICON,
   CYCLE_ICON, TIMECYC_ICON, SINE_ICON,
+  LONGPOS_ICON, SHORTPOS_ICON, FORECAST_ICON, KPATTERN_ICON, SIMCANDLE_ICON,
+  FAN_ICON, AVWAP_ICON, VPROFILE_ICON, AVPROFILE_ICON,
+  PRANGE_ICON, DRANGE_ICON, DPRANGE_ICON,
 } from './sidebar-icons';
 
 /* ------------------------------------------------------------------ 工具 */
@@ -222,7 +225,26 @@ const SECTIONS: Section[] = [
         ['正弦线', SINE_ICON],
       ] },
     ] },
-    { icon: LONG_POS, caret: CARET, label: '多头仓位', items: [['多头仓位', LONG_POS], ['空头仓位', LONG_POS]] },
+    { icon: LONG_POS, caret: CARET, label: '多头仓位', groups: [
+      { label: '预测', items: [
+        ['多头仓位', LONGPOS_ICON],
+        ['空头仓位', SHORTPOS_ICON],
+        ['仓位预测', FORECAST_ICON],
+        ['K线形态', KPATTERN_ICON],
+        ['模拟K线', SIMCANDLE_ICON],
+        ['扇形', FAN_ICON],
+      ] },
+      { label: '基于成交量', items: [
+        ['锚定VWAP', AVWAP_ICON],
+        ['固定范围成交量分布图', VPROFILE_ICON],
+        ['锚定成交量分布图', AVPROFILE_ICON],
+      ] },
+      { label: '测量', items: [
+        ['价格范围', PRANGE_ICON],
+        ['日期范围', DRANGE_ICON],
+        ['日期和价格范围', DPRANGE_ICON],
+      ] },
+    ] },
     { icon: BRUSH, caret: CARET, label: '笔刷', items: [['笔刷', BRUSH], ['荧光笔', BRUSH], ['路径', BRUSH]] },
     { icon: TEXT, caret: CARET, label: '文字', items: [['文字', TEXT], ['椭圆', TEXT], ['便签', TEXT], ['价格标签', TEXT], ['日期范围', TEXT]] },
   ]},

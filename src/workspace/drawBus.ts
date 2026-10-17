@@ -153,6 +153,31 @@ export function toolKeyForLabel(label: string): string | null {
       return 'timecycle';
     case '正弦线':
       return 'sine';
+    // —— 设计稿「预测/基于成交量/测量」子菜单（多头仓位按钮） ——
+    case '多头仓位':
+      return 'longpos';
+    case '空头仓位':
+      return 'shortpos';
+    case '仓位预测':
+      return 'forecast';
+    case 'K线形态':
+      return 'kpattern';
+    case '模拟K线':
+      return 'simcandle';
+    case '扇形':
+      return 'fan';
+    case '锚定VWAP':
+      return 'avwap';
+    case '固定范围成交量分布图':
+      return 'vprofile';
+    case '锚定成交量分布图':
+      return 'avprofile';
+    case '价格范围':
+      return 'prange';
+    case '日期范围':
+      return 'drange';
+    case '日期和价格范围':
+      return 'dprange';
     case '文字':
       return 'text';
     case '测量':

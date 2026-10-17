@@ -303,14 +303,16 @@ describe('2.8 几何纯函数与回归', () => {
     expect(L.drawings.length).toBe(1);
     expect(L.drawings[0].pts.length).toBe(2);
   });
-  it('工具表：9 → 48 种，新工具的锚点数与快捷键就位', () => {
-    expect(DRAW_TOOLS.length).toBe(48);
+  it('工具表：9 → 60 种，新工具的锚点数与快捷键就位', () => {
+    expect(DRAW_TOOLS.length).toBe(60);
     const want: Record<string, number> = {
       hray: 1, extline: 2, arrow: 2, ellipse: 2, triangle: 3, channel: 3,
       dot: 1, highlight: 0, eraser: 0, infoline: 2, angle: 2, crossline: 1,
       xabcd: 5, shark: 5, hs: 5, abcd: 4, tri: 5, threedrives: 6,
       ewimpulse: 6, ewcorrection: 4, ewtriangle: 5, ewdouble: 4, ewtriple: 5,
       cycle: 2, timecycle: 2, sine: 2,
+      longpos: 2, shortpos: 2, forecast: 3, kpattern: 1, simcandle: 2, fan: 2,
+      avwap: 1, vprofile: 2, avprofile: 1, prange: 2, drange: 2, dprange: 2,
     };
     for (const [key, points] of Object.entries(want)) {
       expect(DRAW_TOOLS.find((t) => t.key === key)?.points === points).toBe(true);
@@ -958,5 +960,260 @@ describe('设计稿「图表形态」组：14 种工具 × 四判据（数据驱
     expect(L.drawings.length).toBe(1);
     expect(L.drawings[0].pts.length).toBe(5);
     expect(L.tool).toBe('cursor');
+  });
+});
+
+/* ===========================================================================
+ * 设计稿「预测/基于成交量/测量」子菜单（多头仓位按钮）：12 种新工具 × 四判据
+ * 数据驱动：多锚点工具走通用四判据；单点工具（kpattern/avwap/avprofile）单独 describe。
+ * ========================================================================= */
+
+import {
+  POS_RR, KPATTERN_H, VP_WIDTH, vwapSeries, volumeProfile,
+  kpatternCandles, simCandlePx, CANDLE_PATTERN, FAN_DEG, SIM_CANDLES, VP_BINS,
+} from '../src/engine/draw';
+
+interface PosSpec {
+  key: string;
+  pts: { time: number; price: number }[];
+  inside: (L: DrawLayer, d: Drawing) => { x: number; y: number };
+  outside: (L: DrawLayer, d: Drawing) => { x: number; y: number };
+  minStrokes: number;
+}
+
+const POS_SPECS: PosSpec[] = [
+  {
+    key: 'longpos',
+    pts: [anchor(10, 104), anchor(30, 100)],
+    // 目标价 = 104 + 4×2 = 112，目标箱中部
+    inside: (L, d) => ({ x: (px(10) + px(30)) / 2, y: L.host.yOf(104 + (104 - 100) * POS_RR * 0.5) }),
+    outside: (L, d) => ({ x: (px(10) + px(30)) / 2, y: L.host.yOf(95) }),
+    minStrokes: 4,
+  },
+  {
+    key: 'shortpos',
+    pts: [anchor(10, 100), anchor(30, 104)],
+    inside: (L, d) => ({ x: (px(10) + px(30)) / 2, y: L.host.yOf(100 - 4 * POS_RR * 0.5) }),
+    outside: (L, d) => ({ x: (px(10) + px(30)) / 2, y: L.host.yOf(109) }),
+    minStrokes: 4,
+  },
+  {
+    key: 'forecast',
+    pts: [anchor(8, 100), anchor(20, 108), anchor(34, 104)],
+    inside: (L, d) => {
+      const p = L.pixelPts(d);
+      return { x: (p[1].x + p[2].x) / 2, y: (p[1].y + p[2].y) / 2 };
+    },
+    outside: (L, d) => {
+      const p = L.pixelPts(d);
+      return { x: (p[1].x + p[2].x) / 2, y: (p[1].y + p[2].y) / 2 + 50 };
+    },
+    minStrokes: 3,
+  },
+  {
+    key: 'simcandle',
+    pts: [anchor(10, 100), anchor(24, 108)],
+    inside: (L, d) => {
+      const p = L.pixelPts(d);
+      return { x: (p[0].x + p[1].x) / 2, y: (p[0].y + p[1].y) / 2 };
+    },
+    outside: (L, d) => {
+      const p = L.pixelPts(d);
+      return { x: (p[0].x + p[1].x) / 2, y: (p[0].y + p[1].y) / 2 + 90 };
+    },
+    minStrokes: SIM_CANDLES,
+  },
+  {
+    key: 'fan',
+    pts: [anchor(10, 100), anchor(30, 110)],
+    // 0° 基线方向射线上的点
+    inside: (L, d) => {
+      const p = L.pixelPts(d);
+      return { x: p[0].x + (p[1].x - p[0].x) * 0.5, y: p[0].y + (p[1].y - p[0].y) * 0.5 };
+    },
+    outside: (L, d) => {
+      const p = L.pixelPts(d);
+      // 中点 + 垂直偏移 40px：±45°/0° 三条射线都够不到
+      return { x: p[0].x + (p[1].x - p[0].x) * 0.5, y: p[0].y + (p[1].y - p[0].y) * 0.5 + 40 };
+    },
+    minStrokes: FAN_DEG.length + 1,
+  },
+  {
+    key: 'vprofile',
+    pts: [anchor(10, 98), anchor(34, 112)],
+    inside: (L, d) => {
+      const p = L.pixelPts(d);
+      return { x: (p[0].x + p[1].x) / 2, y: (p[0].y + p[1].y) / 2 };
+    },
+    outside: (L, d) => {
+      const p = L.pixelPts(d);
+      return { x: (p[0].x + p[1].x) / 2, y: Math.max(p[0].y, p[1].y) + 30 };
+    },
+    minStrokes: 2,
+  },
+  {
+    key: 'prange',
+    pts: [anchor(12, 100), anchor(12, 112)],
+    inside: (L, d) => {
+      const p = L.pixelPts(d);
+      return { x: p[0].x, y: (p[0].y + p[1].y) / 2 };
+    },
+    outside: (L, d) => {
+      const p = L.pixelPts(d);
+      return { x: p[0].x + 40, y: (p[0].y + p[1].y) / 2 };
+    },
+    minStrokes: 3,
+  },
+  {
+    key: 'drange',
+    pts: [anchor(10, 105), anchor(30, 105)],
+    inside: (L, d) => {
+      const p = L.pixelPts(d);
+      return { x: (p[0].x + p[1].x) / 2, y: p[0].y };
+    },
+    outside: (L, d) => {
+      const p = L.pixelPts(d);
+      return { x: (p[0].x + p[1].x) / 2, y: p[0].y + 40 };
+    },
+    minStrokes: 3,
+  },
+  {
+    key: 'dprange',
+    pts: [anchor(10, 100), anchor(30, 112)],
+    inside: (L, d) => {
+      const p = L.pixelPts(d);
+      return { x: (p[0].x + p[1].x) / 2, y: (p[0].y + p[1].y) / 2 };
+    },
+    outside: (L, d) => {
+      const p = L.pixelPts(d);
+      return { x: (p[0].x + p[1].x) / 2, y: Math.max(p[0].y, p[1].y) + 30 };
+    },
+    minStrokes: 3,
+  },
+];
+
+describe('设计稿「预测/成交量/测量」组：多锚点工具 × 四判据（数据驱动）', () => {
+  for (const spec of POS_SPECS) {
+    describe(spec.key, () => {
+      const { L, d } = draw(spec.key, spec.pts);
+
+      it(`① 画法：render 不抛错且 stroke ≥ ${spec.minStrokes}`, () => {
+        const { ctx, ops } = makeCtx();
+        expect(() => L.render(ctx)).not.toThrow();
+        expect(ops.stroke).toBeGreaterThanOrEqual(spec.minStrokes);
+      });
+      it('② 命中：图形上的点能命中', () => {
+        const pt = spec.inside(L, d);
+        const hit = L.hitTest(pt.x, pt.y);
+        expect(hit && hit.d.id === d.id).toBe(true);
+      });
+      it('③ 命中外：图形外的点不命中', () => {
+        const pt = spec.outside(L, d);
+        expect(L.hitTest(pt.x, pt.y)).toBeNull();
+      });
+      it('④ 手柄+撤销：拖 0 号手柄只动 p0，undo×2 退回 / redo 复原', () => {
+        const p0px = L.pixelPts(d)[0];
+        L.select(d.id);
+        expect(L.hitTest(p0px.x, p0px.y)!.part).toBe(0);
+        const orig1 = { ...d.pts[1] };
+        L.onDown(p0px.x, p0px.y);
+        L.onMove(p0px.x + 40, p0px.y + 20);
+        L.onUp();
+        expect(d.pts[1].time).toBe(orig1.time);
+        expect(d.pts[1].price).toBeCloseTo(orig1.price, 9);
+        const movedTime = L.find(d.id)!.pts[0].time;
+        expect(movedTime).not.toBe(spec.pts[0].time);
+        L.undo(); // 退回拖拽
+        expect(L.find(d.id)!.pts[0].time).toBe(spec.pts[0].time);
+        L.undo(); // 移除图形
+        expect(L.drawings.length).toBe(0);
+        L.redo();
+        expect(L.drawings.length).toBe(1);
+      });
+    });
+  }
+});
+
+/* —— 单点工具：kpattern / avwap / avprofile —— */
+
+describe('预测组单点工具：K线形态 kpattern', () => {
+  const { L, d } = draw('kpattern', [anchor(15, 105)]);
+  const p = L.pixelPts(d)[0];
+  const cs = kpatternCandles(p.x, p.y);
+
+  it('画法：render 不抛错，3 根迷你K线 = 3 影线 + 3 实体', () => {
+    const { ctx, ops } = makeCtx();
+    expect(() => L.render(ctx)).not.toThrow();
+    expect(ops.stroke).toBeGreaterThanOrEqual(4); // 基线 + 3 影线
+    expect(cs.length).toBe(CANDLE_PATTERN.length);
+  });
+  it('命中：迷你K线区内命中，下方不命中', () => {
+    const last = cs[cs.length - 1];
+    expect(L.hitTest(p.x + 10, p.y - KPATTERN_H / 2) && L.hitTest(p.x + 10, p.y - KPATTERN_H / 2)!.d.id === d.id).toBe(true);
+    expect(L.hitTest(last.x + last.w + 30, p.y)).toBeNull();
+  });
+  it('手柄 + 撤销：唯一锚点即手柄；undo 退回 / redo 复原', () => {
+    L.select(d.id);
+    expect(L.hitTest(p.x, p.y)!.part).toBe(0);
+    L.onDown(p.x, p.y);
+    L.onMove(p.x + 30, p.y - 40);
+    L.onUp();
+    expect(d.pts[0].price).not.toBe(105);
+    L.undo();
+    expect(L.find(d.id)!.pts[0].price).toBe(105);
+    L.redo();
+    expect(L.find(d.id)!.pts[0].price).not.toBe(105);
+  });
+});
+
+describe('成交量组单点工具：锚定VWAP avwap / 锚定成交量分布图 avprofile', () => {
+  it('vwapSeries：首值 = 首 bar 典型价；全长与从半程起算不同', () => {
+    const s0 = vwapSeries(HOST.bars, 0);
+    const tp0 = (HOST.bars[0].high + HOST.bars[0].low + HOST.bars[0].close) / 3;
+    expect(s0[0]).toBeCloseTo(tp0, 9);
+    const sHalf = vwapSeries(HOST.bars, 30);
+    expect(sHalf.length).toBe(30);
+  });
+  it('volumeProfile：总量守恒、POC 为最大箱、边界外量滑入边箱', () => {
+    const total = HOST.bars.reduce((s, b) => s + b.volume, 0);
+    const vp = volumeProfile(HOST.bars, 0, HOST.bars.length - 1, VP_BINS, HOST.scale.min, HOST.scale.max);
+    expect(vp.vol.reduce((s, v) => s + v, 0)).toBeCloseTo(total, 9);
+    expect(vp.vol[vp.poc]).toBe(Math.max(...vp.vol));
+    const clipped = volumeProfile(HOST.bars, 0, 10, 8, 50, 60); // 价格远超范围也应收敛
+    expect(clipped.vol.reduce((s, v) => s + v, 0)).toBeCloseTo(HOST.bars.slice(0, 11).reduce((s, b) => s + b.volume, 0), 9);
+  });
+  it('avwap：锚点处曲线命中，上方远处不命中；undo/redo 往返', () => {
+    const L = new DrawLayer(HOST);
+    const d = L.add('avwap', [anchor(10, 105)]);
+    const i0 = HOST.indexAtTime(d.pts[0].time);
+    const series = vwapSeries(HOST.bars, i0);
+    const hit = L.hitTest(HOST.xCenter(i0), HOST.yOf(series[0]));
+    expect(hit && hit.d.id === d.id).toBe(true);
+    expect(L.hitTest(HOST.xCenter(i0), HOST.yOf(series[0]) - 80)).toBeNull();
+    const n = L.drawings.length;
+    L.undo();
+    expect(L.drawings.length).toBe(n - 1);
+    L.redo();
+    expect(L.drawings.length).toBe(n);
+  });
+  it('avprofile：直方图区内命中，锚点左侧不命中', () => {
+    const L = new DrawLayer(HOST);
+    const d = L.add('avprofile', [anchor(10, 105)]);
+    const p0 = L.pixelPts(d)[0];
+    const hi = Math.max(...HOST.bars.slice(10).map((b) => b.high));
+    const lo = Math.min(...HOST.bars.slice(10).map((b) => b.low));
+    const hit = L.hitTest(p0.x + VP_WIDTH / 2, HOST.yOf((hi + lo) / 2));
+    expect(hit && hit.d.id === d.id).toBe(true);
+    expect(L.hitTest(Math.max(4, p0.x - 60), HOST.yOf((hi + lo) / 2))).toBeNull();
+  });
+  it('simCandlePx：n 根、首根开在 ay、单调推进（屏幕 y 向下则收盘可上可下）', () => {
+    const cs = simCandlePx(100, 200, 300, 160);
+    expect(cs.length).toBe(SIM_CANDLES);
+    expect(cs[0].o).toBe(200);
+    expect(cs[cs.length - 1].x).toBeLessThan(300);
+    for (const k of cs) {
+      expect(k.h).toBeLessThanOrEqual(Math.min(k.o, k.c)); // 影线顶不超过实体上缘
+      expect(k.l).toBeGreaterThanOrEqual(Math.max(k.o, k.c));
+    }
   });
 });
