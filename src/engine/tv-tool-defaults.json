@@ -1,0 +1,505 @@
+{
+  "source": {
+    "library": "charting_library/bundles/library.63466897dbd7710a003a.js",
+    "module": 64548,
+    "note": "linetoolXXX 默认属性（color 已按 generateColor 解析成 rgba）"
+  },
+  "tools": {
+    "order": {
+      "color": "#FF0000",
+      "linestyle": "solid"
+    },
+    "position": {
+      "linestyle": "solid"
+    },
+    "execution": {
+      "fontSize": 10
+    },
+    "icon": {
+      "color": "#2962FF"
+    },
+    "emoji": {},
+    "image": {
+      "transparency": 0
+    },
+    "bezierquadro": {
+      "color": "#2962FF",
+      "fillColor": "rgba(41,98,255,0.2)",
+      "linewidth": 1,
+      "linestyle": "solid",
+      "transparency": 50,
+      "fillBackground": false
+    },
+    "beziercubic": {
+      "color": "#673ab7",
+      "fillColor": "rgba(103,58,183,0.2)",
+      "linewidth": 1,
+      "linestyle": "solid",
+      "transparency": 80,
+      "fillBackground": false
+    },
+    "trendline": {
+      "color": "#2962FF",
+      "linewidth": 2,
+      "linestyle": "solid",
+      "fontSize": 14
+    },
+    "infoline": {
+      "color": "#2962FF",
+      "linewidth": 2,
+      "linestyle": "solid",
+      "fontSize": 14
+    },
+    "timecycles": {
+      "color": "#159980",
+      "fillColor": "rgba(106, 168, 79, 0.5)",
+      "linewidth": 1,
+      "linestyle": "solid",
+      "transparency": 50,
+      "fillBackground": true
+    },
+    "sineline": {
+      "color": "#159980",
+      "linewidth": 1,
+      "linestyle": "solid"
+    },
+    "trendangle": {
+      "color": "#2962FF",
+      "linewidth": 2,
+      "linestyle": "solid",
+      "fontSize": 12
+    },
+    "disjointangle": {
+      "color": "#089981",
+      "fillColor": "rgba(8,153,129,0.2)",
+      "linewidth": 2,
+      "linestyle": "solid",
+      "transparency": 20,
+      "fillBackground": true,
+      "fontSize": 12
+    },
+    "flatbottom": {
+      "color": "#FF9800",
+      "fillColor": "rgba(255,152,0,0.2)",
+      "linewidth": 2,
+      "linestyle": "solid",
+      "transparency": 20,
+      "fillBackground": true,
+      "fontSize": 12
+    },
+    "fibspiral": {
+      "color": "#00bcd4",
+      "linewidth": 1,
+      "linestyle": "solid"
+    },
+    "riskrewardshort": {
+      "color": "#787B86",
+      "linewidth": 1,
+      "fillBackground": true,
+      "fontSize": 12
+    },
+    "riskrewardlong": {
+      "color": "#787B86",
+      "linewidth": 1,
+      "fillBackground": true,
+      "fontSize": 12
+    },
+    "arrow": {
+      "color": "#2962FF",
+      "linewidth": 2,
+      "linestyle": "solid",
+      "fontSize": 14
+    },
+    "ray": {
+      "color": "#2962FF",
+      "linewidth": 2,
+      "linestyle": "solid",
+      "fontSize": 14
+    },
+    "extended": {
+      "color": "#2962FF",
+      "linewidth": 2,
+      "linestyle": "solid",
+      "fontSize": 14
+    },
+    "horzline": {
+      "color": "#2962FF",
+      "linewidth": 2,
+      "linestyle": "solid",
+      "fontSize": 12
+    },
+    "horzray": {
+      "color": "#2962FF",
+      "linewidth": 2,
+      "linestyle": "solid",
+      "fontSize": 12
+    },
+    "vertline": {
+      "color": "#2962FF",
+      "linewidth": 2,
+      "linestyle": "solid",
+      "fontSize": 14
+    },
+    "crossline": {
+      "color": "#2962FF",
+      "linewidth": 2,
+      "linestyle": "solid"
+    },
+    "circlelines": {
+      "color": "#80ccdb",
+      "linewidth": 1,
+      "linestyle": "solid"
+    },
+    "fibtimezone": {
+      "color": "#0055db",
+      "linewidth": 1,
+      "linestyle": "solid",
+      "transparency": 80,
+      "fillBackground": false,
+      "levels": true
+    },
+    "text": {
+      "color": "#2962FF",
+      "fillColor": "rgba(91, 133, 191, 0.3)",
+      "backgroundTransparency": 70,
+      "fillBackground": false,
+      "fontSize": 14
+    },
+    "textabsolute": {
+      "color": "#2962FF",
+      "fillColor": "rgba(155, 190, 213, 0.3)",
+      "backgroundTransparency": 70,
+      "fillBackground": false,
+      "fontSize": 14
+    },
+    "balloon": {
+      "color": "#ffffff",
+      "fillColor": "rgba(156,39,176,0.7)",
+      "transparency": 30,
+      "fontSize": 14
+    },
+    "comment": {
+      "color": "#ffffff",
+      "fillColor": "#2962FF",
+      "transparency": 0,
+      "fontSize": 16
+    },
+    "brush": {
+      "color": "#00bcd4",
+      "fillColor": "#00bcd4",
+      "linewidth": 1,
+      "linestyle": "solid",
+      "transparency": 50,
+      "fillBackground": false,
+      "smooth": 5
+    },
+    "highlighter": {
+      "color": "rgba(242,54,69,0.2)",
+      "transparency": 80,
+      "smooth": 5
+    },
+    "polyline": {
+      "color": "#00bcd4",
+      "fillColor": "rgba(0,188,212,0.2)",
+      "linewidth": 1,
+      "linestyle": "solid",
+      "transparency": 80,
+      "fillBackground": true
+    },
+    "signpost": {
+      "color": "#2962FF",
+      "fontSize": 12
+    },
+    "path": {
+      "color": "#2962FF",
+      "linewidth": 2,
+      "linestyle": "solid"
+    },
+    "arrowmarkleft": {
+      "color": "#2962FF",
+      "fontSize": 14
+    },
+    "arrowmarkup": {
+      "color": "#089981",
+      "fontSize": 14
+    },
+    "arrowmarkright": {
+      "color": "#2962FF",
+      "fontSize": 14
+    },
+    "arrowmarkdown": {
+      "color": "#CC2F3C",
+      "fontSize": 14
+    },
+    "flagmark": {},
+    "note": {
+      "fillColor": "rgba(41,98,255,0.7)",
+      "backgroundTransparency": 0,
+      "fontSize": 14
+    },
+    "noteabsolute": {
+      "fillColor": "rgba(41,98,255,0.7)",
+      "backgroundTransparency": 0,
+      "fontSize": 14
+    },
+    "pricelabel": {
+      "color": "#ffffff",
+      "fillColor": "#2962FF",
+      "transparency": 0,
+      "fontSize": 14
+    },
+    "pricenote": {
+      "color": "#2962FF",
+      "fontSize": 14
+    },
+    "arrowmarker": {
+      "fillColor": "#1E53E5",
+      "fontSize": 16
+    },
+    "rectangle": {
+      "color": "#9c27b0",
+      "fillColor": "rgba(156,39,176,0.2)",
+      "linewidth": 1,
+      "transparency": 50,
+      "fillBackground": true,
+      "fontSize": 14
+    },
+    "rotatedrectangle": {
+      "color": "#4caf50",
+      "fillColor": "rgba(76,175,80,0.2)",
+      "linewidth": 1,
+      "transparency": 50,
+      "fillBackground": true
+    },
+    "circle": {
+      "color": "#FF9800",
+      "fillColor": "rgba(255,152,0,0.2)",
+      "linewidth": 1,
+      "fillBackground": true,
+      "fontSize": 14
+    },
+    "ellipse": {
+      "color": "#F23645",
+      "fillColor": "rgba(242,54,69,0.2)",
+      "linewidth": 1,
+      "transparency": 50,
+      "fillBackground": true,
+      "fontSize": 14
+    },
+    "arc": {
+      "color": "#e91e63",
+      "fillColor": "rgba(233,30,99,0.2)",
+      "linewidth": 1,
+      "transparency": 80,
+      "fillBackground": true
+    },
+    "prediction": {
+      "color": "#2962FF",
+      "linewidth": 1,
+      "transparency": 10
+    },
+    "triangle": {
+      "color": "#089981",
+      "fillColor": "rgba(8,153,129,0.2)",
+      "linewidth": 1,
+      "transparency": 80,
+      "fillBackground": true
+    },
+    "callout": {
+      "color": "#ffffff",
+      "fillColor": "rgba(0,151,167,0.7)",
+      "linewidth": 1,
+      "transparency": 50,
+      "fontSize": 14
+    },
+    "parallelchannel": {
+      "color": "#2962FF",
+      "fillColor": "rgba(41,98,255,0.2)",
+      "linewidth": 2,
+      "linestyle": "solid",
+      "transparency": 20,
+      "fillBackground": true
+    },
+    "elliottimpulse": {
+      "color": "#3d85c6",
+      "linewidth": 1
+    },
+    "elliotttriangle": {
+      "color": "#FF9800",
+      "linewidth": 1
+    },
+    "elliotttriplecombo": {
+      "color": "#6aa84f",
+      "linewidth": 1
+    },
+    "elliottcorrection": {
+      "color": "#3d85c6",
+      "linewidth": 1
+    },
+    "elliottdoublecombo": {
+      "color": "#6aa84f",
+      "linewidth": 1
+    },
+    "barspattern": {
+      "color": "#2962FF"
+    },
+    "ghostfeed": {
+      "transparency": 50
+    },
+    "pitchfork": {
+      "transparency": 80,
+      "fillBackground": true,
+      "medianColor": "#F23645",
+      "levels": true
+    },
+    "pitchfan": {
+      "transparency": 80,
+      "fillBackground": true,
+      "medianColor": "#F23645",
+      "levels": true
+    },
+    "gannfan": {
+      "transparency": 80,
+      "fillBackground": true,
+      "levels": true
+    },
+    "ganncomplex": {
+      "fillBackground": false,
+      "levels": true
+    },
+    "gannfixed": {
+      "fillBackground": false,
+      "levels": true
+    },
+    "gannsquare": {
+      "color": "rgba(21, 56, 153, 0.8)",
+      "linewidth": 1,
+      "linestyle": "solid",
+      "levels": true
+    },
+    "fibspeedresistancefan": {
+      "linewidth": 1,
+      "linestyle": "solid",
+      "transparency": 80,
+      "fillBackground": true,
+      "levels": true,
+      "nestedColor": "rgba(21, 56, 153, 0.8)"
+    },
+    "fibretracement": {
+      "transparency": 80,
+      "fillBackground": true,
+      "levels": true,
+      "nestedColor": "#787B86"
+    },
+    "fibchannel": {
+      "transparency": 80,
+      "fillBackground": true,
+      "levels": true
+    },
+    "projection": {
+      "linewidth": 1,
+      "transparency": 80,
+      "fillBackground": true,
+      "levels": true,
+      "nestedColor": "#9598A1"
+    },
+    "5pointspattern": {
+      "color": "#2962FF",
+      "fillColor": "#2962FF",
+      "linewidth": 1,
+      "transparency": 85,
+      "fillBackground": true,
+      "fontSize": 12
+    },
+    "cypherpattern": {
+      "color": "#2962FF",
+      "fillColor": "#2962FF",
+      "linewidth": 1,
+      "transparency": 85,
+      "fillBackground": true,
+      "fontSize": 12
+    },
+    "trianglepattern": {
+      "color": "#673ab7",
+      "fillColor": "#673ab7",
+      "linewidth": 1,
+      "transparency": 85,
+      "fillBackground": true,
+      "fontSize": 12
+    },
+    "abcd": {
+      "color": "#089981",
+      "linewidth": 1,
+      "fontSize": 12
+    },
+    "threedrivers": {
+      "color": "#673ab7",
+      "fillColor": "rgba(149, 40, 204, 0.5)",
+      "linewidth": 1,
+      "transparency": 50,
+      "fillBackground": true,
+      "fontSize": 12
+    },
+    "headandshoulders": {
+      "color": "#089981",
+      "fillColor": "#089981",
+      "linewidth": 1,
+      "transparency": 85,
+      "fillBackground": true,
+      "fontSize": 12
+    },
+    "fibwedge": {
+      "transparency": 80,
+      "fillBackground": true,
+      "levels": true,
+      "nestedColor": "#808080"
+    },
+    "fibcircles": {
+      "transparency": 80,
+      "fillBackground": true,
+      "levels": true,
+      "nestedColor": "#787B86"
+    },
+    "fibspeedresistancearcs": {
+      "transparency": 80,
+      "fillBackground": true,
+      "levels": true,
+      "nestedColor": "#787B86"
+    },
+    "trendbasedfibextension": {
+      "transparency": 80,
+      "fillBackground": true,
+      "levels": true,
+      "nestedColor": "#787B86"
+    },
+    "trendbasedfibtime": {
+      "transparency": 80,
+      "fillBackground": true,
+      "levels": true,
+      "nestedColor": "#787B86"
+    },
+    "schiffpitchfork": {
+      "transparency": 80,
+      "fillBackground": true,
+      "medianColor": "#F23645",
+      "levels": true
+    },
+    "schiffpitchfork2": {
+      "transparency": 80,
+      "fillBackground": true,
+      "medianColor": "#F23645",
+      "levels": true
+    },
+    "insidepitchfork": {
+      "transparency": 80,
+      "fillBackground": true,
+      "medianColor": "#F23645",
+      "levels": true
+    },
+    "regressiontrend": {
+      "linewidth": 1,
+      "linestyle": "solid",
+      "nestedColor": "rgba(41,98,255,0.3)"
+    }
+  }
+}

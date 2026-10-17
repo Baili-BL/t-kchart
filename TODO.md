@@ -53,11 +53,11 @@ Pine 编辑器、权益曲线、统计组件目前**没有对应的 UI 入口**�
 ```
 npm run typecheck                          0 错误（strict）
 npm test (vitest)                          引擎 615 PASS（绘图 39 + Pine 74 + Pine 撮合 69 + 权益 26 + 统计 34 + 回放 27 + 布局目录 346）
-                                           共 599 个 vitest 用例（含 Agent / 工作区 / 数据 / 回放 / 布局 / 指标库 15 / 图表样式 8 / 商品代码 10 / 颜色选择器 5 / paneLayout 10 / 绘图工具扩充 347（含 emoji 选中框 8 + 测量对齐 8 + 笔刷/荧光笔对齐 9）+ 绘图属性工具条 22 + 长按信息卡 9 + 侧栏接线 26 + emoji 数据对齐 17，其中 1 条是与参考库逐字节同步）
+                                           共 615 个 vitest 用例（含 Agent / 工作区 / 数据 / 回放 / 布局 / 指标库 15 / 图表样式 8 / 商品代码 10 / 颜色选择器 5 / paneLayout 10 / 绘图工具扩充 347（含 emoji 选中框 8 + 测量对齐 8 + 笔刷/荧光笔对齐 9）+ 工具默认属性 16（与官方 defaultProperties 逐条核对，其中 1 条是与参考库逐字节同步）+ 绘图属性工具条 22 + 长按信息卡 9 + 侧栏接线 26 + emoji 数据对齐 17，其中 1 条是与参考库逐字节同步）
 浏览器侧（dev 控制台 __app.runBrowserSelfTests()）
                                            图表 76（改造前 48，新增 setRange 回归 1 条 + 图表样式 8 条 + revealSpan 4 条 + 回放 15 条）+ 网格 20（含 55 种布局抽样的像素位置、时间联动）
-                                           + 权益 39（含 2.4 持仓色带像素断言 2 条）+ 统计 50 + 指标 31（含 2.6 窗格拖拽 / 最大化 / 折叠 / 坐标轴 12 条）+ 样式 52 + 绘图 127（2.8 起纳入；含光标组、线组、斐波那契/江恩组 13 种、音叉族 5 种、图表形态/艾略特波浪/循环组 14 种、预测/成交量/测量组 12 种（测量含官方配色 / 中线箭头 / 三行卡片 / 轴标签 6 条）、笔刷/箭头/形状组 16 种（笔刷/荧光笔含官方默认色与线宽、平滑算法、端点圆点）、文本标注组 7 种、emoji 标注（含选中框四角手柄与拖角改字号）、浮动属性工具条（setStyle/setLocked/repeatDraw/clone/selectionToolbarAnchor）与 setAllLocked 全锁断言）
-E2E（puppeteer 驱动 headless Chrome，未入库）  布局 13 + 指标 36 + 样式 38 + 商品代码搜索 28 + 测量对齐 13 + 笔刷/荧光笔对齐 13 PASS / 0 FAIL（早先的整页 E2E 79 条已随脚本被覆盖，未重跑）
+                                           + 权益 39（含 2.4 持仓色带像素断言 2 条）+ 统计 50 + 指标 31（含 2.6 窗格拖拽 / 最大化 / 折叠 / 坐标轴 12 条）+ 样式 52 + 绘图 129（2.8 起纳入；含光标组、线组、斐波那契/江恩组 13 种、音叉族 5 种、图表形态/艾略特波浪/循环组 14 种、预测/成交量/测量组 12 种（测量含官方配色 / 中线箭头 / 三行卡片 / 轴标签 6 条）、笔刷/箭头/形状组 16 种（笔刷/荧光笔含官方默认色与线宽、平滑算法、端点圆点）、各工具默认样式（矩形紫 / 圆橙 / 三角绿 / 趋势线 2px）、文本标注组 7 种、emoji 标注（含选中框四角手柄与拖角改字号）、浮动属性工具条（setStyle/setLocked/repeatDraw/clone/selectionToolbarAnchor）与 setAllLocked 全锁断言）
+E2E（puppeteer 驱动 headless Chrome，未入库）  布局 13 + 指标 36 + 样式 38 + 商品代码搜索 28 + 测量对齐 13 + 笔刷/荧光笔对齐 13 + 工具默认样式 8 PASS / 0 FAIL（早先的整页 E2E 79 条已随脚本被覆盖，未重跑）
                                            近期功能 E2E：自选 15 + 告警 23 + 设置 20 + 交易 25 + 交易复刻 13 + 颜色选择器 13 + 副图窗格 8 + 右栏布局 13 + 绘图子菜单 23/26/26 + emoji 面板 14 + emoji 数据对齐 41 + emoji 选中框 20 + 测量对齐 13 + 笔刷/荧光笔对齐 13 + 绘图属性工具条 30 + 长按信息卡 6 + 对齐 charting_library 143 + 侧栏动作 17 PASS / 0 FAIL
 ```
 
@@ -536,6 +536,43 @@ E2E（puppeteer 驱动 headless Chrome，未入库）  布局 13 + 指标 36 + �
 > 真鼠标 E2E「笔刷/荧光笔对齐」**13 PASS / 0 FAIL**（菜单行 → 落笔类型 → 20% 红 → 法线 6px 内 14px 外 →
 > 端点白点与蓝环 → 笔刷青蓝 1px → 波浪平滑笔迹）；
 > 截图 `docs/shot-brush-align.png`（两种笔迹同框）/ `docs/shot-brush-anchor.png`（选中端点圆点）。
+
+> **各工具默认属性对齐（2026-10-17，用户给了一张 cn.tradingview.com 的图表链接）**：
+> 链接 `https://cn.tradingview.com/chart/obmoJwJQ/` 匿名访问是 **403 + Chart Not Found**
+> （`/api/v1/charts/obmoJwJQ/` 返回 `null`，真 Chrome 打开也是同一句「无法打开此图表布局」），
+> 所以看不到那张图的布局；改从**同一份引擎**的默认属性表核对。
+>
+> **官方依据**：`charting_library/bundles/library.*.js` 的 webpack **模块 64548** ——
+> 模块头先把颜色绑到单字母变量（`L = r("color-tv-blue-500")`、`K = color-ripe-red-500`、
+> `te = grapes-purple-500`、`Pe = cold-gray-500`…，`n(x, 80)` 即 `generateColor` = 20% 透明），
+> 随后是 `TradingView.defaultProperties` 里的 **87 个 `linetoolXXX` 块**。
+>
+> **抽法**：`scripts/sync-tv-tool-defaults.mjs` —— 解析模块头的变量表 + 逐块解 `linetoolXXX` 的
+> 标量属性（键名并不统一：`color` / `linecolor` / `lineColor`、`backgroundColor`、`fontsize` / `fontSize`），
+> 生成 `src/engine/tv-tool-defaults.json`（87 条，`--check` 逐字节校对）。
+> 音叉族的主色在嵌套 `median`、斐波那契/江恩是逐 level 给色（`levels: true`），都按原样记下来。
+>
+> **最要紧的一条**：官方**不是「所有工具一个蓝色」**，形状各有专属色 ——
+> 矩形紫 `#9c27b0`、圆橙 `#FF9800`、椭圆红 `#F23645`、三角/头肩/ABCD 绿 `#089981`、
+> 三驱/三角形态深紫 `#673ab7`、旋转矩形 `#4caf50`、弧形 `#e91e63`、斐波那契灰 `#787B86`、
+> 音叉/江恩红 `#F23645`；线条类统一 `#2962FF` 但**线宽是 2px**（我们原来是 1.6px）。
+>
+> **跟着改的**：`TV_TOOL_KEY`（我们的 66 个 key → 官方名）+ `tvToolStyle()` +
+> `styleForTool()` 接上官方默认值（显式 patch 仍优先）；新增三条分支：
+> 官方 `fillBackground: false` → 填充转 `transparent`、`linestyle` → dash、`fontSize` → 字号。
+> 顺手修掉一个真 bug：**两点形状落笔走的是 `drawStyle()` 而不是 `styleForTool()`**，
+> 所以就算默认表接上了，画出来的矩形仍是老蓝色（现在两条落笔路径统一）。
+>
+> **断言**：`tests/toolDefaults.test.ts` 16 条（快照 87 条 / 关键色与线宽逐条钉死 /
+> 映射表每个官方名必须真实存在 / patch 优先 / 与参考库逐字节同步）；
+> vitest 599 → **615**；浏览器自检 draw 127 → **129**；真鼠标 E2E「工具默认样式」**8 PASS / 0 FAIL**
+> （矩形紫 20% 底 → 圆橙 → 三角绿 → 趋势线 2px 蓝 + 两处像素抽查）；
+> 回归 测量 13 / 笔刷 13 / emoji 选中框 20 全绿。截图 `docs/shot-tool-defaults.png`。
+>
+> **诚实边界**：① 只接了「有确定对应关系」的 66 个工具，`dot` / `curve` / `hyperbola` /
+> `tiltfan` / `xabcd` 官方没有同名工具，仍走蓝色默认；② 快照只取标量与嵌套主色，
+> 斐波那契各 level 的颜色仍由我们的 `FIB_LEVELS` 管；③ 官方 `transparency` 我们只在
+> 填充色缺失时用作兜底（`backgroundColor` 里已经带了 alpha）。
 
 
 | 2.9 | 布局存档（localStorage / 服务端） | ⬜ | 小 | 存/读往返一致，含视口、通道开关、绘图、联动开关 |

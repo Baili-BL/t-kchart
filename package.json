@@ -11,7 +11,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "sync:emoji": "node scripts/sync-tv-emoji.mjs",
-    "check:emoji": "node scripts/sync-tv-emoji.mjs --check"
+    "check:emoji": "node scripts/sync-tv-emoji.mjs --check",
+    "sync:tool-defaults": "node scripts/sync-tv-tool-defaults.mjs",
+    "check:tool-defaults": "node scripts/sync-tv-tool-defaults.mjs --check"
   },
   "dependencies": {
     "react": "^18.3.1",

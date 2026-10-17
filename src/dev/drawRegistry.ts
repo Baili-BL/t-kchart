@@ -34,6 +34,8 @@ export interface DrawLayerSnapshot {
   sizes: number[];
   /** 每个图形的锚点像素坐标（画布 CSS px，顺序同 types）——E2E 据此算选中框四角 */
   pts: { x: number; y: number }[][];
+  /** 每个图形的样式（颜色 / 线宽 / 填充 / 线型），用来断言「默认值是否与官方一致」 */
+  styles: { color: string; width: number; fill: string; dash: number[] }[];
 }
 
 /** 所有活着的绘图层的快照 */
@@ -47,6 +49,9 @@ export function drawLayerSnapshots(): DrawLayerSnapshot[] {
     texts: l.drawings.filter((d) => d.type === 'emoji' || d.type === 'text').map((d) => d.style.text || ''),
     sizes: l.drawings.filter((d) => d.type === 'emoji' || d.type === 'text').map((d) => d.style.fontSize || 0),
     pts: l.drawings.map((d) => l.pixelPts(d).map((q) => ({ x: Math.round(q.x * 100) / 100, y: Math.round(q.y * 100) / 100 }))),
+    styles: l.drawings.map((d) => ({
+      color: d.style.color, width: d.style.width, fill: d.style.fill, dash: d.style.dash.slice(),
+    })),
   }));
 }
 

@@ -19,6 +19,7 @@
  */
 
 import { Bar, fmtCrossTime, log } from './chart';
+import TV_TOOL_DEFAULTS from './tv-tool-defaults.json';
 
 /* ===========================================================================
  * 1. 类型
@@ -970,9 +971,125 @@ export function strokeHitTol(width: number): number {
   return Math.max(3, Math.ceil(width / 2));
 }
 
+/**
+ * 我们的工具 key → 官方 linetoolXXX（`TradingView.defaultProperties` 的键去掉 linetool 前缀）。
+ * 只收「语义确定」的对应关系；官方没有同义工具的（dot/curve/hyperbola/tiltfan/xabcd…）
+ * 不进表，落回 drawStyle() 的蓝色默认。
+ */
+export const TV_TOOL_KEY: Record<string, string> = {
+  trend: 'trendline',
+  hline: 'horzline',
+  vline: 'vertline',
+  ray: 'ray',
+  hray: 'horzray',
+  extline: 'extended',
+  arrow: 'arrow',
+  rect: 'rectangle',
+  ellipse: 'ellipse',
+  triangle: 'triangle',
+  channel: 'parallelchannel',
+  fib: 'fibretracement',
+  text: 'text',
+  infoline: 'infoline',
+  angle: 'trendangle',
+  crossline: 'crossline',
+  fibext: 'trendbasedfibextension',
+  fibchannel: 'fibchannel',
+  fibtz: 'fibtimezone',
+  fibfan: 'fibspeedresistancefan',
+  fibttz: 'trendbasedfibtime',
+  fibcirc: 'fibcircles',
+  fibspiral: 'fibspiral',
+  fibarc: 'fibspeedresistancearcs',
+  fibwedge: 'fibwedge',
+  gannsqf: 'gannfixed',
+  gannsq: 'gannsquare',
+  hs: 'headandshoulders',
+  abcd: 'abcd',
+  tri: 'trianglepattern',
+  shark: 'cypherpattern',
+  threedrives: 'threedrivers',
+  ewimpulse: 'elliottimpulse',
+  ewcorrection: 'elliottcorrection',
+  ewtriangle: 'elliotttriangle',
+  ewdouble: 'elliottdoublecombo',
+  ewtriple: 'elliotttriplecombo',
+  timecycle: 'timecycles',
+  sine: 'sineline',
+  longpos: 'riskrewardlong',
+  shortpos: 'riskrewardshort',
+  forecast: 'prediction',
+  kpattern: 'barspattern',
+  brush: 'brush',
+  highlight: 'highlighter',
+  arrowmark: 'arrowmarker',
+  uparrow: 'arrowmarkup',
+  downarrow: 'arrowmarkdown',
+  rotrect: 'rotatedrectangle',
+  path: 'path',
+  circle: 'circle',
+  polyline: 'polyline',
+  arc: 'arc',
+  pitchfork: 'pitchfork',
+  schiff: 'schiffpitchfork',
+  schiff2: 'schiffpitchfork2',
+  innerfork: 'insidepitchfork',
+  pitchfan: 'pitchfan',
+  note: 'note',
+  callout: 'callout',
+  comment: 'comment',
+  balloon: 'balloon',
+  pricenote: 'pricenote',
+  pricelabel: 'pricelabel',
+  signpost: 'signpost',
+  circlelines: 'circlelines',
+  beziercubic: 'beziercubic',
+  flatbottom: 'flatbottom',
+  arrowmarl: 'arrowmarkleft',
+  arrowmarr: 'arrowmarkright',
+};
+
+/** 官方虚线口径（LINESTYLE_SOLID/DASHED/DOTTED）→ canvas dash */
+const DASH_OF: Record<string, number[]> = { solid: [], dashed: [8, 5], dotted: [2, 4] };
+
+type TvToolDefault = {
+  color?: string;
+  fillColor?: string;
+  linewidth?: number;
+  linestyle?: string;
+  fillBackground?: boolean;
+  fontSize?: number;
+  medianColor?: string;
+  nestedColor?: string;
+};
+
+const TV_DEFAULTS: Record<string, TvToolDefault> =
+  (TV_TOOL_DEFAULTS as unknown as { tools: Record<string, TvToolDefault> }).tools;
+
+/** 官方默认样式；没有对应工具时返回 null */
+export function tvToolStyle(key: string): Partial<DrawStyle> | null {
+  const name = TV_TOOL_KEY[key];
+  const d = name ? TV_DEFAULTS[name] : undefined;
+  if (!d) return null;
+  const out: Partial<DrawStyle> = {};
+  // 音叉的主色在 median 上、斐波那契/回归在主色在 trendline / styles 里
+  const color = d.color || d.medianColor || d.nestedColor;
+  if (color) out.color = color;
+  if (typeof d.linewidth === 'number') out.width = d.linewidth;
+  if (d.linestyle) out.dash = (DASH_OF[d.linestyle] || []).slice();
+  // 官方的 fill 只由 backgroundColor 决定；fillBackground=false 就是不填
+  if (d.fillBackground === true && d.fillColor) out.fill = d.fillColor;
+  else if (d.fillBackground === false) out.fill = 'transparent';
+  if (typeof d.fontSize === 'number') out.fontSize = d.fontSize;
+  return out;
+}
+
 /** 按工具给默认样式（官方默认属性表）；显式 patch 优先 */
 export function styleForTool(type: string, patch?: Partial<DrawStyle>): DrawStyle {
   const s = drawStyle();
+  const off = tvToolStyle(type);
+  if (off) Object.assign(s, off);
+  // 笔刷/荧光笔的线宽在官方的 PaneView 里另有定值（荧光笔写死 20）
   if (type === 'brush') {
     s.color = BRUSH_COLOR;
     s.width = BRUSH_WIDTH;
@@ -1893,7 +2010,7 @@ export class DrawLayer {
           id: this.nextId++,
           type: this.tool,
           pts: Array.from({ length: def.points }, () => ({ time: a.time, price: a.price })),
-          style: drawStyle(this.tool === 'measure' ? '#787b86' : undefined),
+          style: styleForTool(this.tool, this.tool === 'measure' ? { color: '#787b86' } : undefined),
           locked: false,
           visible: true,
         };
@@ -4162,6 +4279,18 @@ export function drawSelfTest(): DrawTestResult {
     t('测量：按住拖一下就量完（官方手势），松手即成型并回到光标',
       Lmd.drawings.length === 1 && Lmd.drawings[0].type === 'measure' &&
       Lmd.pendingCount() === 0 && Lmd.tool === 'cursor');
+
+    // 官方 defaultProperties（模块 64548）：形状不是一种颜色，线条是 2px
+    const dRect = styleForTool('rect');
+    const dCir = styleForTool('circle');
+    const dTri = styleForTool('triangle');
+    const dTrd = styleForTool('trend');
+    const dFib = styleForTool('fib');
+    t('默认属性对齐官方：矩形紫 #9c27b0 / 圆橙 #FF9800 / 三角绿 #089981',
+      dRect.color === '#9c27b0' && dCir.color === '#FF9800' && dTri.color === '#089981');
+    t('默认属性对齐官方：趋势线 2px 蓝、斐波那契灰、形状 20% 同色底',
+      dTrd.color === '#2962FF' && dTrd.width === 2 && dFib.color === '#787B86' &&
+      dRect.fill === 'rgba(156,39,176,0.2)' && dRect.width === 1);
   }
 
   log('绘图层自检：' + pass + ' PASS / ' + fail + ' FAIL');
