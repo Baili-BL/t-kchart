@@ -266,6 +266,12 @@ export interface ChartHooks {
   /** 在绘图区裁剪内、十字光标之前调用 */
   onDraw?(ctx: CanvasRenderingContext2D): void;
   /**
+   * 在绘图区裁剪内、**十字光标之后**调用 —— 给「要盖在十字线上」的东西用。
+   * 典型就是荧光笔 / 橡皮擦的悬停光晕：官方截图里那层粉色是压在虚线之上的。
+   * 第二个参数是当前指针位置（没指针 = null），免得外部图层自己再记一份、还会记过期。
+   */
+  onOverlay?(ctx: CanvasRenderingContext2D, pointer: { x: number; y: number } | null): void;
+  /**
    * 全部内容（含坐标轴、图例）画完之后调用 —— 给需要落在轴条带上的东西用，
    * 例如测量工具的起止时间 / 价格标签（在 onDraw 里画会被轴色块盖掉）。
    */
@@ -1752,6 +1758,8 @@ export class KChart {
     if (this.hooks && this.hooks.onDraw) this.hooks.onDraw(ctx);   // 外部图层（绘图工具）
     this.drawCrosshairV();
     this.drawCrosshairH();
+    // 十字线之后的外部覆盖层（荧光笔 / 橡皮擦的悬停光晕就压在这层）
+    if (this.hooks && this.hooks.onOverlay) this.hooks.onOverlay(ctx, this.pointer);
     ctx.restore();
 
     this.studyHits = [];

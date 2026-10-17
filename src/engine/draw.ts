@@ -364,12 +364,60 @@ export const LEVEL_TOOLS: Record<string, number> = {
 export const ERASER_CURSOR = 'url("data:image/svg+xml;utf8,'
   + encodeURIComponent(
     '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">'
-    + '<path d="M2.6 5h4.8M5 2.6v4.8" stroke="#353535" stroke-width="1.3" stroke-linecap="round"/>'
-    + '<g transform="rotate(-42 15 14)">'
-    + '<rect x="5.5" y="9.6" width="19" height="9" rx="1.3" fill="#fff" stroke="#353535" stroke-width="1.5"/>'
-    + '<path d="M13.6 9.6h9.6a1.3 1.3 0 0 1 1.3 1.3v6.4a1.3 1.3 0 0 1-1.3 1.3h-9.6z" fill="#353535"/>'
+    // 热点十字：官方位图里就是 (3..7, 3..7) 这个 5×5 的「+」，中心 = 热点 (5,5)
+    + '<path d="M2.8 5h4.4M5 2.8v4.4" stroke="#353535" stroke-width="1.4" stroke-linecap="round"/>'
+    // 橡皮本体：斜置 -45° 的细长条，(6,20) → (22,5)，宽 7.4
+    + '<g transform="translate(14 12.6) rotate(-45)">'
+    + '<rect x="-11" y="-3.7" width="22" height="7.4" rx="1.5" fill="#fff" stroke="#353535" stroke-width="1.2"/>'
+    + '<path d="M1.6 -3.7H9.4a1.6 1.6 0 0 1 1.6 1.6v4.2a1.6 1.6 0 0 1-1.6 1.6H1.6Z" fill="#353535"/>'
     + '</g></svg>',
   ) + '") 5 5, crosshair';
+
+/**
+ * 圆点光标 —— 对齐官方的 `pane--cursor-dot`：线上 `dot.3d617b6b01edba83a7f4.cur`，
+ * 32×32、热点 **(11,11)**（正好落在这个圆点的**圆心**），造型是 #353535 的实心点
+ * 外面套一圈 ~80% 白边（白边用来在深色底上保住轮廓）。
+ * 不搬官方位图，用同尺寸同热点的 SVG；还是老规矩，不支持 SVG 光标就退回 crosshair。
+ */
+export const DOT_CURSOR = 'url("data:image/svg+xml;utf8,'
+  + encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">'
+    + '<circle cx="11" cy="11" r="4.4" fill="#fff" fill-opacity="0.8"/>'
+    + '<circle cx="11" cy="11" r="2.7" fill="#353535"/>'
+    + '</svg>',
+  ) + '") 11 11, crosshair';
+
+/**
+ * 荧光笔 / 橡皮擦的悬停光晕 —— 线上量的：半径 **18px**、颜色 **rgba(242,54,69,0.25)**
+ * （二值反解出来的 alpha 0.25、原色 #f23645），圆心就是热点位置。
+ * 它比十字线晚画（盖在虚线上，官方截图里虚线在光晕里发红）。
+ */
+export const CURSOR_HALO_R = 18;
+export const CURSOR_HALO_COLOR = 'rgba(242,54,69,0.25)';
+
+/**
+ * 哪些工具有「光晕」：荧光笔和橡皮擦。官方的十字线 / 圆点 / 箭头没有。
+ */
+export function hasCursorHalo(tool: string): boolean {
+  return tool === 'eraser' || tool === 'highlight';
+}
+
+/**
+ * 光标类型（CSS cursor 值）—— 与线上 `setCursorForTool()` 逐项对齐：
+ *   十字线 → null（交给命中判定：move / pointer / resize / crosshair）
+ *   圆点   → dot.cur 的 URL（热点 11,11）
+ *   箭头   → 系统默认箭头（`default`）
+ *   荧光笔 → 系统默认箭头（“笔”由光晕表达，线上也是 `default`）
+ *   橡皮擦 → eraser.cur 的 URL（热点 5,5）
+ *   其余绘图工具 → crosshair
+ */
+export function cursorForTool(tool: string): string | null {
+  if (tool === 'eraser') return ERASER_CURSOR;
+  if (tool === 'dot') return DOT_CURSOR;
+  if (tool === 'arrow' || tool === 'highlight') return 'default';
+  if (tool !== 'cursor') return 'crosshair';
+  return null;
+}
 
 /**
  * emoji 标注的默认字号（px）—— 对齐官方 `linetoolemoji.size = 40`。
@@ -2199,7 +2247,7 @@ export class DrawLayer {
     this.host.invalidate();
   }
 
-  /** 指针离开画布：悬停高亮跟着消失 */
+  /** 指针离开画布：悬停高亮跟着消失（光晕在 onOverlay 里按 pointer=null 自动不画） */
   onLeave(): void {
     this.setHover(null);
     if (this.tool === 'eraser') {
@@ -2250,8 +2298,9 @@ export class DrawLayer {
   }
 
   private cursorForHit(hit: { d: Drawing; part: number | string } | null): string {
-    if (this.tool === 'eraser') return ERASER_CURSOR;
-    if (this.tool !== 'cursor') return 'crosshair';
+    // 工具级光标优先（圆点 / 箭头 / 荧光笔 / 橡皮擦 各自一套，与官方 setCursorForTool 一致）
+    const fixed = cursorForTool(this.tool);
+    if (fixed) return fixed;
     if (!hit) return 'crosshair';
     // emoji 四角：给出缩放光标（与官方一致，拖角就是改大小）
     if (hit.part === 'emoji-nw' || hit.part === 'emoji-se') return 'nwse-resize';
@@ -2324,6 +2373,25 @@ export class DrawLayer {
     }
     if (hov && hov.visible) this.renderOne(ctx, hov, false, true);
     if (this.pending) this.renderOne(ctx, this.pending, false);
+  }
+
+  /**
+   * 荧光笔 / 橡皮擦的悬停光晕：以指针为圆心、半径 18、rgba(242,54,69,0.25) 的实心圆。
+   * 官方把它画在十字线**之上**（虚线透过去会发红），所以这条不能塞进 render()，
+   * 由 KChart 的 onOverlay 钩子在 drawCrosshairV/H 之后调用，指针位置由图表给。
+   * 指针不在绘图区内（贴到轴上 / 已离开）就不画。
+   */
+  renderCursorHalo(ctx: CanvasRenderingContext2D, pt: { x: number; y: number } | null): void {
+    if (!hasCursorHalo(this.tool)) return;
+    if (!pt) return;
+    const p = this.host.plot;
+    if (pt.x < p.l || pt.x > p.r || pt.y < p.t || pt.y > p.b) return;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, CURSOR_HALO_R, 0, Math.PI * 2);
+    ctx.fillStyle = CURSOR_HALO_COLOR;
+    ctx.fill();
+    ctx.restore();
   }
 
   private renderOne(ctx: CanvasRenderingContext2D, d: Drawing, selected: boolean, hovered = false): void {

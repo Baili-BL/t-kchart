@@ -101,6 +101,9 @@ export function ChartGridView(): JSX.Element {
             if (layer.active()) barLayer = layer;
             if (barLayer === layer) propsBar.sync();
           },
+          // 荧光笔 / 橡皮擦的粉色光晕：压在十字线之上（官方量得 r=18、rgba(242,54,69,.25)）
+          onOverlay: (ctx: CanvasRenderingContext2D, pt: { x: number; y: number } | null) =>
+            layer.renderCursorHalo(ctx, pt),
           // 轴上的测量起止标签：在坐标轴画完之后补一层（在 onDraw 里画会被轴色块盖掉）
           onAxisDraw: (ctx: CanvasRenderingContext2D) => layer.renderAxisLabels(ctx),
         });
