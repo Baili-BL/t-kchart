@@ -9,6 +9,7 @@
  * 全部 38 步进（线宽那颗 70 宽），条高 38、圆角 8。
  */
 import type { DrawLayer, Drawing } from '../../engine/draw';
+import { PALETTE_ROWS, normalizeHex, swatchEdge } from '../../ui/palette';
 
 /* ------------------------------------------------------------------ 尺寸（官方实测，单位 CSS px） */
 
@@ -104,12 +105,34 @@ const CSS = `
 }
 .kc-propsbar-pop.open { display: block; }
 .kc-propsbar-pop .pop-title { color: var(--kpb-sub); font-size: 11px; padding: 2px 4px 6px; }
-.kc-propsbar-swatches { display: grid; grid-template-columns: repeat(5, 28px); gap: 6px; }
+/* 调色板：与设置里的取色器同一套官方度量（10 列 / 17 格 / 6 间距 / 圆角 2 / 1px currentColor 描边） */
+.kc-propsbar-pop-color { border-radius: 6px; }
+.kc-propsbar-swatches { display: grid; grid-template-columns: repeat(10, 17px); gap: 6px; }
 .kc-propsbar-swatches button {
-  width: 28px; height: 28px; border-radius: 6px; border: 1px solid rgba(0,0,0,.12);
-  cursor: pointer; padding: 0; transition: transform .06s ease;
+  position: relative; width: 17px; height: 17px; border-radius: 2px; border: 1px solid currentColor;
+  background: currentColor; cursor: pointer; padding: 0; box-sizing: border-box;
 }
-.kc-propsbar-swatches button:hover { transform: scale(1.12); }
+.kc-propsbar-swatches button::after {
+  content: ''; position: absolute; inset: -5px; border: 2px solid transparent; border-radius: 6px;
+  pointer-events: none; transition: border-color .06s ease;
+}
+.kc-propsbar-swatches button:hover::after { border-color: var(--kpb-line, rgba(0,0,0,.28)); }
+.kc-propsbar-sep { height: 1px; background: var(--kpb-line, rgba(0,0,0,.16)); margin: 12px 0; }
+.kc-propsbar-plus {
+  position: relative; width: 17px; height: 17px; margin: 3px 0; padding: 0; border: 0;
+  background: transparent; color: currentColor; cursor: pointer; border-radius: 2px;
+}
+.kc-propsbar-plus::before, .kc-propsbar-plus::after {
+  content: ''; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: currentColor;
+}
+.kc-propsbar-plus::before { width: 13px; height: 1px; }
+.kc-propsbar-plus::after { width: 1px; height: 13px; }
+.kc-propsbar-plus:hover { background: var(--kpb-hover); }
+.kc-propsbar-custom { margin-top: 6px; }
+.kc-propsbar-hex {
+  width: 100px; height: 24px; padding: 0 6px; border-radius: 4px; border: 1px solid currentColor;
+  background: transparent; color: inherit; font: 12px var(--mono, monospace); box-sizing: border-box;
+}
 .kc-propsbar-rows { min-width: 150px; }
 .kc-propsbar-rows button {
   display: flex; align-items: center; gap: 10px; width: 100%; border: 0; background: transparent;
@@ -186,7 +209,7 @@ export const ICON_MORE = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1
 
 /* ------------------------------------------------------------------ 数据 */
 
-const SWATCHES = ['#2962ff', '#f23645', '#089981', '#ff9800', '#9c27b0', '#00bcd4', '#e91e63', '#787b86', '#131722', '#ffffff'];
+/** 调色板 = 线上官方那 80 色（10 列 × 8 行），与设置里的取色器同一份 */
 const WIDTHS = [1, 2, 4, 8];
 const DASH_ROWS: [string, string, number[]][] = [
   ['实线', '', []],
@@ -320,23 +343,58 @@ export function createDrawPropsBar(getLayer: () => DrawLayer | null): DrawPropsB
     const c = cur();
     if (!c) return;
     const el = document.createElement('div');
-    el.className = 'kc-propsbar-pop';
-    el.innerHTML = '<div class="pop-title">线条颜色</div>';
+    el.className = 'kc-propsbar-pop kc-propsbar-pop-color';
+    const paint = (col: string): void => {
+      const cc = cur();
+      if (!cc) return;
+      c.l.setStyle(cc.d.id, { color: col, fill: hexToRgba(col, 0.14) });
+      closePop();
+    };
     const grid = document.createElement('div');
     grid.className = 'kc-propsbar-swatches';
-    for (const col of SWATCHES) {
-      const sw = document.createElement('button');
-      sw.style.background = col;
-      sw.title = col;
-      sw.addEventListener('click', () => {
-        const cc = cur();
-        if (!cc) return;
-        c.l.setStyle(cc.d.id, { color: col, fill: hexToRgba(col, 0.14) });
-        closePop();
-      });
-      grid.appendChild(sw);
+    for (const row of PALETTE_ROWS) {
+      for (const col of row) {
+        const sw = document.createElement('button');
+        sw.style.color = col;
+        sw.style.borderColor = swatchEdge(col);
+        sw.title = col;
+        sw.setAttribute('aria-label', col);
+        sw.addEventListener('click', () => paint(col));
+        grid.appendChild(sw);
+      }
     }
     el.appendChild(grid);
+    /* 网格下面：1px 分隔线 + 17×17 的「+」（官方同款；「+」展开 hex 自定义色） */
+    const sep = document.createElement('div');
+    sep.className = 'kc-propsbar-sep';
+    const plus = document.createElement('button');
+    plus.className = 'kc-propsbar-plus';
+    plus.title = '添加自定义颜色';
+    plus.setAttribute('aria-label', '添加自定义颜色');
+    const custom = document.createElement('div');
+    custom.className = 'kc-propsbar-custom';
+    custom.hidden = true;
+    const input = document.createElement('input');
+    input.className = 'kc-propsbar-hex';
+    input.placeholder = '#RRGGBB';
+    input.spellcheck = false;
+    input.maxLength = 7;
+    const commitHex = (): void => {
+      const v = normalizeHex(input.value);
+      if (v) paint(v);
+      else input.value = '';
+    };
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') commitHex(); });
+    input.addEventListener('blur', () => { if (input.value.trim()) commitHex(); });
+    plus.addEventListener('click', (e) => {
+      e.stopPropagation();
+      custom.hidden = !custom.hidden;
+      if (!custom.hidden) input.focus();
+    });
+    custom.appendChild(input);
+    el.appendChild(sep);
+    el.appendChild(plus);
+    el.appendChild(custom);
     openPop(colorBtn, el);
   });
   bar.appendChild(colorBtn);

@@ -1,29 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
+import { PALETTE_ROWS, normalizeHex, swatchEdge } from './palette';
+
+export { PALETTE, PALETTE_COLS, PALETTE_ROWS, normalizeHex, swatchEdge } from './palette';
 
 /**
- * 页内颜色选择器（TradingView「设置 → 样式」经典样式）。
- * 设计稿链接（magicpatterns c7c97790）已 404，按 TV 经典口径实现：
- * 调色板网格 + 自定义 hex 输入 + 恢复默认。
- * 诚实边界：不含不透明度滑块——当前引擎/设置链路没有 alpha 语义，加了就是假开关；
- * 引擎侧接入 #RRGGBBAA 后再加。
+ * 页内颜色选择器 —— 对齐线上 TradingView 的取色器。
+ *
+ * 官方（cn.tradingview.com「设置 → 商品代码 → 主体颜色」，2026-10-18 Playwright 抓取）：
+ * 弹层 248 宽 / `6px 12px` 内边距 / 圆角 6 / `0 2px 4px rgba(0,0,0,.2)`；
+ * 调色板 10 列 × 8 行、格子 17×17、间距 6、圆角 2、1px 描边（白色块描边 #dbdbdb）；
+ * 悬停/选中的外环是 `::after { inset: -5px; border: 2px solid; border-radius: 6px }`；
+ * 网格下面一条 1px #dbdbdb 分隔线（上下各 12），再往下是 17×17 的「+」。
+ *
+ * 诚实边界：官方的「+」打开的是带色相环/不透明度的大取色器，我们这里只有 hex 输入
+ * （引擎侧没有 alpha 语义，加不透明度就是假开关）；「恢复默认」也收在这个自定义面板里。
  */
 
-/** 调色板：7 列 × 5 行（灰阶 + 红/橙/黄 + 绿系 + 青蓝 + 紫粉，含项目红绿 #f23645 / #089981 / #2962ff） */
-export const PALETTE: string[] = [
-  '#ffffff', '#e6e9ef', '#d1d4dc', '#b2b5be', '#787b86', '#434651', '#131722',
-  '#f23645', '#ff7043', '#ff9800', '#ffb74d', '#ffd54f', '#ffee58', '#fdd835',
-  '#c6ff00', '#aed581', '#66bb6a', '#26a69a', '#089981', '#00897b', '#00695c',
-  '#26c6da', '#29b6f6', '#2962ff', '#1565c0', '#0d47a1', '#3f51b5', '#5e35b1',
-  '#7e57c2', '#9c27b0', '#ab47bc', '#e57fd1', '#f06292', '#f8bbd0', '#fce4ec',
-];
-
-/** hex 规范化：接受 3/6 位（可带 #），非法返回 null；输出大写 #RRGGBB */
-export function normalizeHex(raw: string): string | null {
-  const s = raw.trim().replace(/^#/, '');
-  if (!/^[0-9a-fA-F]{3}$|^[0-9a-fA-F]{6}$/.test(s)) return null;
-  const six = s.length === 3 ? s.split('').map((c) => c + c).join('') : s;
-  return `#${six.toUpperCase()}`;
-}
+/** 颜色选择器的纯逻辑（hex 规范化、官方调色板）都在 ./palette，这里只做弹层 */
 
 interface Props {
   value: string;
@@ -36,6 +29,7 @@ interface Props {
 
 export function ColorPicker({ value, onChange, label, defaultColor }: Props): JSX.Element {
   const [open, setOpen] = useState(false);
+  const [custom, setCustom] = useState(false);
   const [pos, setPos] = useState<{ left: number; top: number }>({ left: 0, top: 0 });
   const [hexText, setHexText] = useState(value);
   const rootRef = useRef<HTMLSpanElement>(null);
@@ -46,13 +40,14 @@ export function ColorPicker({ value, onChange, label, defaultColor }: Props): JS
   const [wasOpen, setWasOpen] = useState(false);
   if (open && !wasOpen) {
     setWasOpen(true);
+    setCustom(false);
     setHexText(value.toUpperCase());
     const r = btnRef.current?.getBoundingClientRect();
     if (r) {
-      const width = 196;
+      const width = 248;
       setPos({
         left: Math.max(8, Math.min(r.left, window.innerWidth - width - 8)),
-        top: r.bottom + 6,
+        top: Math.min(r.bottom + 6, Math.max(8, window.innerHeight - 340 - 8)),
       });
     }
   } else if (!open && wasOpen) {
@@ -79,9 +74,14 @@ export function ColorPicker({ value, onChange, label, defaultColor }: Props): JS
     };
   }, [open]);
 
+  useEffect(() => {
+    if (custom) inputRef.current?.focus();
+  }, [custom]);
+
   const pick = (c: string): void => {
     onChange(c);
     setHexText(c.toUpperCase());
+    setOpen(false);
   };
 
   const commitHex = (): void => {
@@ -89,6 +89,8 @@ export function ColorPicker({ value, onChange, label, defaultColor }: Props): JS
     if (v) pick(v);
     else setHexText(value.toUpperCase());
   };
+
+  const on = value.toUpperCase();
 
   return (
     <span ref={rootRef} className="cp-root">
@@ -104,38 +106,48 @@ export function ColorPicker({ value, onChange, label, defaultColor }: Props): JS
       />
       {open && (
         <div className="cp-pop" role="dialog" aria-label={`${label}颜色选择器`} style={{ left: pos.left, top: pos.top }}>
-          <div className="cp-head">
-            <span className="cp-title">自定义颜色</span>
-            <input
-              ref={inputRef}
-              className="cp-hex"
-              value={hexText}
-              onChange={(e) => setHexText(e.target.value)}
-              onBlur={commitHex}
-              onKeyDown={(e) => e.key === 'Enter' && commitHex()}
-              spellCheck={false}
-              aria-label="自定义 hex 颜色"
-            />
-          </div>
           <div className="cp-grid" role="listbox" aria-label="调色板">
-            {PALETTE.map((c) => (
+            {PALETTE_ROWS.map((row) => row.map((c) => (
               <button
                 key={c}
                 type="button"
                 role="option"
-                aria-selected={c.toUpperCase() === value.toUpperCase()}
+                aria-selected={c.toUpperCase() === on}
                 aria-label={c}
-                className={'cp-cell' + (c.toUpperCase() === value.toUpperCase() ? ' on' : '')}
-                style={{ background: c }}
+                title={c}
+                className={'cp-cell' + (c.toUpperCase() === on ? ' on' : '')}
+                style={{ color: c, borderColor: swatchEdge(c) }}
                 onClick={() => pick(c)}
               />
-            ))}
+            )))}
           </div>
-          <div className="cp-foot">
-            <button type="button" className="cp-reset" onClick={() => pick(defaultColor)}>
-              恢复默认
-            </button>
-          </div>
+          <div className="cp-sep" aria-hidden="true" />
+          <button
+            type="button"
+            className="cp-plus"
+            title="添加自定义颜色"
+            aria-label="添加自定义颜色"
+            aria-expanded={custom}
+            onClick={() => setCustom((v) => !v)}
+          />
+          {custom && (
+            <div className="cp-custom">
+              <span className="cp-custom-preview" style={{ background: hexText }} aria-hidden="true" />
+              <input
+                ref={inputRef}
+                className="cp-hex"
+                value={hexText}
+                onChange={(e) => setHexText(e.target.value)}
+                onBlur={commitHex}
+                onKeyDown={(e) => e.key === 'Enter' && commitHex()}
+                spellCheck={false}
+                aria-label="自定义 hex 颜色"
+              />
+              <button type="button" className="cp-reset" onClick={() => pick(defaultColor)}>
+                恢复默认
+              </button>
+            </div>
+          )}
         </div>
       )}
     </span>
