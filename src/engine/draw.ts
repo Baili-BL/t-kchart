@@ -99,7 +99,7 @@ export const DRAW_TOOLS: DrawToolDef[] = [
     icon: 'M1 9 L17 9 M4 6 L1 9 L4 12 M14 6 L17 9 L14 12' },
   { key: 'arrow', label: '箭头', points: 2, key2: 'w',
     icon: 'M3 14 L14 4 M14 4 L9 4 M14 4 L14 9' },
-  { key: 'rect', label: '矩形', points: 2, key2: 'b',
+  { key: 'rect', label: '矩形', points: 2, key2: 'b', key3: '⌥R',
     icon: 'M3 5 L15 5 L15 14 L3 14 Z' },
   { key: 'ellipse', label: '椭圆', points: 2, key2: 'o',
     icon: 'M9 4 C13.5 4 16 6.2 16 9 C16 11.8 13.5 14 9 14 C4.5 14 2 11.8 2 9 C2 6.2 4.5 4 9 4 Z' },
@@ -208,6 +208,29 @@ export const DRAW_TOOLS: DrawToolDef[] = [
     icon: 'M3 8 L14 8 M3 5 L3 11 M14 5 L14 11 M13 3 L13 5 M15 3 L15 5 M13 2 L15 2' },
   { key: 'dprange', label: '日期和价格范围', points: 2,
     icon: 'M3 3 L15 3 L15 14 L3 14 Z M3 3 L3 14 M8 8 L8 11 M15 8 L15 11 M8 11 L15 11' },
+  // —— 设计稿「笔刷」子菜单：笔刷/箭头/形状三组新增的 11 种 ——
+  { key: 'brush', label: '笔刷', points: 0,
+    icon: 'M2 13 C4 9 6 12 8 8 C10 5 12 9 15 4' },
+  { key: 'arrowmark', label: '箭头标记', points: 1,
+    icon: 'M9 3 L13 9 L10.5 9 L10.5 14 L7.5 14 L7.5 9 L5 9 Z' },
+  { key: 'uparrow', label: '向上箭头', points: 1,
+    icon: 'M9 3 L13 8 L11 8 L11 14 L7 14 L7 8 L5 8 Z' },
+  { key: 'downarrow', label: '向下箭头', points: 1,
+    icon: 'M9 14 L5 9 L7 9 L7 3 L11 3 L11 9 L13 9 Z' },
+  { key: 'rotrect', label: '旋转矩形', points: 3,
+    icon: 'M4 6 L12 3 L14 10 L6 13 Z' },
+  { key: 'path', label: '路径', points: 4,
+    icon: 'M2 13 L7 6 L11 10 L16 4' },
+  { key: 'circle', label: '圆', points: 2,
+    icon: 'M9 3.5 A5.5 5.5 0 1 0 9 14.5 A5.5 5.5 0 1 0 9 3.5 Z M9 9 L13 6' },
+  { key: 'polyline', label: '折线', points: 4,
+    icon: 'M3 4 L15 4 L3 13 L15 13' },
+  { key: 'arc', label: '弧形', points: 2,
+    icon: 'M3 13 C3 7 7 4 15 4' },
+  { key: 'curve', label: '曲线', points: 3,
+    icon: 'M3 13 C5 4 9 14 15 4' },
+  { key: 'hyperbola', label: '双曲线', points: 2,
+    icon: 'M4 3 C6 8 6 10 4 14 M14 3 C12 8 12 10 14 14' },
 ];
 
 export const FIB_LEVELS: { l: number; c: string }[] = [
@@ -380,6 +403,81 @@ export function volumeProfile(
   let poc = 0;
   for (let k = 1; k < bins; k++) if (vol[k] > vol[poc]) poc = k;
   return { vol, poc };
+}
+
+/* —— 设计稿「笔刷」子菜单：箭头/形状组几何（纯函数，好测） —— */
+
+/** 标记 / 空心箭头字形的半边长（px） */
+export const MARKER_SIZE: number = 13;
+
+export interface PxPt { x: number; y: number }
+
+/** 二次贝塞尔曲线采样：p0 起点、p1 控制点、p2 终点 */
+export function quadBezierPts(p0: PxPt, p1: PxPt, p2: PxPt, seg = 32): PxPt[] {
+  const out: PxPt[] = [];
+  for (let i = 0; i <= seg; i++) {
+    const t = i / seg;
+    const u = 1 - t;
+    out.push({
+      x: u * u * p0.x + 2 * u * t * p1.x + t * t * p2.x,
+      y: u * u * p0.y + 2 * u * t * p1.y + t * t * p2.y,
+    });
+  }
+  return out;
+}
+
+/** 椭圆弧采样：中心 (cx,cy)、半轴 rx/ry，角度 a0 → a1（弧度，屏幕坐标系顺时针） */
+export function ellipseArcPts(cx: number, cy: number, rx: number, ry: number, a0: number, a1: number, seg = 32): PxPt[] {
+  const out: PxPt[] = [];
+  for (let i = 0; i <= seg; i++) {
+    const a = a0 + (a1 - a0) * (i / seg);
+    out.push({ x: cx + rx * Math.cos(a), y: cy + ry * Math.sin(a) });
+  }
+  return out;
+}
+
+/**
+ * 双曲线采样：p0/p1 为两焦点，横轴沿弦方向，两支对称张开。
+ * 实半轴取半焦距的 0.45 倍（开口不至于太尖/太扁）。
+ */
+export function hyperbolaPts(ax: number, ay: number, bx: number, by: number, seg = 40): PxPt[] {
+  const mx = (ax + bx) / 2;
+  const my = (ay + by) / 2;
+  const dx = bx - ax;
+  const dy = by - ay;
+  const c = Math.hypot(dx, dy) / 2; // 半焦距
+  const ux = c > 0 ? dx / (2 * c) : 1;
+  const uy = c > 0 ? dy / (2 * c) : 0;
+  const A = Math.max(c * 0.45, 6); // 实半轴
+  const B = Math.sqrt(Math.max(A * A - (c > 0 ? c * c * 0.2025 : 0), 4)); // 虚半轴 √(A²−a'²)，a'≈0.45c
+  const branch = (dir: 1 | -1): PxPt[] => {
+    const out: PxPt[] = [];
+    for (let i = 0; i <= seg; i++) {
+      const t = -1.5 + (3 * i) / seg;
+      const lx = dir * A * Math.cosh(t);
+      const ly = B * Math.sinh(t);
+      out.push({ x: mx + lx * ux + ly * -uy, y: my + lx * uy + ly * ux });
+    }
+    return out;
+  };
+  return branch(1).concat(branch(-1));
+}
+
+/**
+ * 空心箭头字形（↑ 方向）的 7 个顶点，以 (cx,cy) 为中心；dir=-1 时旋转 180°（↓）。
+ * 箭头头部宽 1.24s、高 0.82s，杆宽 0.56s、杆长 1.82s。
+ */
+export function arrowGlyphPts(cx: number, cy: number, s = MARKER_SIZE, dir: 1 | -1 = 1): PxPt[] {
+  const raw: PxPt[] = [
+    { x: 0, y: -s },                    // 头顶点
+    { x: s * 0.62, y: -s * 0.18 },      // 头右翼
+    { x: s * 0.28, y: -s * 0.18 },      // 杆右上
+    { x: s * 0.28, y: s * 0.82 },       // 杆右下
+    { x: -s * 0.28, y: s * 0.82 },      // 杆左下
+    { x: -s * 0.28, y: -s * 0.18 },     // 杆左上
+    { x: -s * 0.62, y: -s * 0.18 },     // 头左翼
+  ];
+  return raw.map((q) => ({ x: cx + q.x * dir, y: cy + q.y * dir }));
 }
 
 export function drawStyle(color?: string): DrawStyle {
@@ -649,8 +747,8 @@ export class DrawLayer {
       const p = this.pixelPts(d);
       if (!p.length) continue;
 
-      // 先测手柄（选中态才有），手柄优先级最高。荧光笔是自由笔迹，只整体拖动，不提供逐锚点手柄
-      if (this.activeId === d.id && d.type !== 'highlight') {
+      // 先测手柄（选中态才有），手柄优先级最高。荧光笔/笔刷是自由笔迹，只整体拖动，不提供逐锚点手柄
+      if (this.activeId === d.id && d.type !== 'highlight' && d.type !== 'brush') {
         for (let i = 0; i < p.length; i++) {
           if (Math.abs(px - p[i].x) <= tol && Math.abs(py - p[i].y) <= tol) {
             return { d, part: i };
@@ -671,6 +769,15 @@ export class DrawLayer {
         for (let i = 0; i < p.length - 1; i++) {
           if (distToSeg(px, py, p[i].x, p[i].y, p[i + 1].x, p[i + 1].y) <= 5 + 6) return { d, part: 'body' };
         }
+      } else if (d.type === 'brush') {
+        // 笔刷笔迹：细笔画的带内
+        for (let i = 0; i < p.length - 1; i++) {
+          if (distToSeg(px, py, p[i].x, p[i].y, p[i + 1].x, p[i + 1].y) <= 5 + 3) return { d, part: 'body' };
+        }
+      } else if (d.type === 'arrowmark' || d.type === 'uparrow' || d.type === 'downarrow') {
+        // 单击标记：以锚点为中心的字形包围盒
+        const s = d.type === 'arrowmark' ? MARKER_SIZE * 1.15 : MARKER_SIZE;
+        if (Math.abs(px - a.x) <= s * 0.75 + tol && Math.abs(py - a.y) <= s + tol) return { d, part: 'body' };
       } else if (d.type === 'hray') {
         // 从锚点向右的半条水平线
         if (distToSeg(px, py, a.x, a.y, ch.plot.r + 50, a.y) <= tol) return { d, part: 'body' };
@@ -884,6 +991,44 @@ export class DrawLayer {
         if (distToSeg(px, py, a.x, a.y, b.x, a.y) <= tol) return { d, part: 'body' };
         if (distToSeg(px, py, a.x, a.y - 8, a.x, a.y + 8) <= tol) return { d, part: 'body' };
         if (distToSeg(px, py, b.x, a.y - 8, b.x, a.y + 8) <= tol) return { d, part: 'body' };
+      } else if (d.type === 'rotrect') {
+        // 旋转矩形：p0p1 一条边，p2 定高度（off = p2 - p0 的平行四边形，两邻边垂直时即旋转矩形）
+        const wx = c.x - a.x;
+        const wy = c.y - a.y;
+        const onEdge =
+          distToSeg(px, py, a.x, a.y, b.x, b.y) <= tol ||
+          distToSeg(px, py, b.x, b.y, b.x + wx, b.y + wy) <= tol ||
+          distToSeg(px, py, b.x + wx, b.y + wy, a.x + wx, a.y + wy) <= tol ||
+          distToSeg(px, py, a.x + wx, a.y + wy, a.x, a.y) <= tol;
+        if (onEdge || inParallelogram(px, py, a.x, a.y, b.x, b.y, wx, wy)) return { d, part: 'body' };
+      } else if (d.type === 'path' || d.type === 'polyline' || d.type === 'hyperbola') {
+        // 多段折线 / 双曲线两支：任意一段附近（双曲线两支分开测，拼接连线不算图形）
+        if (d.type === 'hyperbola') {
+          const hp = hyperbolaPts(a.x, a.y, b.x, b.y);
+          const half = hp.length / 2;
+          if (distToPolyline(px, py, hp.slice(0, half)) <= tol) return { d, part: 'body' };
+          if (distToPolyline(px, py, hp.slice(half)) <= tol) return { d, part: 'body' };
+        } else if (d.type === 'polyline') {
+          if (distToPolyline(px, py, [...p, p[0]]) <= tol) return { d, part: 'body' }; // 折线闭合
+        } else {
+          if (distToPolyline(px, py, p) <= tol) return { d, part: 'body' };
+        }
+      } else if (d.type === 'circle') {
+        // 圆：圆心 a、半径 |ab|；圆环带内或圆内（与椭圆一致的「内部也算」策略）
+        const r = Math.hypot(b.x - a.x, b.y - a.y);
+        if (Math.hypot(px - a.x, py - a.y) <= r + tol) return { d, part: 'body' };
+      } else if (d.type === 'arc') {
+        // 弧形：外接框的椭圆四分之一弧（右上开口，与 fibarc 同向）
+        const rx = Math.abs(b.x - a.x) / 2;
+        const ry = Math.abs(b.y - a.y) / 2;
+        const cx = (a.x + b.x) / 2;
+        const cy = (a.y + b.y) / 2;
+        if (distToPolyline(px, py, ellipseArcPts(cx, cy, rx, ry, 0, -Math.PI / 2)) <= tol) {
+          return { d, part: 'body' };
+        }
+      } else if (d.type === 'curve') {
+        // 曲线：二次贝塞尔（p1 为控制点）
+        if (distToPolyline(px, py, quadBezierPts(a, b, c)) <= tol) return { d, part: 'body' };
       } else if (d.type === 'text') {
         const w = Math.max(24, d.style.text.length * 7);
         if (inRect(px, py, a.x - 2, a.y - 10, a.x + w, a.y + 6)) return { d, part: 'body' };
@@ -1042,15 +1187,15 @@ export class DrawLayer {
   onDown(px: number, py: number): boolean {
     const def = toolDef(this.tool);
 
-    // ⓪ 荧光笔：按下开始采点，拖动收集轨迹，onUp 收笔成一笔
-    if (this.tool === 'highlight') {
+    // ⓪ 荧光笔/笔刷：按下开始采点，拖动收集轨迹，onUp 收笔成一笔
+    if (this.tool === 'highlight' || this.tool === 'brush') {
       if (this.pending) return true;
       const a = this.anchorAt(px, py);
       this.pending = {
         id: this.nextId++,
-        type: 'highlight',
+        type: this.tool,
         pts: [a],
-        style: Object.assign(drawStyle(), { color: '#f7c52f' }),
+        style: Object.assign(drawStyle(), this.tool === 'highlight' ? { color: '#f7c52f' } : {}),
         locked: false,
         visible: true,
       };
@@ -1129,8 +1274,8 @@ export class DrawLayer {
   }
 
   onMove(px: number, py: number): void {
-    // 荧光笔：轨迹采点 —— 距上一锚点 ≥6px 才记一个，太密了笔迹数据爆炸
-    if (this.pending && this.pending.type === 'highlight') {
+    // 荧光笔/笔刷：轨迹采点 —— 距上一锚点 ≥6px 才记一个，太密了笔迹数据爆炸
+    if (this.pending && (this.pending.type === 'highlight' || this.pending.type === 'brush')) {
       const a = this.anchorAt(px, py);
       const pts = this.pending.pts;
       const last = pts[pts.length - 1];
@@ -1170,8 +1315,8 @@ export class DrawLayer {
   }
 
   onUp(): void {
-    // 荧光笔收笔：一笔 = 一次快照（undo 一次退一整笔）；单击无轨迹时补成一个小短划
-    if (this.pending && this.pending.type === 'highlight') {
+    // 荧光笔/笔刷收笔：一笔 = 一次快照（undo 一次退一整笔）；单击无轨迹时补成一个小短划
+    if (this.pending && (this.pending.type === 'highlight' || this.pending.type === 'brush')) {
       if (this.pending.pts.length < 2) {
         const a = this.pending.pts[0];
         this.pending.pts.push({ time: a.time, price: a.price });
@@ -1299,6 +1444,33 @@ export class DrawLayer {
       }
       ctx.restore();
       // 选中态只描一个包围盒，不做逐锚点手柄
+      if (selected) {
+        let l = Infinity, t = Infinity, r2 = -Infinity, b2 = -Infinity;
+        for (const q of p) { l = Math.min(l, q.x); t = Math.min(t, q.y); r2 = Math.max(r2, q.x); b2 = Math.max(b2, q.y); }
+        ctx.save();
+        ctx.strokeStyle = '#1f6feb';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 3]);
+        ctx.strokeRect(l - 8, t - 8, r2 - l + 16, b2 - t + 16);
+        ctx.restore();
+      }
+      return;
+    } else if (d.type === 'brush') {
+      // 笔刷笔迹：细笔画实线、圆头（与荧光笔同机制，颜色/粗细走默认样式）
+      ctx.setLineDash([]);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(p[0].x, p[0].y);
+      if (p.length === 1) {
+        ctx.arc(p[0].x, p[0].y, 1.5, 0, Math.PI * 2);
+        ctx.fillStyle = col;
+        ctx.fill();
+      } else {
+        for (let i = 1; i < p.length; i++) ctx.lineTo(p[i].x, p[i].y);
+        ctx.stroke();
+      }
+      // 选中态描包围盒（同荧光笔，无逐锚点手柄）
       if (selected) {
         let l = Infinity, t = Infinity, r2 = -Infinity, b2 = -Infinity;
         for (const q of p) { l = Math.min(l, q.x); t = Math.min(t, q.y); r2 = Math.max(r2, q.x); b2 = Math.max(b2, q.y); }
@@ -1808,6 +1980,81 @@ export class DrawLayer {
       this.label(ctx, (dp >= 0 ? '+' : '') + dp.toFixed(2) + '  (' + (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%)',
         Math.max(a.x, b.x) + 6, Math.min(a.y, b.y) + 10, col);
       this.label(ctx, n + ' 根', (a.x + b.x) / 2 - 12, Math.max(a.y, b.y) + 18, col);
+    } else if (d.type === 'arrowmark' || d.type === 'uparrow' || d.type === 'downarrow') {
+      // 箭头标记：实心箭头；向上/向下箭头：空心描边箭头（锚点即字形中心）
+      ctx.setLineDash([]);
+      const s = d.type === 'arrowmark' ? MARKER_SIZE * 1.15 : MARKER_SIZE;
+      const g = arrowGlyphPts(a.x, a.y, s, d.type === 'downarrow' ? -1 : 1);
+      ctx.beginPath();
+      ctx.moveTo(g[0].x, g[0].y);
+      for (let i = 1; i < g.length; i++) ctx.lineTo(g[i].x, g[i].y);
+      ctx.closePath();
+      if (d.type === 'arrowmark') {
+        ctx.fillStyle = col;
+        ctx.fill();
+      } else {
+        ctx.fillStyle = d.style.fill || 'rgba(41,98,255,0.14)';
+        ctx.fill();
+        ctx.stroke();
+      }
+    } else if (d.type === 'rotrect') {
+      // 旋转矩形：p0p1 一条边 + p2 定高度的平行四边形
+      const wx = c.x - a.x;
+      const wy = c.y - a.y;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.lineTo(b.x + wx, b.y + wy);
+      ctx.lineTo(a.x + wx, a.y + wy);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    } else if (d.type === 'path' || d.type === 'polyline') {
+      // 路径（开放）/ 折线（闭合）：逐段连线
+      ctx.beginPath();
+      ctx.moveTo(p[0].x, p[0].y);
+      for (let i = 1; i < p.length; i++) ctx.lineTo(p[i].x, p[i].y);
+      if (d.type === 'polyline') ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    } else if (d.type === 'circle') {
+      // 圆：圆心 a、半径 |ab|
+      const r = Math.hypot(b.x - a.x, b.y - a.y);
+      ctx.beginPath();
+      ctx.arc(a.x, a.y, Math.max(r, 0.5), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    } else if (d.type === 'arc') {
+      // 弧形：外接框的椭圆右上四分之一弧，不填充
+      const rx = Math.abs(b.x - a.x) / 2;
+      const ry = Math.abs(b.y - a.y) / 2;
+      const cx = (a.x + b.x) / 2;
+      const cy = (a.y + b.y) / 2;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, Math.max(rx, 0.5), Math.max(ry, 0.5), 0, -Math.PI / 2, 0);
+      ctx.stroke();
+    } else if (d.type === 'curve') {
+      // 曲线：二次贝塞尔（p0 起点、p1 控制点、p2 终点）
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.quadraticCurveTo(b.x, b.y, c.x, c.y);
+      ctx.stroke();
+    } else if (d.type === 'hyperbola') {
+      // 双曲线：p0/p1 为焦点的两支
+      ctx.beginPath();
+      const hp = hyperbolaPts(a.x, a.y, b.x, b.y);
+      ctx.moveTo(hp[0].x, hp[0].y);
+      for (let i = 1; i < hp.length; i++) {
+        // 两支之间跳笔
+        if (i === hp.length / 2) {
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(hp[i].x, hp[i].y);
+        } else {
+          ctx.lineTo(hp[i].x, hp[i].y);
+        }
+      }
+      ctx.stroke();
     } else if (d.type === 'text') {
       ctx.setLineDash([]);
       this.label(ctx, d.style.text || '文字', a.x, a.y, col, d.style.fontSize);
@@ -2200,8 +2447,8 @@ export function drawSelfTest(): DrawTestResult {
     const dd = Ld.add('dot', [{ time: host.bars[20].time, price: 105 }]);
     const pd = Ld.pixelPts(dd)[0];
     t('圆点：圆心命中 / 40px 外不命中', !!Ld.hitTest(pd.x, pd.y) && Ld.hitTest(pd.x + 40, pd.y) === null);
-    t('光标组：工具表 60 种且新三项就位',
-      DRAW_TOOLS.length === 60 &&
+    t('光标组：工具表 71 种且新三项就位',
+      DRAW_TOOLS.length === 71 &&
       toolDef('dot').points === 1 && toolDef('highlight').points === 0 && toolDef('eraser').points === 0);
     t('线组：信息线/趋势角度/横线 就位',
       toolDef('infoline').points === 2 && toolDef('angle').points === 2 && toolDef('crossline').points === 1 &&
@@ -2479,6 +2726,113 @@ export function drawSelfTest(): DrawTestResult {
         const total = host.bars.reduce((s, b) => s + b.volume, 0);
         return Math.abs(vp.vol.reduce((s, v) => s + v, 0) - total) < 1e-9 &&
           vp.vol[vp.poc] === Math.max(...vp.vol);
+      })());
+
+    // --- 设计稿「笔刷」子菜单：笔刷/箭头/形状三组 ---
+    t('笔刷/箭头/形状组：11 种新工具就位（锚点数 + ⌥R）',
+      DRAW_TOOLS.length === 71 &&
+      toolDef('brush').points === 0 && toolDef('rect').key3 === '⌥R' &&
+      ['arrowmark', 'uparrow', 'downarrow'].every((k) => toolDef(k).points === 1) &&
+      toolDef('rotrect').points === 3 && toolDef('curve').points === 3 &&
+      ['path', 'polyline'].every((k) => toolDef(k).points === 4) &&
+      ['circle', 'arc', 'hyperbola'].every((k) => toolDef(k).points === 2));
+
+    // 笔刷：自由笔迹（与荧光笔同机制，默认色细线）
+    const Lb = new DrawLayer(host);
+    Lb.setTool('brush');
+    Lb.onDown(host.xCenter(10), host.yOf(105));
+    Lb.onMove(host.xCenter(16), host.yOf(107));
+    Lb.onMove(host.xCenter(22), host.yOf(103));
+    Lb.onUp();
+    const brushed = Lb.drawings.length === 1 && Lb.drawings[0].type === 'brush' &&
+      Lb.drawings[0].pts.length >= 3 && Lb.tool === 'cursor';
+    Lb.undo();
+    t('笔刷：拖动采点收笔成型、一笔一次 undo', brushed && Lb.drawings.length === 0);
+
+    // 箭头标记 / 向上 / 向下箭头：单击放置的字形
+    const Lmk = new DrawLayer(host);
+    const dmk = Lmk.add('arrowmark', [{ time: host.bars[20].time, price: 105 }]);
+    const pmk = Lmk.pixelPts(dmk)[0];
+    const dup = Lmk.add('uparrow', [{ time: host.bars[28].time, price: 105 }]);
+    const pup = Lmk.pixelPts(dup)[0];
+    const ddn = Lmk.add('downarrow', [{ time: host.bars[36].time, price: 105 }]);
+    const pdn = Lmk.pixelPts(ddn)[0];
+    t('箭头标记/上下箭头：字形中心能命中，远处不命中',
+      !!Lmk.hitTest(pmk.x, pmk.y) && !!Lmk.hitTest(pup.x, pup.y) && !!Lmk.hitTest(pdn.x, pdn.y) &&
+      Lmk.hitTest(pmk.x + 40, pmk.y + 40) === null);
+
+    // 旋转矩形：p0p1 边 + p2 高度
+    const Lrr = new DrawLayer(host);
+    const drr = Lrr.add('rotrect', [
+      { time: host.bars[8].time, price: 100 },
+      { time: host.bars[24].time, price: 100 },
+      { time: host.bars[8].time, price: 108 },
+    ]);
+    const prr = Lrr.pixelPts(drr);
+    t('旋转矩形：形内与边框能命中，形外不命中',
+      !!Lrr.hitTest((prr[0].x + prr[2].x) / 2, (prr[0].y + prr[2].y) / 2) &&
+      !!Lrr.hitTest((prr[0].x + prr[1].x) / 2, prr[0].y) &&
+      Lrr.hitTest(prr[0].x - 40, (prr[0].y + prr[2].y) / 2) === null);
+
+    // 路径（开放）与折线（闭合）
+    const Lpl = new DrawLayer(host);
+    const dpath = Lpl.add('path', [
+      { time: host.bars[6].time, price: 100 },
+      { time: host.bars[14].time, price: 108 },
+      { time: host.bars[22].time, price: 102 },
+      { time: host.bars[30].time, price: 110 },
+    ]);
+    const ppath = Lpl.pixelPts(dpath);
+    const dpoly = Lpl.add('polyline', [
+      { time: host.bars[36].time, price: 100 },
+      { time: host.bars[44].time, price: 108 },
+      { time: host.bars[52].time, price: 102 },
+    ]);
+    const ppoly = Lpl.pixelPts(dpoly);
+    const closeMid = { x: (ppoly[0].x + ppoly[2].x) / 2, y: (ppoly[0].y + ppoly[2].y) / 2 };
+    t('路径：折线段上能命中，段外不命中；折线：首尾闭合边上也能命中',
+      !!Lpl.hitTest((ppath[1].x + ppath[2].x) / 2, (ppath[1].y + ppath[2].y) / 2) &&
+      Lpl.hitTest((ppath[1].x + ppath[2].x) / 2, (ppath[1].y + ppath[2].y) / 2 + 60) === null &&
+      !!Lpl.hitTest(closeMid.x, closeMid.y));
+
+    // 圆 / 弧形 / 曲线 / 双曲线
+    const Lsh = new DrawLayer(host);
+    const dcir = Lsh.add('circle', [
+      { time: host.bars[10].time, price: 105 },
+      { time: host.bars[20].time, price: 105 },
+    ]);
+    const pcir = Lsh.pixelPts(dcir);
+    const rcir = Math.hypot(pcir[1].x - pcir[0].x, pcir[1].y - pcir[0].y);
+    const darc = Lsh.add('arc', [
+      { time: host.bars[30].time, price: 100 },
+      { time: host.bars[40].time, price: 110 },
+    ]);
+    const parc = Lsh.pixelPts(darc);
+    const dcv = Lsh.add('curve', [
+      { time: host.bars[8].time, price: 100 },
+      { time: host.bars[16].time, price: 112 },
+      { time: host.bars[24].time, price: 100 },
+    ]);
+    const pcv = Lsh.pixelPts(dcv);
+    const dhb = Lsh.add('hyperbola', [
+      { time: host.bars[34].time, price: 100 },
+      { time: host.bars[42].time, price: 100 },
+    ]);
+    const phb = Lsh.pixelPts(dhb);
+    const arcHit = ellipseArcPts((parc[0].x + parc[1].x) / 2, (parc[0].y + parc[1].y) / 2,
+      Math.abs(parc[1].x - parc[0].x) / 2, Math.abs(parc[1].y - parc[0].y) / 2, -Math.PI / 4, -Math.PI / 4)[0];
+    t('圆：圆心与环带能命中；弧形：右上四分之一弧上能命中',
+      !!Lsh.hitTest(pcir[0].x, pcir[0].y) &&
+      !!Lsh.hitTest(pcir[0].x + rcir, pcir[0].y) &&
+      !!Lsh.hitTest(arcHit.x, arcHit.y));
+    t('曲线：贝塞尔中点能命中；双曲线：顶点（焦点中点右侧实半轴处）能命中',
+      (() => {
+        const mid = quadBezierPts(pcv[0], pcv[1], pcv[2])[16];
+        const vx = (phb[0].x + phb[1].x) / 2;
+        const vy = (phb[0].y + phb[1].y) / 2;
+        const c = Math.hypot(phb[1].x - phb[0].x, phb[1].y - phb[0].y) / 2;
+        const vtxX = vx + Math.max(c * 0.45, 6);
+        return !!Lsh.hitTest(mid.x, mid.y) && !!Lsh.hitTest(vtxX, vy);
       })());
   }
 

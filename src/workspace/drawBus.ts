@@ -178,6 +178,30 @@ export function toolKeyForLabel(label: string): string | null {
       return 'drange';
     case '日期和价格范围':
       return 'dprange';
+    case '笔刷':
+      return 'brush';
+    case '箭头标记':
+      return 'arrowmark';
+    case '向上箭头':
+      return 'uparrow';
+    case '向下箭头':
+      return 'downarrow';
+    case '旋转矩形':
+      return 'rotrect';
+    case '路径':
+      return 'path';
+    case '圆':
+      return 'circle';
+    case '折线':
+      return 'polyline';
+    case '弧形':
+      return 'arc';
+    case '曲线':
+      return 'curve';
+    case '双曲线':
+      return 'hyperbola';
+    case '矩形':
+      return 'rect';
     case '文字':
       return 'text';
     case '测量':

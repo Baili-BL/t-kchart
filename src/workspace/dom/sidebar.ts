@@ -21,6 +21,9 @@ import {
   LONGPOS_ICON, SHORTPOS_ICON, FORECAST_ICON, KPATTERN_ICON, SIMCANDLE_ICON,
   FAN_ICON, AVWAP_ICON, VPROFILE_ICON, AVPROFILE_ICON,
   PRANGE_ICON, DRANGE_ICON, DPRANGE_ICON,
+  ARROWMARK, UPARROW, DNARROW, RECT_ICON, ROTRECT, PATH_ICON,
+  CIRCLE_ICON, ELLIPSE_ICON, POLYLINE_ICON, TRIANGLE_ICON, ARC_ICON,
+  CURVE_ICON, HYPERBOLA,
 } from './sidebar-icons';
 
 /* ------------------------------------------------------------------ 工具 */
@@ -245,7 +248,30 @@ const SECTIONS: Section[] = [
         ['日期和价格范围', DPRANGE_ICON],
       ] },
     ] },
-    { icon: BRUSH, caret: CARET, label: '笔刷', items: [['笔刷', BRUSH], ['荧光笔', BRUSH], ['路径', BRUSH]] },
+    { icon: BRUSH, caret: CARET, label: '笔刷', groups: [
+      { label: '笔刷', items: [
+        ['笔刷', BRUSH],
+        ['荧光笔', HIGHLIGHTER],
+      ] },
+      { label: '箭头', items: [
+        ['箭头标记', ARROWMARK],
+        ['箭头', ARROW_ICON],
+        ['向上箭头', UPARROW],
+        ['向下箭头', DNARROW],
+      ] },
+      { label: '形状', items: [
+        ['矩形', RECT_ICON, '⌥R'],
+        ['旋转矩形', ROTRECT],
+        ['路径', PATH_ICON],
+        ['圆', CIRCLE_ICON],
+        ['椭圆', ELLIPSE_ICON],
+        ['折线', POLYLINE_ICON],
+        ['三角形', TRIANGLE_ICON],
+        ['弧形', ARC_ICON],
+        ['曲线', CURVE_ICON],
+        ['双曲线', HYPERBOLA],
+      ] },
+    ] },
     { icon: TEXT, caret: CARET, label: '文字', items: [['文字', TEXT], ['椭圆', TEXT], ['便签', TEXT], ['价格标签', TEXT], ['日期范围', TEXT]] },
   ]},
   { tools: [

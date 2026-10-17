@@ -189,3 +189,43 @@ export const DRANGE_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"
 
 // 日期和价格范围：虚线框 + 内部双箭头
 export const DPRANGE_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 4 h20 v20 h-20 Z M4 10 h20 M14 14 v6 M11 17.5 L14 20.5 L17 17.5 M4 20 h4 M20 20 h4\"></path></svg>";
+
+/* —— 设计稿「笔刷」子菜单（笔刷/箭头/形状三组）图标 —— */
+// 箭头标记：实心上箭头
+export const ARROWMARK = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\"><path fill=\"currentColor\" d=\"M14 4 L20 11 L16.5 11 L16.5 24 L11.5 24 L11.5 11 L8 11 Z\"></path></svg>";
+
+// 向上箭头：空心上箭头
+export const UPARROW = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linejoin=\"round\"><path d=\"M14 4 L20 11 L16.5 11 L16.5 24 L11.5 24 L11.5 11 L8 11 Z\"></path></svg>";
+
+// 向下箭头：空心下箭头
+export const DNARROW = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linejoin=\"round\"><path d=\"M14 24 L8 17 L11.5 17 L11.5 4 L16.5 4 L16.5 17 L20 17 Z\"></path></svg>";
+
+// 矩形：四角带圆点的方框
+export const RECT_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\"><path d=\"M6 7 H22 V21 H6 Z\"></path><circle cx=\"6\" cy=\"7\" r=\"2.1\" fill=\"currentColor\" stroke=\"none\"></circle><circle cx=\"22\" cy=\"7\" r=\"2.1\" fill=\"currentColor\" stroke=\"none\"></circle><circle cx=\"22\" cy=\"21\" r=\"2.1\" fill=\"currentColor\" stroke=\"none\"></circle><circle cx=\"6\" cy=\"21\" r=\"2.1\" fill=\"currentColor\" stroke=\"none\"></circle></svg>";
+
+// 旋转矩形：倾斜四边形 + 顶点圆点
+export const ROTRECT = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\"><path d=\"M6 11 L19 5 L23 17 L10 23 Z\"></path><circle cx=\"6\" cy=\"11\" r=\"2.1\" fill=\"currentColor\" stroke=\"none\"></circle><circle cx=\"19\" cy=\"5\" r=\"2.1\" fill=\"currentColor\" stroke=\"none\"></circle><circle cx=\"23\" cy=\"17\" r=\"2.1\" fill=\"currentColor\" stroke=\"none\"></circle><circle cx=\"10\" cy=\"23\" r=\"2.1\" fill=\"currentColor\" stroke=\"none\"></circle></svg>";
+
+// 路径：折线 + 转折点圆点
+export const PATH_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 22 L11 12 L17 17 L24 6\"></path><circle cx=\"4\" cy=\"22\" r=\"2.1\" fill=\"currentColor\" stroke=\"none\"></circle><circle cx=\"11\" cy=\"12\" r=\"2.1\" fill=\"currentColor\" stroke=\"none\"></circle><circle cx=\"17\" cy=\"17\" r=\"2.1\" fill=\"currentColor\" stroke=\"none\"></circle><circle cx=\"24\" cy=\"6\" r=\"2.1\" fill=\"currentColor\" stroke=\"none\"></circle></svg>";
+
+// 圆：圆周 + 圆心圆点
+export const CIRCLE_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\"><circle cx=\"14\" cy=\"14\" r=\"9\"></circle><circle cx=\"14\" cy=\"14\" r=\"2.1\" fill=\"currentColor\" stroke=\"none\"></circle></svg>";
+
+// 椭圆：扁椭圆 + 两端圆点
+export const ELLIPSE_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\"><ellipse cx=\"14\" cy=\"14\" rx=\"10.5\" ry=\"6.5\"></ellipse><circle cx=\"3.5\" cy=\"14\" r=\"2.1\" fill=\"currentColor\" stroke=\"none\"></circle><circle cx=\"24.5\" cy=\"14\" r=\"2.1\" fill=\"currentColor\" stroke=\"none\"></circle></svg>";
+
+// 折线：Z 形闭合折线 + 顶点圆点
+export const POLYLINE_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linejoin=\"round\"><path d=\"M5 6 H23 L5 22 H23\"></path><circle cx=\"5\" cy=\"6\" r=\"2.1\" fill=\"currentColor\" stroke=\"none\"></circle><circle cx=\"23\" cy=\"6\" r=\"2.1\" fill=\"currentColor\" stroke=\"none\"></circle><circle cx=\"5\" cy=\"22\" r=\"2.1\" fill=\"currentColor\" stroke=\"none\"></circle><circle cx=\"23\" cy=\"22\" r=\"2.1\" fill=\"currentColor\" stroke=\"none\"></circle></svg>";
+
+// 三角形：三顶点圆点
+export const TRIANGLE_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linejoin=\"round\"><path d=\"M14 5 L24 23 H4 Z\"></path><circle cx=\"14\" cy=\"5\" r=\"2.1\" fill=\"currentColor\" stroke=\"none\"></circle><circle cx=\"24\" cy=\"23\" r=\"2.1\" fill=\"currentColor\" stroke=\"none\"></circle><circle cx=\"4\" cy=\"23\" r=\"2.1\" fill=\"currentColor\" stroke=\"none\"></circle></svg>";
+
+// 弧形：四分之一弧 + 两端圆点
+export const ARC_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\"><path d=\"M4 23 C4 12 12 5 24 5\"></path><circle cx=\"4\" cy=\"23\" r=\"2.1\" fill=\"currentColor\" stroke=\"none\"></circle><circle cx=\"24\" cy=\"5\" r=\"2.1\" fill=\"currentColor\" stroke=\"none\"></circle></svg>";
+
+// 曲线：S 形贝塞尔 + 两端圆点
+export const CURVE_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\"><path d=\"M4 22 C8 6 16 24 24 7\"></path><circle cx=\"4\" cy=\"22\" r=\"2.1\" fill=\"currentColor\" stroke=\"none\"></circle><circle cx=\"24\" cy=\"7\" r=\"2.1\" fill=\"currentColor\" stroke=\"none\"></circle></svg>";
+
+// 双曲线：左右两支
+export const HYPERBOLA = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\"><path d=\"M7 4 C11 11 11 17 7 24 M21 4 C17 11 17 17 21 24\"></path></svg>";

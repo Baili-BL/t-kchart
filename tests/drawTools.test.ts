@@ -9,6 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DRAW_TOOLS, DrawLayer, makeFakeHost, rayToX, inTriangle, inParallelogram,
+  MARKER_SIZE, quadBezierPts, ellipseArcPts, hyperbolaPts, arrowGlyphPts,
 } from '../src/engine/draw';
 import type { DrawHost, Drawing } from '../src/engine/draw';
 
@@ -36,6 +37,10 @@ function makeCtx() {
     fillText() { ops.text++; },
     measureText: (s: string) => ({ width: s.length * 7 }),
     setLineDash() { /* no-op */ },
+    quadraticCurveTo() { /* no-op */ },
+    globalAlpha: 1,
+    lineCap: 'butt',
+    lineJoin: 'miter',
   };
   return { ctx, ops };
 }
@@ -303,8 +308,8 @@ describe('2.8 几何纯函数与回归', () => {
     expect(L.drawings.length).toBe(1);
     expect(L.drawings[0].pts.length).toBe(2);
   });
-  it('工具表：9 → 60 种，新工具的锚点数与快捷键就位', () => {
-    expect(DRAW_TOOLS.length).toBe(60);
+  it('工具表：9 → 71 种，新工具的锚点数与快捷键就位', () => {
+    expect(DRAW_TOOLS.length).toBe(71);
     const want: Record<string, number> = {
       hray: 1, extline: 2, arrow: 2, ellipse: 2, triangle: 3, channel: 3,
       dot: 1, highlight: 0, eraser: 0, infoline: 2, angle: 2, crossline: 1,
@@ -313,6 +318,8 @@ describe('2.8 几何纯函数与回归', () => {
       cycle: 2, timecycle: 2, sine: 2,
       longpos: 2, shortpos: 2, forecast: 3, kpattern: 1, simcandle: 2, fan: 2,
       avwap: 1, vprofile: 2, avprofile: 1, prange: 2, drange: 2, dprange: 2,
+      brush: 0, arrowmark: 1, uparrow: 1, downarrow: 1,
+      rotrect: 3, path: 4, circle: 2, polyline: 4, arc: 2, curve: 3, hyperbola: 2,
     };
     for (const [key, points] of Object.entries(want)) {
       expect(DRAW_TOOLS.find((t) => t.key === key)?.points === points).toBe(true);
@@ -322,7 +329,7 @@ describe('2.8 几何纯函数与回归', () => {
     for (const [key, k] of Object.entries(key2)) {
       expect(DRAW_TOOLS.find((t) => t.key === key)?.key2).toBe(k);
     }
-    const alt: Record<string, string> = { trend: '⌥T', hline: '⌥H', hray: '⌥J', vline: '⌥V', crossline: '⌥C' };
+    const alt: Record<string, string> = { trend: '⌥T', hline: '⌥H', hray: '⌥J', vline: '⌥V', crossline: '⌥C', rect: '⌥R' };
     for (const [key, k3] of Object.entries(alt)) {
       expect(DRAW_TOOLS.find((t) => t.key === key)?.key3).toBe(k3);
     }
@@ -1215,5 +1222,284 @@ describe('成交量组单点工具：锚定VWAP avwap / 锚定成交量分布图
       expect(k.h).toBeLessThanOrEqual(Math.min(k.o, k.c)); // 影线顶不超过实体上缘
       expect(k.l).toBeGreaterThanOrEqual(Math.max(k.o, k.c));
     }
+  });
+});
+
+/* ===========================================================================
+ * 设计稿「笔刷」子菜单（笔刷/箭头/形状三组）：11 种新工具
+ *   - brush：freehand，与荧光笔同机制，单独 describe
+ *   - arrowmark / uparrow / downarrow：单击标记，单独 describe
+ *   - rotrect / path / circle / polyline / arc / curve / hyperbola：数据驱动四判据
+ * ========================================================================= */
+
+describe('笔刷组：笔刷 brush（自由笔迹，默认色细线）', () => {
+  it('交互：按下→拖动采点→松手收笔，一笔一次 undo；与荧光笔互不影响', () => {
+    const L = new DrawLayer(HOST);
+    L.setTool('brush');
+    L.onDown(HOST.xCenter(10), HOST.yOf(105));
+    L.onMove(HOST.xCenter(16), HOST.yOf(106));
+    L.onMove(HOST.xCenter(22), HOST.yOf(104));
+    L.onMove(HOST.xCenter(28), HOST.yOf(105));
+    L.onUp();
+    expect(L.drawings.length).toBe(1);
+    const d0 = L.drawings[0];
+    expect(d0.type).toBe('brush');
+    expect(d0.pts.length).toBeGreaterThanOrEqual(3);
+    expect(d0.style.color).not.toBe('#f7c52f'); // 笔刷走默认蓝，不是荧光笔的黄色
+    expect(L.tool).toBe('cursor');
+    L.undo();
+    expect(L.drawings.length).toBe(0);
+    L.redo();
+    expect(L.drawings.length).toBe(1);
+  });
+
+  const { L, d } = draw('brush', [
+    anchor(10, 105), anchor(14, 106), anchor(18, 104), anchor(22, 105),
+  ]);
+  const p = L.pixelPts(d);
+
+  it('画法：render 产生描边、不抛错', () => {
+    const { ctx, ops } = makeCtx();
+    expect(() => L.render(ctx)).not.toThrow();
+    expect(ops.stroke).toBeGreaterThanOrEqual(1);
+  });
+  it('命中：笔迹段上命中（无逐锚点手柄），离轨迹 40px 不命中', () => {
+    const hit = L.hitTest((p[1].x + p[2].x) / 2, (p[1].y + p[2].y) / 2);
+    expect(hit && hit.d.id === d.id).toBe(true);
+    expect(hit!.part).toBe('body');
+    expect(L.hitTest(p[1].x, p[1].y + 40)).toBeNull();
+    L.select(d.id);
+    expect(L.hitTest(p[1].x, p[1].y)!.part).toBe('body');
+  });
+  it('拖动：整体平移，轨迹点数不变；undo/redo 往返', () => {
+    const before = d.pts.map((q) => ({ ...q }));
+    L.onDown(p[1].x, p[1].y);
+    L.onMove(p[1].x + 30, p[1].y + 25);
+    L.onUp();
+    expect(d.pts.length).toBe(before.length);
+    L.undo(); // 退回拖拽
+    L.undo(); // 移除
+    expect(L.drawings.length).toBe(0);
+    L.redo();
+    expect(L.drawings.length).toBe(1);
+  });
+});
+
+describe('箭头组：单击标记 arrowmark / uparrow / downarrow', () => {
+  const L = new DrawLayer(HOST);
+  const dmk = L.add('arrowmark', [anchor(20, 105)]);
+  const pmk = L.pixelPts(dmk)[0];
+  const dup = L.add('uparrow', [anchor(30, 105)]);
+  const pup = L.pixelPts(dup)[0];
+  const ddn = L.add('downarrow', [anchor(40, 105)]);
+  const pdn = L.pixelPts(ddn)[0];
+
+  it('画法：render 不抛错；标记产生填充、空心箭头产生填充+描边', () => {
+    const { ctx, ops } = makeCtx();
+    expect(() => L.render(ctx)).not.toThrow();
+    expect(ops.fill).toBeGreaterThanOrEqual(3);
+    expect(ops.stroke).toBeGreaterThanOrEqual(2);
+  });
+  it('命中：字形中心能命中，字形外（对角 40px）不命中', () => {
+    expect(L.hitTest(pmk.x, pmk.y)!.d.id).toBe(dmk.id);
+    expect(L.hitTest(pup.x, pup.y)!.d.id).toBe(dup.id);
+    expect(L.hitTest(pdn.x, pdn.y)!.d.id).toBe(ddn.id);
+    expect(L.hitTest(pmk.x + 40, pmk.y + 40)).toBeNull();
+  });
+  it('手柄：唯一锚点即手柄，拖动改位置', () => {
+    L.select(dmk.id);
+    expect(L.hitTest(pmk.x, pmk.y)!.part).toBe(0);
+    L.onDown(pmk.x, pmk.y);
+    L.onMove(pmk.x + 20, pmk.y - 30);
+    L.onUp();
+    expect(dmk.pts[0].price).not.toBe(105);
+  });
+  it('撤销：undo 退回拖拽 / 移除图形，redo×3 复原（undo 后对象重建，用 find 取新引用）', () => {
+    L.undo(); // 退回拖拽
+    expect(L.find(dmk.id)!.pts[0].price).toBe(105);
+    L.undo();
+    expect(L.drawings.length).toBe(2);
+    L.undo();
+    expect(L.drawings.length).toBe(1);
+    L.redo();
+    L.redo();
+    L.redo();
+    expect(L.drawings.length).toBe(3); // 全部复原（含拖拽后的状态，价格不再是 105）
+    expect(L.find(dmk.id)!.pts[0].price).not.toBe(105);
+  });
+  it('字形纯函数：7 个顶点、dir=-1 时上下翻转', () => {
+    const up = arrowGlyphPts(0, 0, 10);
+    const dn = arrowGlyphPts(0, 0, 10, -1);
+    expect(up.length).toBe(7);
+    expect(up[0].y).toBe(-10);
+    expect(dn[0].y).toBe(10);
+    expect(up[0].x).toBeCloseTo(dn[0].x, 9);
+  });
+});
+
+/* —— 形状组：多锚点工具 × 四判据（数据驱动） —— */
+
+interface ShapeSpec {
+  key: string;
+  pts: { time: number; price: number }[];
+  inside: (L: DrawLayer, d: Drawing) => { x: number; y: number };
+  outside: (L: DrawLayer, d: Drawing) => { x: number; y: number };
+  minStrokes: number;
+}
+
+const SHAPE_SPECS: ShapeSpec[] = [
+  {
+    key: 'rotrect',
+    pts: [anchor(8, 100), anchor(24, 100), anchor(8, 108)],
+    inside: (L, d) => {
+      const p = L.pixelPts(d);
+      return { x: (p[0].x + p[2].x) / 2, y: (p[0].y + p[2].y) / 2 };
+    },
+    outside: (L, d) => {
+      const p = L.pixelPts(d);
+      return { x: (p[0].x + p[2].x) / 2, y: Math.max(p[0].y, p[2].y) + 40 };
+    },
+    minStrokes: 1,
+  },
+  {
+    key: 'path',
+    pts: [anchor(6, 100), anchor(14, 108), anchor(22, 102), anchor(30, 110)],
+    inside: (L, d) => {
+      const p = L.pixelPts(d);
+      return { x: (p[1].x + p[2].x) / 2, y: (p[1].y + p[2].y) / 2 };
+    },
+    outside: (L, d) => {
+      const p = L.pixelPts(d);
+      return { x: (p[1].x + p[2].x) / 2, y: (p[1].y + p[2].y) / 2 + 50 };
+    },
+    minStrokes: 1,
+  },
+  {
+    key: 'circle',
+    pts: [anchor(10, 105), anchor(22, 105)],
+    inside: (L, d) => {
+      const p = L.pixelPts(d);
+      return { x: p[0].x, y: p[0].y }; // 圆心
+    },
+    outside: (L, d) => {
+      const p = L.pixelPts(d);
+      return { x: p[0].x + Math.hypot(p[1].x - p[0].x, p[1].y - p[0].y) + 60, y: p[0].y };
+    },
+    minStrokes: 1,
+  },
+  {
+    key: 'polyline',
+    pts: [anchor(36, 100), anchor(44, 108), anchor(52, 102)],
+    inside: (L, d) => {
+      const p = L.pixelPts(d);
+      return { x: (p[1].x + p[2].x) / 2, y: (p[1].y + p[2].y) / 2 };
+    },
+    outside: (L, d) => {
+      const p = L.pixelPts(d);
+      return { x: (p[1].x + p[2].x) / 2, y: (p[1].y + p[2].y) / 2 + 50 };
+    },
+    minStrokes: 1,
+  },
+  {
+    key: 'arc',
+    pts: [anchor(30, 100), anchor(42, 110)],
+    inside: (L, d) => {
+      // 右上四分之一弧的 45° 采样点
+      const p = L.pixelPts(d);
+      return ellipseArcPts((p[0].x + p[1].x) / 2, (p[0].y + p[1].y) / 2,
+        Math.abs(p[1].x - p[0].x) / 2, Math.abs(p[1].y - p[0].y) / 2, -Math.PI / 4, -Math.PI / 4)[0];
+    },
+    outside: (L, d) => {
+      const p = L.pixelPts(d);
+      // 左下角（弧的对角）不在这条弧上
+      return { x: Math.min(p[0].x, p[1].x) - 10, y: Math.max(p[0].y, p[1].y) + 10 };
+    },
+    minStrokes: 1,
+  },
+  {
+    key: 'curve',
+    pts: [anchor(8, 100), anchor(16, 112), anchor(24, 100)],
+    inside: (L, d) => {
+      const p = L.pixelPts(d);
+      return quadBezierPts(p[0], p[1], p[2])[16]; // t=0.5 附近
+    },
+    outside: (L, d) => {
+      const p = L.pixelPts(d);
+      return { x: (p[0].x + p[2].x) / 2, y: (p[0].y + p[2].y) / 2 + 45 }; // 弦中点下方
+    },
+    minStrokes: 1,
+  },
+  {
+    key: 'hyperbola',
+    pts: [anchor(34, 100), anchor(44, 100)],
+    inside: (L, d) => {
+      const p = L.pixelPts(d);
+      const vx = (p[0].x + p[1].x) / 2;
+      const vy = (p[0].y + p[1].y) / 2;
+      const c = Math.hypot(p[1].x - p[0].x, p[1].y - p[0].y) / 2;
+      return { x: vx + Math.max(c * 0.45, 6), y: vy }; // 顶点
+    },
+    outside: (L, d) => {
+      const p = L.pixelPts(d);
+      return { x: (p[0].x + p[1].x) / 2, y: (p[0].y + p[1].y) / 2 }; // 两支之间的中心空档
+    },
+    minStrokes: 2,
+  },
+];
+
+describe('形状组：rotrect/path/circle/polyline/arc/curve/hyperbola × 四判据（数据驱动）', () => {
+  for (const spec of SHAPE_SPECS) {
+    describe(spec.key, () => {
+      const { L, d } = draw(spec.key, spec.pts);
+
+      it(`① 画法：render 不抛错且 stroke ≥ ${spec.minStrokes}`, () => {
+        const { ctx, ops } = makeCtx();
+        expect(() => L.render(ctx)).not.toThrow();
+        expect(ops.stroke).toBeGreaterThanOrEqual(spec.minStrokes);
+      });
+      it('② 命中：图形上的点能命中', () => {
+        const pt = spec.inside(L, d);
+        const hit = L.hitTest(pt.x, pt.y);
+        expect(hit && hit.d.id === d.id).toBe(true);
+      });
+      it('③ 命中外：图形外的点不命中', () => {
+        const pt = spec.outside(L, d);
+        expect(L.hitTest(pt.x, pt.y)).toBeNull();
+      });
+      it('④ 手柄+撤销：拖 0 号手柄只动 p0，undo×2 退回 / redo 复原', () => {
+        const p0px = L.pixelPts(d)[0];
+        L.select(d.id);
+        expect(L.hitTest(p0px.x, p0px.y)!.part).toBe(0);
+        const orig1 = { ...d.pts[1] };
+        L.onDown(p0px.x, p0px.y);
+        L.onMove(p0px.x + 40, p0px.y + 20);
+        L.onUp();
+        expect(d.pts[1].time).toBe(orig1.time);
+        expect(d.pts[1].price).toBeCloseTo(orig1.price, 9);
+        const movedTime = L.find(d.id)!.pts[0].time;
+        expect(movedTime).not.toBe(spec.pts[0].time);
+        L.undo(); // 退回拖拽
+        expect(L.find(d.id)!.pts[0].time).toBe(spec.pts[0].time);
+        L.undo(); // 移除图形
+        expect(L.drawings.length).toBe(0);
+        L.redo();
+        expect(L.drawings.length).toBe(1);
+      });
+    });
+  }
+
+  it('几何纯函数：quadBezier 端点守恒 / ellipseArc 端点在椭圆上 / hyperbola 两支对称', () => {
+    const bez = quadBezierPts({ x: 0, y: 0 }, { x: 50, y: 100 }, { x: 100, y: 0 });
+    expect(bez[0]).toEqual({ x: 0, y: 0 });
+    expect(bez[bez.length - 1]).toEqual({ x: 100, y: 0 });
+    expect(bez[16].y).toBeCloseTo(50, 6); // t=0.5 → y = 100/2
+
+    const arc = ellipseArcPts(0, 0, 30, 20, -Math.PI / 2, 0);
+    expect(arc[0].y).toBeCloseTo(-20, 9); // 顶部
+    expect(arc[arc.length - 1].x).toBeCloseTo(30, 9); // 右侧
+
+    const hb = hyperbolaPts(-40, 0, 40, 0);
+    expect(hb.length).toBe(82); // 2 支 × 41 点
+    expect(hb[0].x + hb[hb.length - 1].x).toBeCloseTo(0, 6); // 两支关于 x=0 对称（镜像点 x 和）
   });
 });
