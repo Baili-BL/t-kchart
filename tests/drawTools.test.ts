@@ -303,16 +303,23 @@ describe('2.8 几何纯函数与回归', () => {
     expect(L.drawings.length).toBe(1);
     expect(L.drawings[0].pts.length).toBe(2);
   });
-  it('工具表：9 → 18 种，新工具的锚点数与快捷键就位', () => {
-    expect(DRAW_TOOLS.length).toBe(18);
+  it('工具表：9 → 21 种，新工具的锚点数与快捷键就位', () => {
+    expect(DRAW_TOOLS.length).toBe(21);
     const want: Record<string, number> = {
       hray: 1, extline: 2, arrow: 2, ellipse: 2, triangle: 3, channel: 3,
-      dot: 1, highlight: 0, eraser: 0,
+      dot: 1, highlight: 0, eraser: 0, infoline: 2, angle: 2, crossline: 1,
     };
     for (const [key, points] of Object.entries(want)) {
-      const def = DRAW_TOOLS.find((t) => t.key === key);
-      expect(def && def.points === points).toBe(true);
-      expect(def && def.key2 && def.key2.length === 1).toBe(true);
+      expect(DRAW_TOOLS.find((t) => t.key === key)?.points === points).toBe(true);
+    }
+    // 普通快捷键 + ⌥ 组合快捷键（设计稿「趋势线」子菜单）
+    const key2: Record<string, string> = { trend: 't', hline: 'h', hray: 'y', vline: 'v' };
+    for (const [key, k] of Object.entries(key2)) {
+      expect(DRAW_TOOLS.find((t) => t.key === key)?.key2).toBe(k);
+    }
+    const alt: Record<string, string> = { trend: '⌥T', hline: '⌥H', hray: '⌥J', vline: '⌥V', crossline: '⌥C' };
+    for (const [key, k3] of Object.entries(alt)) {
+      expect(DRAW_TOOLS.find((t) => t.key === key)?.key3).toBe(k3);
     }
   });
 });
@@ -437,5 +444,113 @@ describe('光标组新工具：橡皮擦 eraser', () => {
     L.undo();
     expect(L.drawings.length).toBe(2);
     expect(L.find(h.id)).not.toBeNull();
+  });
+});
+
+/* ===========================================================================
+ * 设计稿「趋势线」子菜单（线工具组）新增：信息线 / 趋势角度 / 横线
+ * ========================================================================= */
+
+describe('线组新工具：信息线 infoline', () => {
+  const { L, d } = draw('infoline', [anchor(8, 98), anchor(35, 114)]);
+  const p = L.pixelPts(d);
+
+  it('画法：render 产生描边 + 两处价格标签，不抛错', () => {
+    const { ctx, ops } = makeCtx();
+    expect(() => L.render(ctx)).not.toThrow();
+    expect(ops.stroke).toBeGreaterThanOrEqual(1);
+    expect(ops.text).toBeGreaterThanOrEqual(2);
+  });
+  it('命中：线段中点命中、离线 40px 不命中', () => {
+    const mid = L.hitTest((p[0].x + p[1].x) / 2, (p[0].y + p[1].y) / 2);
+    expect(mid && mid.d.id === d.id).toBe(true);
+    expect(L.hitTest((p[0].x + p[1].x) / 2, (p[0].y + p[1].y) / 2 + 40)).toBeNull();
+  });
+  it('手柄：拖 1 号端点，另一端不动', () => {
+    L.select(d.id);
+    expect(L.hitTest(p[1].x, p[1].y)!.part).toBe(1);
+    const o0 = { ...d.pts[0] };
+    L.onDown(p[1].x, p[1].y);
+    L.onMove(p[1].x, p[1].y - 40);
+    L.onUp();
+    expect(d.pts[0].time).toBe(o0.time);
+    expect(d.pts[1].price).toBeGreaterThan(114);
+  });
+  it('撤销（拖过手柄，历史两个快照）', () => {
+    const n = L.drawings.length;
+    L.undo();
+    L.undo();
+    expect(L.drawings.length).toBe(n - 1);
+    L.redo();
+    expect(L.drawings.length).toBe(n);
+  });
+});
+
+describe('线组新工具：趋势角度 angle', () => {
+  const { L, d } = draw('angle', [anchor(10, 100), anchor(30, 112)]);
+  const p = L.pixelPts(d);
+
+  it('画法：render 产生描边 + 角度标签', () => {
+    const { ctx, ops } = makeCtx();
+    expect(() => L.render(ctx)).not.toThrow();
+    expect(ops.stroke).toBeGreaterThanOrEqual(1);
+    expect(ops.text).toBeGreaterThanOrEqual(1);
+  });
+  it('命中：线段上命中、线段外不命中', () => {
+    const mid = L.hitTest((p[0].x + p[1].x) / 2, (p[0].y + p[1].y) / 2);
+    expect(mid && mid.d.id === d.id).toBe(true);
+    expect(L.hitTest((p[0].x + p[1].x) / 2, (p[0].y + p[1].y) / 2 - 40)).toBeNull();
+  });
+  it('手柄：3 点不变，拖 0 号端点只动 p0', () => {
+    L.select(d.id);
+    expect(L.hitTest(p[0].x, p[0].y)!.part).toBe(0);
+    const o1 = { ...d.pts[1] };
+    L.onDown(p[0].x, p[0].y);
+    L.onMove(p[0].x + 30, p[0].y);
+    L.onUp();
+    expect(d.pts[1].time).toBe(o1.time);
+    expect(d.pts[1].price).toBeCloseTo(o1.price, 9);
+  });
+  it('撤销（拖过手柄，历史两个快照）', () => {
+    const n = L.drawings.length;
+    L.undo();
+    L.undo();
+    expect(L.drawings.length).toBe(n - 1);
+    L.redo();
+    expect(L.drawings.length).toBe(n);
+  });
+});
+
+describe('线组新工具：横线 crossline（十字）', () => {
+  const { L, d } = draw('crossline', [anchor(20, 105)]);
+  const p = L.pixelPts(d)[0];
+
+  it('画法：render 产生描边 + 价格标签', () => {
+    const { ctx, ops } = makeCtx();
+    expect(() => L.render(ctx)).not.toThrow();
+    expect(ops.stroke).toBeGreaterThanOrEqual(1);
+    expect(ops.text).toBeGreaterThanOrEqual(1);
+  });
+  it('命中：水平线与垂直线上都能命中，两线之外不命中', () => {
+    expect(L.hitTest(HOST.plot.r - 30, p.y)!.d.id === d.id).toBe(true);
+    expect(L.hitTest(p.x, HOST.plot.b - 20)!.d.id === d.id).toBe(true);
+    expect(L.hitTest(p.x + 60, p.y + 60)).toBeNull();
+  });
+  it('手柄：唯一锚点即手柄，拖动改价格与时间', () => {
+    L.select(d.id);
+    expect(L.hitTest(p.x, p.y)!.part).toBe(0);
+    L.onDown(p.x, p.y);
+    L.onMove(p.x + 50, p.y + 40);
+    L.onUp();
+    expect(d.pts[0].time).not.toBe(HOST.bars[20].time);
+    expect(d.pts[0].price).not.toBe(105);
+  });
+  it('撤销（拖过手柄，历史两个快照）', () => {
+    const n = L.drawings.length;
+    L.undo();
+    L.undo();
+    expect(L.drawings.length).toBe(n - 1);
+    L.redo();
+    expect(L.drawings.length).toBe(n);
   });
 });

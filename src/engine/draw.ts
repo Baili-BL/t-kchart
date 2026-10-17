@@ -74,6 +74,8 @@ export interface DrawToolDef {
   icon: string;
   /** 快捷键 */
   key2?: string;
+  /** Alt 组合快捷键（设计稿「⌥T」样式，attachKeys 里匹配 e.altKey） */
+  key3?: string;
 }
 
 /* ===========================================================================
@@ -83,15 +85,15 @@ export interface DrawToolDef {
 export const DRAW_TOOLS: DrawToolDef[] = [
   { key: 'cursor', label: '光标 / 拖动', points: 0, key2: 'Escape',
     icon: 'M4 2 L4 16 L8 12 L11 17 L13 16 L10 11 L15 11 Z' },
-  { key: 'trend', label: '趋势线', points: 2, key2: 't',
+  { key: 'trend', label: '趋势线', points: 2, key2: 't', key3: '⌥T',
     icon: 'M3 15 L15 3' },
-  { key: 'hline', label: '水平线', points: 1, key2: 'h',
+  { key: 'hline', label: '水平线', points: 1, key2: 'h', key3: '⌥H',
     icon: 'M2 9 L16 9' },
-  { key: 'vline', label: '垂直线', points: 1, key2: 'v',
+  { key: 'vline', label: '垂直线', points: 1, key2: 'v', key3: '⌥V',
     icon: 'M9 2 L9 16' },
   { key: 'ray', label: '射线', points: 2, key2: 'r',
     icon: 'M3 14 L15 4 M11 4 L15 4 L15 8' },
-  { key: 'hray', label: '水平射线', points: 1, key2: 'y',
+  { key: 'hray', label: '水平射线', points: 1, key2: 'y', key3: '⌥J',
     icon: 'M3 9 L16 9 M12 6 L16 9 L12 12' },
   { key: 'extline', label: '延长线', points: 2, key2: 'e',
     icon: 'M1 9 L17 9 M4 6 L1 9 L4 12 M14 6 L17 9 L14 12' },
@@ -118,6 +120,13 @@ export const DRAW_TOOLS: DrawToolDef[] = [
     icon: 'M3 14 L6 11 M6 11 L11 3 L14 6 L9 14 Z' },
   { key: 'eraser', label: '橡皮擦', points: 0, key2: 'q',
     icon: 'M5 14 L2 11 L9 3 L14 8 L9 14 Z M5 14 L14 14' },
+  // —— 设计稿「趋势线」子菜单（线工具组）新增的三种 ——
+  { key: 'infoline', label: '信息线', points: 2,
+    icon: 'M3 14 L13 4 M11 13 L15 13 L15 9' },
+  { key: 'angle', label: '趋势角度', points: 2,
+    icon: 'M3 14 L14 4 M3 10 A4 4 0 0 1 7 14' },
+  { key: 'crossline', label: '横线', points: 1, key3: '⌥C',
+    icon: 'M2 9 L16 9 M9 2 L9 16' },
 ];
 
 export const FIB_LEVELS: { l: number; c: string }[] = [
@@ -346,6 +355,9 @@ export class DrawLayer {
         if (distToSeg(px, py, a.x, a.y, ch.plot.r + 50, a.y) <= tol) return { d, part: 'body' };
       } else if (d.type === 'vline') {
         if (Math.abs(px - a.x) <= tol) return { d, part: 'body' };
+      } else if (d.type === 'crossline') {
+        // 横线 = 过锚点的水平线 + 垂直线（十字）
+        if (Math.abs(py - a.y) <= tol || Math.abs(px - a.x) <= tol) return { d, part: 'body' };
       } else if (d.type === 'extline') {
         // 两端都延伸出绘图区
         const l = rayToX(a.x, a.y, b.x, b.y, ch.plot.l - 50);
@@ -730,6 +742,15 @@ export class DrawLayer {
           e.preventDefault();
           return;
         }
+        // ⌥ 组合快捷键（设计稿「⌥T / ⌥H / ⌥J / ⌥V / ⌥C」）
+        if (t.key3 && e.altKey && !e.ctrlKey && !e.metaKey) {
+          const k = t.key3.replace('⌥', '').toLowerCase();
+          if (e.key.toLowerCase() === k) {
+            this.setTool(t.key);
+            e.preventDefault();
+            return;
+          }
+        }
       }
     };
     target.addEventListener('keydown', this.keyHandler as any);
@@ -828,6 +849,35 @@ export class DrawLayer {
       ctx.moveTo(l.x, l.y);
       ctx.lineTo(r.x, r.y);
       ctx.stroke();
+    } else if (d.type === 'crossline') {
+      // 过锚点的水平线 + 垂直线（十字），带价格标签
+      ctx.beginPath();
+      ctx.moveTo(ch.plot.l, a.y);
+      ctx.lineTo(ch.plot.r, a.y);
+      ctx.moveTo(a.x, ch.plot.t);
+      ctx.lineTo(a.x, ch.plot.b);
+      ctx.stroke();
+      this.label(ctx, '  ' + d.pts[0].price.toFixed(2), ch.plot.l + 4, a.y - 4, col);
+    } else if (d.type === 'infoline') {
+      // 信息线：线段 + 两端价格标签 + 涨跌幅
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+      const dp = d.pts[1].price - d.pts[0].price;
+      const pct = d.pts[0].price ? (dp / d.pts[0].price) * 100 : 0;
+      const sg = (v: number) => (v >= 0 ? '+' : '');
+      this.label(ctx, d.pts[0].price.toFixed(2), a.x + 4, a.y - 4, col);
+      this.label(ctx, d.pts[1].price.toFixed(2) + '  ' + sg(dp) + dp.toFixed(2) +
+        ' (' + sg(pct) + pct.toFixed(2) + '%)', b.x + 4, b.y - 4, col);
+    } else if (d.type === 'angle') {
+      // 趋势角度：线段 + 中点角度标签（屏幕 y 向下，取负才是数学角度）
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+      const deg = (Math.atan2(-(b.y - a.y), b.x - a.x) * 180) / Math.PI;
+      this.label(ctx, deg.toFixed(1) + '°', (a.x + b.x) / 2 + 6, (a.y + b.y) / 2 - 6, col);
     } else if (d.type === 'vline') {
       ctx.beginPath();
       ctx.moveTo(a.x, ch.plot.t);
@@ -1299,9 +1349,12 @@ export function drawSelfTest(): DrawTestResult {
     const dd = Ld.add('dot', [{ time: host.bars[20].time, price: 105 }]);
     const pd = Ld.pixelPts(dd)[0];
     t('圆点：圆心命中 / 40px 外不命中', !!Ld.hitTest(pd.x, pd.y) && Ld.hitTest(pd.x + 40, pd.y) === null);
-    t('光标组：工具表 18 种且新三项就位',
-      DRAW_TOOLS.length === 18 &&
+    t('光标组：工具表 21 种且新三项就位',
+      DRAW_TOOLS.length === 21 &&
       toolDef('dot').points === 1 && toolDef('highlight').points === 0 && toolDef('eraser').points === 0);
+    t('线组：信息线/趋势角度/横线 就位',
+      toolDef('infoline').points === 2 && toolDef('angle').points === 2 && toolDef('crossline').points === 1 &&
+      toolDef('trend').key3 === '⌥T' && toolDef('crossline').key3 === '⌥C');
 
     const Lh = new DrawLayer(host);
     Lh.setTool('highlight');

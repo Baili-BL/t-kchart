@@ -71,6 +71,12 @@ export function toolKeyForLabel(label: string): string | null {
       return 'eraser';
     case '趋势线':
       return 'trend';
+    case '信息线':
+      return 'infoline';
+    case '趋势角度':
+      return 'angle';
+    case '横线':
+      return 'crossline';
     case '水平线':
       return 'hline';
     case '垂直线':

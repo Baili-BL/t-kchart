@@ -45,3 +45,34 @@ export const HIGHLIGHTER = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"
 
 // 橡皮擦：斜放的方块橡皮 + 底部横线
 export const ERASER = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12.5 5.5 L22.5 15.5 L16 22 H10 L5.5 17.5 a2 2 0 0 1 0-2.8 Z M11 12 l5.5 5.5 M6 25 h16\"></path></svg>";
+
+/* —— 设计稿「趋势线」子菜单（线工具组）图标 —— */
+// 射线：带起点圆点的斜线
+export const RAY_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\"><circle cx=\"6\" cy=\"22\" r=\"1.8\"></circle><path d=\"M8 20 L22 6\"></path></svg>";
+
+// 信息线：带起点圆点的斜线 + 端点信息框
+export const INFOLINE_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\"><circle cx=\"6\" cy=\"22\" r=\"1.8\"></circle><path d=\"M8 20 L20 8\"></path><rect x=\"17\" y=\"16\" width=\"6\" height=\"5\" rx=\"1.2\"></rect></svg>";
+
+// 延长线：两端都有圆点的斜线
+export const EXTLINE_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\"><circle cx=\"6\" cy=\"22\" r=\"1.8\"></circle><path d=\"M8 20 L20 8\"></path><circle cx=\"22\" cy=\"6\" r=\"1.8\"></circle></svg>";
+
+// 趋势角度：斜线 + 角度弧
+export const ANGLE_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\"><path d=\"M6 22 L22 6 M6 15 A7 7 0 0 1 13 22\"></path></svg>";
+
+// 水平线：两端圆点的横线
+export const HLINE_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\"><circle cx=\"5\" cy=\"14\" r=\"1.8\"></circle><path d=\"M7.5 14 H20.5\"></path><circle cx=\"23\" cy=\"14\" r=\"1.8\"></circle></svg>";
+
+// 水平射线：起点圆点向右
+export const HRAY_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\"><circle cx=\"6\" cy=\"14\" r=\"1.8\"></circle><path d=\"M8.5 14 H23\"></path></svg>";
+
+// 垂直线：两端圆点的竖线
+export const VLINE_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\"><circle cx=\"14\" cy=\"5\" r=\"1.8\"></circle><path d=\"M14 7.5 V20.5\"></path><circle cx=\"14\" cy=\"23\" r=\"1.8\"></circle></svg>";
+
+// 横线：十字
+export const CROSSLINE_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\"><path d=\"M4 14 H24 M14 4 V24\"></path></svg>";
+
+// 收藏星（描边）
+export const STAR = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linejoin=\"round\"><path d=\"M14 4.5 l2.9 5.9 6.5 1 -4.7 4.6 1.1 6.5L14 19.4 8.2 22.5l1.1-6.5L4.6 11.4l6.5-1Z\"></path></svg>";
+
+// 信息徽标（灰底圆 + i）
+export const INFO_BADGE = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"16\" height=\"16\"><circle cx=\"14\" cy=\"14\" r=\"9\" fill=\"rgb(178,178,182)\"></circle><rect x=\"13\" y=\"12\" width=\"2\" height=\"8\" rx=\"1\" fill=\"#fff\"></rect><rect x=\"13\" y=\"8\" width=\"2\" height=\"2\" rx=\"1\" fill=\"#fff\"></rect></svg>";

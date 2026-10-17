@@ -9,6 +9,9 @@ import {
   CROSS, TRENDLINE, FIB, PATTERN, LONG_POS, BRUSH, TEXT, STICKER,
   MEASURE, ZOOM, MAGNET, STAY_DRAWING, LOCK, HIDE_ALL, TRASH, CARET,
   DOT, ARROW_ICON, HIGHLIGHTER, ERASER,
+  RAY_ICON, INFOLINE_ICON, EXTLINE_ICON, ANGLE_ICON,
+  HLINE_ICON, HRAY_ICON, VLINE_ICON, CROSSLINE_ICON,
+  STAR, INFO_BADGE,
 } from './sidebar-icons';
 
 /* ------------------------------------------------------------------ 工具 */
@@ -60,12 +63,13 @@ const CSS = `
 .kc-sb-caret > svg { position: absolute; left: 3px; top: 13px; width: 4px; height: 7px; fill: rgb(15,15,15); transition: transform .5s cubic-bezier(.175,.885,.32,1.275); }
 .kc-sb-caret:hover > svg { transform: scale(1.25); }
 .kc-sb-tool.open .kc-sb-caret > svg { transform: rotate(180deg); }
-/* —— 子菜单：白卡阴影，右侧弹出 —— */
+/* —— 子菜单：白卡阴影，右侧弹出。挂在 body 下用 fixed 定位，
+      避免 sidebar 的 overflow-x:hidden 把整张菜单裁掉（裁剪后既不可见也不可点） —— */
 .kc-sb-menu {
-  position: absolute; left: 52px; top: 0; min-width: 220px; padding: 6px 0; margin: 0;
+  position: fixed; min-width: 220px; padding: 6px 0; margin: 0;
   list-style: none; background: #fff; border-radius: 6px;
   box-shadow: 0 4px 10px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.04);
-  font-size: 13px; z-index: 120; display: none;
+  font-size: 13px; z-index: 1200; display: none;
 }
 .kc-sb-menu.open { display: block; }
 .kc-sb-menu li {
@@ -95,6 +99,23 @@ const CSS = `
 }
 .kc-menu-toggle.off .kc-menu-switch { background: rgb(200,200,200); }
 .kc-menu-toggle.off .kc-menu-switch::after { left: 3px; }
+/* —— 分组标题 / 快捷键提示 / 信息徽标 / 收藏星（设计稿「趋势线」子菜单） —— */
+.kc-sb-menu .kc-menu-group {
+  display: block; height: auto; padding: 8px 12px 2px; margin: 0;
+  color: rgb(140,140,145); font-size: 11px; cursor: default;
+}
+.kc-sb-menu .kc-menu-group:hover { background: transparent; }
+.kc-sb-menu li .kc-li-spacer { flex: 1 1 auto; }
+.kc-sb-menu li .kc-menu-key { color: rgb(140,140,145); font-size: 12px; }
+.kc-sb-menu li .kc-info-badge { display: inline-flex; }
+.kc-sb-menu li .kc-star {
+  display: inline-flex; color: rgb(15,15,15); opacity: 0; cursor: pointer;
+  transition: opacity .1s ease;
+}
+.kc-sb-menu li:hover .kc-star { opacity: 0.55; }
+.kc-sb-menu li .kc-star:hover { opacity: 1; }
+.kc-sb-menu li .kc-star.on { opacity: 1; color: #f0a70a; }
+.kc-sb-menu li .kc-star.on svg path { fill: #f0a70a; stroke: #f0a70a; }
 `;
 
 function injectStyle(): void {
@@ -108,9 +129,14 @@ function injectStyle(): void {
 /* ------------------------------------------------------------- 子菜单数据 */
 // 主图标 / 箭头图标 / 悬停标题 / 子菜单项（标签 + 图标）。
 // 「十字线」子菜单 = 光标工具组，按设计稿：十字线/圆点/箭头/荧光笔/橡皮擦 + 长按提示开关。
+// 「趋势线」子菜单 = 线工具组，按设计稿分组：「线」组（趋势线⌥T/射线/信息线/延长线/趋势角度）
+// + 水平组（水平线⌥H/水平射线⌥J/垂直线⌥V/横线⌥C）；箭头/平行通道作为补充组保留入口。
+type MenuItem = [label: string, icon: string, hint?: string] | [label: string, icon: string, hint?: string, badge?: 'info'];
 interface ToolDef {
   icon: string; caret?: string; label: string;
-  items?: Array<[string, string]>;
+  items?: MenuItem[];
+  /** 分组子菜单：有 label 时渲染灰色小标题行（设计稿「线」） */
+  groups?: Array<{ label?: string; items: MenuItem[] }>;
   /** 子菜单末尾（分隔线之下）的开关行；点击走 onToggle */
   toggle?: { label: string; on?: boolean };
 }
@@ -127,9 +153,24 @@ const SECTIONS: Section[] = [
     ], toggle: { label: LONGPRESS_TIP_LABEL, on: true } },
   ]},
   { tools: [
-    { icon: TRENDLINE, caret: CARET, label: '趋势线', items: [
-      ['趋势线', TRENDLINE], ['水平线', TRENDLINE], ['垂直线', TRENDLINE], ['射线', TRENDLINE],
-      ['水平射线', TRENDLINE], ['延长线', TRENDLINE], ['箭头', TRENDLINE], ['平行通道', TRENDLINE],
+    { icon: TRENDLINE, caret: CARET, label: '趋势线', groups: [
+      { label: '线', items: [
+        ['趋势线', TRENDLINE, '⌥T'],
+        ['射线', RAY_ICON],
+        ['信息线', INFOLINE_ICON, undefined, 'info'],
+        ['延长线', EXTLINE_ICON],
+        ['趋势角度', ANGLE_ICON],
+      ] },
+      { items: [
+        ['水平线', HLINE_ICON, '⌥H'],
+        ['水平射线', HRAY_ICON, '⌥J'],
+        ['垂直线', VLINE_ICON, '⌥V'],
+        ['横线', CROSSLINE_ICON, '⌥C'],
+      ] },
+      { items: [
+        ['箭头', ARROW_ICON],
+        ['平行通道', TRENDLINE],
+      ] },
     ] },
     { icon: FIB, caret: CARET, label: '斐波那契回撤', items: [['斐波那契回撤', FIB], ['斐波那契扩展', FIB], ['斐波那契通道', FIB]] },
   ]},
@@ -163,8 +204,79 @@ export interface SidebarCallbacks {
   onToggle?: (label: string, on: boolean) => void;
 }
 
+/* —— 收藏（设计稿悬停行右侧的星标），localStorage 持久化 —— */
+const FAV_KEY = 'kc-draw-favs';
+function loadFavs(): Set<string> {
+  try { return new Set(JSON.parse(localStorage.getItem(FAV_KEY) || '[]') as string[]); }
+  catch (_e) { return new Set(); }
+}
+function saveFavs(s: Set<string>): void {
+  try { localStorage.setItem(FAV_KEY, JSON.stringify([...s])); } catch (_e) { /* 忽略 */ }
+}
+
+/**
+ * 工具子菜单：分组（灰色小标题）+ 行（图标 标签 [徽标] [快捷键] [收藏星]）+ 末尾开关行。
+ * pick 在用户点某一行时回调。
+ */
+function buildToolMenu(t: ToolDef, pick: (label: string) => void): HTMLUListElement {
+  const menu = el('ul', 'kc-sb-menu');
+  const favs = loadFavs();
+  const groups = t.groups ?? [{ items: t.items ?? [] }];
+  for (const g of groups) {
+    if (g.label) {
+      const gl = el('li', 'kc-menu-group');
+      gl.textContent = g.label;
+      menu.appendChild(gl);
+    }
+    for (const item of g.items) {
+      const [label, icon, hint, badge] = item;
+      const li = el('li');
+      li.innerHTML = icon + `<span>${label}</span>`
+        + (badge === 'info' ? `<span class="kc-info-badge">${INFO_BADGE}</span>` : '')
+        + '<span class="kc-li-spacer"></span>'
+        + (hint ? `<span class="kc-menu-key">${hint}</span>` : '')
+        + `<span class="kc-star${favs.has(label) ? ' on' : ''}" title="收藏">${STAR}</span>`;
+      const star = li.querySelector('.kc-star') as HTMLElement;
+      star.addEventListener('click', e => {
+        e.stopPropagation();
+        const on = !favs.has(label);
+        if (on) favs.add(label); else favs.delete(label);
+        saveFavs(favs);
+        star.classList.toggle('on', on);
+      });
+      li.addEventListener('click', e => {
+        e.stopPropagation();
+        menu.querySelectorAll('li').forEach(x => x.classList.remove('sel'));
+        li.classList.add('sel');
+        pick(label);
+      });
+      menu.appendChild(li);
+    }
+  }
+  // 子菜单末尾的开关行（设计稿：分隔线 + 「长按时显示数值工具提示」）
+  if (t.toggle) {
+    const div = el('li', 'kc-menu-div');
+    menu.appendChild(div);
+    const row = el('div', 'kc-menu-toggle' + (t.toggle.on === false ? ' off' : ''));
+    row.innerHTML = `<span>${t.toggle.label}</span><span class="kc-menu-switch"></span>`;
+    row.addEventListener('click', e => {
+      e.stopPropagation();
+      const on = row.classList.toggle('off') === false;
+      cb_onToggle(t.toggle!.label, on);
+    });
+    menu.appendChild(row);
+  }
+  return menu;
+}
+
+// 开关行的回调由 createSidebar 注入（buildToolMenu 在模块层定义，避免每层传参）
+let cb_onToggle: (label: string, on: boolean) => void = () => { /* 由 createSidebar 赋值 */ };
+
 export function createSidebar(mount: HTMLElement, cb: SidebarCallbacks = {}): HTMLElement {
   injectStyle();
+  cb_onToggle = (label, on) => cb.onToggle?.(label, on);
+  // 组件单例：清理上次 mount 残留在 body 下的子菜单（React 严格模式 / 热重载会重复挂载）
+  document.body.querySelectorAll(':scope > .kc-sb-menu').forEach(m => m.remove());
 
   const root = el('div', 'kc-sidebar');
   root.setAttribute('role', 'toolbar');
@@ -173,7 +285,21 @@ export function createSidebar(mount: HTMLElement, cb: SidebarCallbacks = {}): HT
 
   const menus: HTMLElement[] = [];
   const closeMenus = (except?: HTMLElement): void => {
-    menus.forEach(m => { if (m !== except) { m.classList.remove('open'); m.parentElement?.classList.remove('open'); } });
+    menus.forEach(m => { if (m !== except) m.classList.remove('open'); });
+    root.querySelectorAll('.kc-sb-tool.open').forEach(c => c.classList.remove('open'));
+  };
+  /** 菜单挂在 body 下（fixed）：贴着 cell 右缘弹出，底部越界时上收 */
+  const openMenuAt = (menu: HTMLElement, cell: HTMLElement): void => {
+    menu.classList.add('open');
+    cell.classList.add('open');
+    const r = cell.getBoundingClientRect();
+    const mw = menu.offsetWidth;
+    const mh = menu.offsetHeight;
+    let x = r.right + 2;
+    if (x + mw > window.innerWidth - 8) x = Math.max(8, r.left - mw - 2);
+    const y = Math.max(8, Math.min(r.top, window.innerHeight - mh - 8));
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
   };
 
   let selected: HTMLButtonElement | null = null;
@@ -210,41 +336,20 @@ export function createSidebar(mount: HTMLElement, cb: SidebarCallbacks = {}): HT
         caret.tabIndex = -1;
         caret.setAttribute('aria-label', t.label + '（子菜单）');
         caret.innerHTML = t.caret;
-        const menu = el('ul', 'kc-sb-menu');
-        for (const [label, icon] of t.items ?? []) {
-          const li = el('li');
-          li.innerHTML = icon + `<span>${label}</span>`;
-          li.addEventListener('click', e => {
-            e.stopPropagation();
-            menu.querySelectorAll('li').forEach(x => x.classList.remove('sel'));
-            li.classList.add('sel');
-            closeMenus();
-            pick(btn, label);
-          });
-          menu.appendChild(li);
-        }
-        // 子菜单末尾的开关行（设计稿：分隔线 + 「长按时显示数值工具提示」）
-        if (t.toggle) {
-          const div = el('li', 'kc-menu-div');
-          menu.appendChild(div);
-          const row = el('div', 'kc-menu-toggle' + (t.toggle.on === false ? ' off' : ''));
-          row.innerHTML = `<span>${t.toggle.label}</span><span class="kc-menu-switch"></span>`;
-          row.addEventListener('click', e => {
-            e.stopPropagation();
-            const on = row.classList.toggle('off') === false;
-            cb.onToggle?.(t.toggle!.label, on);
-          });
-          menu.appendChild(row);
-        }
+        const menu = buildToolMenu(t, (label) => {
+          closeMenus();
+          pick(btn, label);
+        });
         caret.addEventListener('click', e => {
           e.stopPropagation();
           const was = menu.classList.contains('open');
           closeMenus();
-          if (!was) { menu.classList.add('open'); cell.classList.add('open'); }
+          if (!was) openMenuAt(menu, cell);
         });
         menus.push(menu);
         cell.appendChild(caret);
-        cell.appendChild(menu);
+        // 菜单挂 body（fixed 定位），避免被 sidebar 的 overflow 裁剪；cell 只留引用关系
+        document.body.appendChild(menu);
       } else {
         btn.addEventListener('click', () => {
           if (t.label === '继续绘图') {
@@ -264,6 +369,8 @@ export function createSidebar(mount: HTMLElement, cb: SidebarCallbacks = {}): HT
 
   document.addEventListener('click', () => closeMenus());
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenus(); });
+  // sidebar 滚动时菜单不再贴合原位，直接关掉
+  root.addEventListener('scroll', () => closeMenus());
 
   mount.appendChild(root);
   // 默认选中第一个工具（十字线），对应原稿 #ebebeb 选中药丸
