@@ -16,7 +16,7 @@
  * ===========================================================================
  */
 
-import { Bar, RANGES, THEMES, clamp, fmtTime, log, makeBars, niceStep, sma } from './chart';
+import { Bar, CROSS_DASH, RANGES, THEMES, clamp, fmtTime, log, makeBars, niceStep, sma } from './chart';
 
 /* ===========================================================================
  * 1. 类型
@@ -43,7 +43,12 @@ export interface EquityOptions {
   bgColor?: string;
   gridColor?: string;
   axisTextColor?: string;
+  /** 十字光标线色 */
   crossColor?: string;
+  /** 十字光标轴标签底色 */
+  crossLabelColor?: string;
+  /** 十字光标轴标签字色 */
+  crossInkColor?: string;
   titleColor?: string;
   /** 右侧数值轴宽度 */
   axisWidth?: number;
@@ -78,7 +83,9 @@ export const EQUITY_DEFAULTS: Required<EquityOptions> = {
   bgColor: '#0e1116',
   gridColor: 'rgba(255,255,255,0.06)',
   axisTextColor: '#9aa4b2',
-  crossColor: '#787b86',
+  crossColor: '#797979',
+  crossLabelColor: '#3d3d3d',
+  crossInkColor: '#ffffff',
   titleColor: '#f23645',
   axisWidth: 96,
   axisHeight: 24,
@@ -350,6 +357,8 @@ export class EquityChart {
     this.o.gridColor = th.grid;
     this.o.axisTextColor = th.axisText;
     this.o.crossColor = th.cross;
+    this.o.crossLabelColor = th.crossLabel;
+    this.o.crossInkColor = th.crossInk;
     this.o.titleColor = name === 'light' ? '#f23645' : th.title;
     this.invalidate();
   }
@@ -629,6 +638,7 @@ export class EquityChart {
     this.drawEquityLine(i0, i1);
     this.drawPositions();
     this.drawCrosshairV();
+    this.drawCrosshairH();
     ctx.restore();
 
     this.drawValueAxis();
@@ -860,10 +870,29 @@ export class EquityChart {
     ctx.save();
     ctx.strokeStyle = this.o.crossColor;
     ctx.lineWidth = 1;
-    ctx.setLineDash([4, 4]);
+    ctx.setLineDash(CROSS_DASH);
     ctx.beginPath();
     ctx.moveTo(x, p.t);
     ctx.lineTo(x, p.b);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /** 横向十字线：与主图同一套节奏/颜色，只在鼠标落在绘图区内才画 */
+  private drawCrosshairH(): void {
+    const ptr = this.pointer;
+    if (!ptr) return;
+    const p = this.plot;
+    if (ptr.y < p.t || ptr.y > p.b) return;
+    const ctx = this.ctx;
+    const y = Math.round(ptr.y) + 0.5;
+    ctx.save();
+    ctx.strokeStyle = this.o.crossColor;
+    ctx.lineWidth = 1;
+    ctx.setLineDash(CROSS_DASH);
+    ctx.beginPath();
+    ctx.moveTo(p.l, y);
+    ctx.lineTo(p.r, y);
     ctx.stroke();
     ctx.restore();
   }
@@ -981,9 +1010,9 @@ export class EquityChart {
       const label = fmtMoney(v, this.o.decimals, this.o.thousands);
       const tw = ctx.measureText(label).width;
       const y = Math.round(ptr.y);
-      ctx.fillStyle = this.o.crossColor;
+      ctx.fillStyle = this.o.crossLabelColor ?? this.o.crossColor;
       ctx.fillRect(p.r + 4, y - 9, Math.max(this.o.axisWidth - 8, tw + 14), 18);
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = this.o.crossInkColor ?? '#ffffff';
       ctx.textAlign = 'left';
       ctx.fillText(label, p.r + 11, y);
     }
@@ -997,9 +1026,9 @@ export class EquityChart {
       const bw = tw + 14;
       const x = clamp(this.xCenter(i), p.l + bw / 2, p.r - bw / 2);
       const y = p.b + this.o.axisHeight / 2;
-      ctx.fillStyle = this.o.crossColor;
+      ctx.fillStyle = this.o.crossLabelColor ?? this.o.crossColor;
       ctx.fillRect(Math.round(x - bw / 2), Math.round(y - 9), Math.round(bw), 18);
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = this.o.crossInkColor ?? '#ffffff';
       ctx.textAlign = 'center';
       ctx.fillText(label, Math.round(x), Math.round(y));
     }

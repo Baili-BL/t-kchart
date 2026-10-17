@@ -123,7 +123,12 @@ export interface ChartOptions {
   bgColor?: string;
   gridColor?: string;
   axisTextColor?: string;
+  /** 十字光标**线**的颜色（虚线本身） */
   crossColor?: string;
+  /** 十字光标落在坐标轴上的那个方块底色 */
+  crossLabelColor?: string;
+  /** 方块里的字色 */
+  crossInkColor?: string;
   /** 右侧价格轴宽度（CSS 像素） */
   axisWidth?: number;
   /** 底部时间轴高度（CSS 像素） */
@@ -267,13 +272,30 @@ export interface ChartHooks {
   onAxisDraw?(ctx: CanvasRenderingContext2D): void;
 }
 
-/** 主题：只换背景/网格/文字/十字光标，不碰涨跌色（涨跌是 A 股习惯，不该跟着主题走）。 */
-export const THEMES: { [k: string]: { bg: string; grid: string; axisText: string; cross: string; title: string; fill: string } } = {
+/**
+ * 主题：只换背景/网格/文字/十字光标，不碰涨跌色（涨跌是 A 股习惯，不该跟着主题走）。
+ *
+ * 十字光标三色是从线上 TradingView（cn.tradingview.com 图表页）**逐像素取样**来的，
+ * 不是凭印象挑的：
+ *   - 线：浅色 rgb(156,156,156)、深色 rgb(121,121,121)（取自 widget dark 主题同一套调色板）
+ *   - 轴标签底色：浅色 rgb(15,15,15)、深色 rgb(61,61,61)
+ *   - 标签字色：两套都是纯白
+ * 注意「线色」和「标签底色」是**两个颜色**：老代码把 crossColor 一个值同时当线和底色用，
+ * 浅色下就出现了「白底上一根近黑虚线、标签却是灰底」的假对齐。
+ */
+export const THEMES: {
+  [k: string]: {
+    bg: string; grid: string; axisText: string; cross: string;
+    crossLabel: string; crossInk: string; title: string; fill: string;
+  };
+} = {
   dark: {
     bg: '#0e1116',
     grid: 'rgba(255,255,255,0.055)',
     axisText: '#9aa4b2',
-    cross: '#787b86',
+    cross: '#797979',
+    crossLabel: '#3d3d3d',
+    crossInk: '#ffffff',
     title: '#e6edf3',
     fill: 'rgba(120,160,255,0.13)',
   },
@@ -281,7 +303,9 @@ export const THEMES: { [k: string]: { bg: string; grid: string; axisText: string
     bg: '#ffffff',
     grid: 'rgba(0,0,0,0.07)',
     axisText: '#131722',
-    cross: '#131722',
+    cross: '#9c9c9c',
+    crossLabel: '#0f0f0f',
+    crossInk: '#ffffff',
     title: '#131722',
     fill: 'rgba(41,98,255,0.10)',
   },
@@ -317,7 +341,9 @@ export const DEFAULTS: Required<ChartOptions> = {
   bgColor: '#0e1116',
   gridColor: 'rgba(255,255,255,0.055)',
   axisTextColor: '#9aa4b2',
-  crossColor: '#787b86',
+  crossColor: '#797979',
+  crossLabelColor: '#3d3d3d',
+  crossInkColor: '#ffffff',
   axisWidth: 66,
   axisHeight: 26,
   volumeRatio: 0.22,
@@ -334,12 +360,79 @@ export const DEFAULTS: Required<ChartOptions> = {
   onView: function (_t0: number, _t1: number): void { /* 默认不做事 */ },
 };
 
+/* ---------------------------------------------------------------- 十字光标
+ * 下面这四个数是**量出来的**，不是拍的：
+ * 用 Playwright 把 https://cn.tradingview.com/chart/ 的十字线画到 2x 屏上截图，
+ * 再逐像素扫虚线列（浅色主题，dpr=2）：
+ *   亮段 10 设备像素 / 暗段 12 设备像素，周期 22 → 折成 CSS 就是 5 亮 6 暗；
+ *   线宽 2 设备像素 = 1 CSS 像素，颜色恒为 rgb(156,156,156)，无灰度过渡（说明画在整像素上）；
+ *   价格轴标签块高 42 设备像素 = 21 CSS，时间轴标签块高 46~47 设备像素 ≈ 23 CSS。
+ * 官方两条线（竖 + 横）用的是同一套节奏和同一个颜色 —— 横向那条我们以前**漏画了**。
+ */
+export const CROSS_DASH: [number, number] = [5, 6];
+/** 价格轴十字标签块高（CSS） */
+export const CROSS_PRICE_LABEL_H = 21;
+/** 时间轴十字标签块高（CSS） */
+export const CROSS_TIME_LABEL_H = 23;
+/** 时间轴标签左右内边距（CSS）：官方标签宽 = 文字宽 + 20 左右 */
+export const CROSS_TIME_PAD_X = 10;
+
+/**
+ * 价格轴十字标签的矩形：**贴着价格轴内侧、垂直居中在鼠标那一行**。
+ * 宽度至少占满轴（官方就是这样，标签块与轴同宽），文字更长时才撑开。
+ */
+export function crossPriceLabelRect(
+  plotR: number, textW: number, axisW: number, pointerY: number,
+): { x: number; y: number; w: number; h: number } {
+  return {
+    x: plotR + 2,
+    y: Math.round(pointerY - CROSS_PRICE_LABEL_H / 2),
+    w: Math.max(axisW - 4, textW + 12),
+    h: CROSS_PRICE_LABEL_H,
+  };
+}
+
+/**
+ * 时间轴十字标签的矩形：以 bar 中心居中，左右夹在绘图区内
+ * （贴到最左/最右那根时官方也是把胶囊往回顶，而不是让它出血）。
+ */
+export function crossTimeLabelRect(
+  barX: number, textW: number, plotL: number, plotR: number, axisY: number,
+): { x: number; y: number; w: number; h: number } {
+  const w = textW + CROSS_TIME_PAD_X * 2;
+  const cx = clamp(barX, plotL + w / 2, plotR - w / 2);
+  return {
+    x: Math.round(cx - w / 2),
+    y: Math.round(axisY - CROSS_TIME_LABEL_H / 2),
+    w: Math.round(w),
+    h: CROSS_TIME_LABEL_H,
+  };
+}
+
 /** '#rrggbb' → 'rgba(r,g,b,a)'；不是 6 位十六进制就原样返回（渐变会退化为纯色） */
 export function withAlpha(hex: string, a: number): string {
   const m = /^#([0-9a-f]{6})$/i.exec(hex);
   if (!m) return hex;
   const n = parseInt(m[1], 16);
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
+
+/**
+ * 实心圆角矩形。canvas 的 roundRect 在旧 Safari 上没有，退化直角（十字标签 r 只有 2px，
+ * 退化后肉眼看不出差别，不值得为它引一个 polyfill）。
+ */
+export function fillRoundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, w: number, h: number, r: number, fill: string,
+): void {
+  const rr = (ctx as unknown as {
+    roundRect?: (x: number, y: number, w: number, h: number, r: number) => void;
+  }).roundRect;
+  ctx.beginPath();
+  if (rr) rr.call(ctx, x, y, w, h, r);
+  else ctx.rect(x, y, w, h);
+  ctx.fillStyle = fill;
+  ctx.fill();
 }
 
 /** 指标图例按钮的动作。max / collapse 由 KChart 内部消化，不进 studyHandler 回调 */
@@ -1046,6 +1139,8 @@ export class KChart {
     this.o.gridColor = t.grid;
     this.o.axisTextColor = t.axisText;
     this.o.crossColor = t.cross;
+    this.o.crossLabelColor = t.crossLabel;
+    this.o.crossInkColor = t.crossInk;
     this.o.titleColor = t.title;
     for (const ch of this.channels) ch.fill = t.fill;
     this.invalidate();
@@ -1650,6 +1745,7 @@ export class KChart {
     this.drawMarks();                // Pine plotshape 打点
     if (this.hooks && this.hooks.onDraw) this.hooks.onDraw(ctx);   // 外部图层（绘图工具）
     this.drawCrosshairV();
+    this.drawCrosshairH();
     ctx.restore();
 
     this.studyHits = [];
@@ -1767,7 +1863,7 @@ export class KChart {
       if (idx != null) {
         const x = Math.round(this.xCenter(idx)) + 0.5;
         ctx.strokeStyle = this.o.crossColor;
-        ctx.setLineDash([4, 4]);
+        ctx.setLineDash(CROSS_DASH);
         ctx.beginPath();
         ctx.moveTo(x, rect.t);
         ctx.lineTo(x, rect.b);
@@ -1778,7 +1874,7 @@ export class KChart {
       const ptr = this.pointer;
       if (ptr && ptr.y > rect.t && ptr.y < rect.b) {
         ctx.strokeStyle = this.o.crossColor;
-        ctx.setLineDash([4, 4]);
+        ctx.setLineDash(CROSS_DASH);
         ctx.beginPath();
         ctx.moveTo(rect.l, Math.round(ptr.y) + 0.5);
         ctx.lineTo(rect.r, Math.round(ptr.y) + 0.5);
@@ -1797,17 +1893,15 @@ export class KChart {
         if (y < rect.t + 8 || y > rect.b - 6) continue;
         ctx.fillText(fmtStudyValue(v, step), p.r + 8, Math.round(y));
       }
-      // 鼠标处的数值标签（反色）
+      // 鼠标处的数值标签（与主图同一套标签度量：块高 21 / 标签底色 / 白字）
       if (ptr && ptr.y > rect.t && ptr.y < rect.b) {
         const v = sc.max - ((ptr.y - rect.t) / rect.h) * span;
         const label = fmtStudyValue(v, step / 10);
         const tw = ctx.measureText(label).width;
-        const bw = Math.max(this.o.axisWidth - 4, tw + 12);
-        const y = Math.round(ptr.y);
-        ctx.fillStyle = this.o.crossColor;
-        ctx.fillRect(p.r + 2, y - 9, bw, 18);
-        ctx.fillStyle = '#ffffff';
-        ctx.fillText(label, p.r + 8, y);
+        const box = crossPriceLabelRect(p.r, tw, this.o.axisWidth, ptr.y);
+        fillRoundRect(ctx, box.x, box.y, box.w, box.h, 2, this.o.crossLabelColor);
+        ctx.fillStyle = this.o.crossInkColor;
+        ctx.fillText(label, p.r + 8, Math.round(ptr.y));
       }
     }
     // 价格轴竖线延伸到最底下一个副图
@@ -2326,7 +2420,7 @@ export class KChart {
     ctx.save();
     ctx.strokeStyle = this.o.axisTextColor;
     ctx.lineWidth = 1;
-    ctx.setLineDash([4, 4]);
+    ctx.setLineDash(CROSS_DASH);
     ctx.beginPath();
     ctx.moveTo(p.l, Math.round(yB) + 0.5);
     ctx.lineTo(p.r, Math.round(yB) + 0.5);
@@ -2457,10 +2551,33 @@ export class KChart {
     ctx.save();
     ctx.strokeStyle = this.o.crossColor;
     ctx.lineWidth = 1;
-    ctx.setLineDash([4, 4]);
+    ctx.setLineDash(CROSS_DASH);
     ctx.beginPath();
     ctx.moveTo(x, p.t);
     ctx.lineTo(x, p.b);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /**
+   * 横向十字线 —— 官方有、我们以前没有（用户截图里那根浅灰实线其实是网格线）。
+   * 只在鼠标真的落在主图绘图区里时画（联动的其它图没有「鼠标的纵坐标」这回事）；
+   * 节奏 / 颜色 / 线宽跟竖线完全一致。
+   */
+  private drawCrosshairH(): void {
+    const ptr = this.pointer;
+    if (!ptr) return;
+    const p = this.plot;
+    if (ptr.y < p.t || ptr.y > p.b) return;
+    const ctx = this.ctx;
+    const y = Math.round(ptr.y) + 0.5;
+    ctx.save();
+    ctx.strokeStyle = this.o.crossColor;
+    ctx.lineWidth = 1;
+    ctx.setLineDash(CROSS_DASH);
+    ctx.beginPath();
+    ctx.moveTo(p.l, y);
+    ctx.lineTo(p.r, y);
     ctx.stroke();
     ctx.restore();
   }
@@ -2620,37 +2737,33 @@ export class KChart {
     ctx.font = this.o.font;
     ctx.textBaseline = 'middle';
 
-    // 价格轴反色标签：**只在鼠标真的落在这张图上时画**。
+    // 价格轴标签：**只在鼠标真的落在这张图上时画**。
     // 联动的其它图没有「鼠标的纵坐标」这回事，硬画一个价格标签是瞎编。
+    // 度量对齐线上：块高 21、底色是「标签色」（不是线色）、字纯白。
     if (ptr && ptr.y >= p.t && ptr.y <= p.b) {
       const price = this.pOf(ptr.y);
       const dec = this.dec();
       const label = price.toFixed(dec);
       const tw = ctx.measureText(label).width;
-      const bw = Math.max(this.o.axisWidth - 4, tw + 12);
-      const y = Math.round(ptr.y);
-      ctx.fillStyle = this.o.crossColor;
-      ctx.fillRect(p.r + 2, y - 9, bw, 18);
-      ctx.fillStyle = '#ffffff';
+      const box = crossPriceLabelRect(p.r, tw, this.o.axisWidth, ptr.y);
+      fillRoundRect(ctx, box.x, box.y, box.w, box.h, 2, this.o.crossLabelColor);
+      ctx.fillStyle = this.o.crossInkColor;
       ctx.textAlign = 'left';
-      ctx.fillText(label, p.r + 8, y);
+      ctx.fillText(label, p.r + 8, Math.round(ptr.y));
     }
 
-    // 时间轴反色标签（吸附到 bar 中心）
+    // 时间轴标签（吸附到 bar 中心）
     if (i != null) {
       const lo = Math.max(0, i0);
       const hi = Math.min(this.bars.length - 1, i1);
       const spanDays = hi >= lo ? (this.bars[hi].time - this.bars[lo].time) / 86400000 : 30;
       const label = fmtCrossTime(this.bars[i].time, spanDays);
       const tw = ctx.measureText(label).width;
-      const bw = tw + 14;
-      const x = clamp(this.xCenter(i), p.l + bw / 2, p.r - bw / 2);
-      const y = this.axisY();
-      ctx.fillStyle = this.o.crossColor;
-      ctx.fillRect(Math.round(x - bw / 2), Math.round(y - 9), Math.round(bw), 18);
-      ctx.fillStyle = '#ffffff';
+      const box = crossTimeLabelRect(this.xCenter(i), tw, p.l, p.r, this.axisY());
+      fillRoundRect(ctx, box.x, box.y, box.w, box.h, 2, this.o.crossLabelColor);
+      ctx.fillStyle = this.o.crossInkColor;
       ctx.textAlign = 'center';
-      ctx.fillText(label, Math.round(x), Math.round(y));
+      ctx.fillText(label, box.x + box.w / 2, Math.round(this.axisY()));
     }
   }
 
