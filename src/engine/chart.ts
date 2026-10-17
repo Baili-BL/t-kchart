@@ -566,8 +566,45 @@ export function fmtCrossTime(t: number, spanDays: number): string {
   return week + ' ' + d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
 }
 
-export function decimalsFor(step: number): number {
-  if (!(step > 0)) return 2;
+/** 成交量缩写（设计稿长按卡片用）：68.4K / 1.2M / 3.4B，一千以内原样；非法值返回 — */
+export function fmtVolShort(v: number): string {
+  if (!isFinite(v) || v < 0) return '—';
+  if (v < 1000) return String(Math.round(v));
+  const units = ['K', 'M', 'B', 'T'];
+  let n = v;
+  let u = -1;
+  while (n >= 1000 && u < units.length - 1) { n /= 1000; u++; }
+  return (n >= 100 ? n.toFixed(0) : n.toFixed(1)) + units[u];
+}
+
+export interface OhlcCardRow { label: string; value: string }
+export interface OhlcCardData { up: boolean; rows: OhlcCardRow[] }
+
+/**
+ * 长按信息卡的数据模型（设计稿「鼠标长按时 K 线图展示」）：
+ * 开盘价 / 高 / 低 / 收盘价 / 涨跌（+绝对值 (+百分比)）/ 成交量（缩写）。
+ * 涨跌以**前一根收盘**为基准（第一根退化为和自身比，涨跌 0）；整卡数值统一按
+ * 该 bar 涨跌着色（A股习惯：涨红跌绿），由 up 字段交给渲染层。
+ */
+export function ohlcCardData(b: Bar, prevClose: number, dec: number): OhlcCardData {
+  const f = (x: number): string => x.toFixed(dec);
+  const chg = b.close - prevClose;
+  const pct = prevClose !== 0 ? (chg / prevClose) * 100 : 0;
+  const sgn = chg > 0 ? '+' : '';
+  return {
+    up: chg >= 0,
+    rows: [
+      { label: '开盘价', value: f(b.open) },
+      { label: '高', value: f(b.high) },
+      { label: '低', value: f(b.low) },
+      { label: '收盘价', value: f(b.close) },
+      { label: '涨跌', value: sgn + chg.toFixed(dec) + ' (' + sgn + pct.toFixed(2) + '%)' },
+      { label: '成交量', value: fmtVolShort(b.volume) },
+    ],
+  };
+}
+
+export function decimalsFor(step: number): number {  if (!(step > 0)) return 2;
   const d = Math.ceil(-Math.log10(step));
   return clamp(d, 0, 6);
 }
@@ -2465,7 +2502,11 @@ export class KChart {
     }
   }
 
-  /** 长按数值提示：深色小浮窗 = 光标处价格 + 所在 bar 时间 */
+  /**
+   * 长按数值提示（设计稿「鼠标长按时 K 线图展示」）：
+   * 白底圆角阴影卡片，左列灰黑标签、右列右对齐数值，整卡按该 bar 涨跌着色（涨红跌绿）。
+   * 贴在按压点右侧垂直居中，出界往回翻并夹在绘图区内。
+   */
   private drawLongPressTip(): void {
     const lp = this.lpPos;
     if (!lp || !this.bars.length) return;
@@ -2473,33 +2514,51 @@ export class KChart {
     const p = this.plot;
     const i = clamp(Math.round(this.iOf(lp.x)), 0, this.bars.length - 1);
     const b = this.bars[i];
-    const dec = this.dec();
-    const spanDays = (this.bars[this.bars.length - 1].time - this.bars[0].time) / 86400000;
-    const priceLine = this.pOf(lp.y).toFixed(dec);
-    const timeLine = fmtCrossTime(b.time, spanDays);
+    const prev = i > 0 ? this.bars[i - 1] : b;
+    const card = ohlcCardData(b, prev.close, this.dec());
     ctx.save();
     ctx.font = this.o.font;
-    const w1 = ctx.measureText(priceLine).width;
-    const w2 = ctx.measureText(timeLine).width;
-    const bw = Math.max(w1, w2) + 16;
-    const bh = 34;
-    // 浮窗贴在光标右下，出界往回翻
-    let bx = lp.x + 12;
-    let by = lp.y + 12;
-    if (bx + bw > p.r) bx = lp.x - bw - 12;
-    if (by + bh > p.b) by = lp.y - bh - 12;
-    ctx.fillStyle = 'rgba(14,17,22,0.9)';
-    ctx.beginPath();
+    const padX = 14, padY = 12, rowH = 26, gap = 24;
+    let labW = 0, valW = 0;
+    for (const r of card.rows) {
+      labW = Math.max(labW, ctx.measureText(r.label).width);
+      valW = Math.max(valW, ctx.measureText(r.value).width);
+    }
+    const bw = Math.ceil(labW + gap + valW) + padX * 2;
+    const bh = card.rows.length * rowH + (padY - 4) * 2;
+    let bx = lp.x + 16;
+    let by = lp.y - bh / 2;
+    if (bx + bw > p.r - 4) bx = lp.x - bw - 16;
+    bx = clamp(bx, p.l + 4, Math.max(p.l + 4, p.r - bw - 4));
+    by = clamp(by, p.t + 4, Math.max(p.t + 4, p.b - bh - 4));
+    // 卡片：白底 + 圆角 + 投影 + 细边
     const rr = (ctx as unknown as { roundRect?: (x: number, y: number, w: number, h: number, r: number) => void }).roundRect;
-    if (rr) rr.call(ctx, bx, by, bw, bh, 6);
+    ctx.beginPath();
+    if (rr) rr.call(ctx, bx, by, bw, bh, 10);
     else ctx.rect(bx, by, bw, bh);
-    ctx.fill();
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
+    ctx.shadowColor = 'rgba(20,24,31,0.16)';
+    ctx.shadowBlur = 20;
+    ctx.shadowOffsetY = 5;
     ctx.fillStyle = '#ffffff';
-    ctx.fillText(priceLine, bx + 8, by + 12);
-    ctx.fillStyle = 'rgba(255,255,255,0.62)';
-    ctx.fillText(timeLine, bx + 8, by + 25);
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.strokeStyle = 'rgba(20,24,31,0.08)';
+    ctx.stroke();
+    // 六行内容：标签左对齐深灰，数值右对齐涨跌色
+    const valColor = card.up ? this.o.upColor : this.o.downColor;
+    ctx.textBaseline = 'middle';
+    let y = by + padY - 4 + rowH / 2;
+    for (const r of card.rows) {
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#131722';
+      ctx.fillText(r.label, bx + padX, y);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = valColor;
+      ctx.fillText(r.value, bx + bw - padX, y);
+      y += rowH;
+    }
     ctx.restore();
   }
 

@@ -3,7 +3,7 @@
  * node 环境没有 localStorage，持久化与 hydrate 校验由浏览器 E2E 覆盖。
  */
 import { describe, expect, it, afterEach } from 'vitest';
-import { fmtTime, fmtCrossTime, setTimezoneShift, timezoneShift } from '../src/engine/chart';
+import { fmtTime, fmtCrossTime, fmtVolShort, ohlcCardData, setTimezoneShift, timezoneShift } from '../src/engine/chart';
 import {
   DEFAULT_SETTINGS, PRECISION_OPTIONS, TZ_OPTIONS, tzShiftMinFor, useChartSettingsStore,
 } from '../src/store/chartSettingsStore';
@@ -98,5 +98,66 @@ describe('chartSettingsStore', () => {
       'barChange', 'buySell', 'downColor', 'indBg', 'indInputs', 'indValues', 'lastDayChange',
       'lineColor', 'logo', 'name', 'precision', 'showVolume', 'ticker', 'timezone', 'upColor', 'values',
     ].sort());
+  });
+});
+
+/* ===========================================================================
+ * 长按 K 线信息卡（设计稿「鼠标长按的时候，K线图展示」）
+ *   —— fmtVolShort 成交量缩写 + ohlcCardData 卡片数据模型
+ * ========================================================================= */
+
+describe('fmtVolShort：成交量缩写（68.4K 风格）', () => {
+  it('一千以内四舍五入原样', () => {
+    expect(fmtVolShort(0)).toBe('0');
+    expect(fmtVolShort(68)).toBe('68');
+    expect(fmtVolShort(999.6)).toBe('1000');
+  });
+  it('K/M/B/T 逐级缩写，百位取整、不足百位保留 1 位小数', () => {
+    expect(fmtVolShort(68400)).toBe('68.4K');
+    expect(fmtVolShort(999 * 1000)).toBe('999K');
+    expect(fmtVolShort(1_234_567)).toBe('1.2M');
+    expect(fmtVolShort(3_450_000_000)).toBe('3.5B');
+    expect(fmtVolShort(2.5e12)).toBe('2.5T');
+  });
+  it('非法输入返回 —', () => {
+    expect(fmtVolShort(NaN)).toBe('—');
+    expect(fmtVolShort(-5)).toBe('—');
+    expect(fmtVolShort(Infinity)).toBe('—');
+  });
+});
+
+describe('ohlcCardData：长按信息卡数据模型', () => {
+  const bar = { time: 0, open: 84.99, high: 85.12, low: 84.5, close: 85.12, volume: 68400 };
+
+  it('六行齐全，顺序为 开盘价/高/低/收盘价/涨跌/成交量', () => {
+    const c = ohlcCardData(bar, 84.99, 2);
+    expect(c.rows.map((r) => r.label)).toEqual(['开盘价', '高', '低', '收盘价', '涨跌', '成交量']);
+    expect(c.rows[0].value).toBe('84.99');
+    expect(c.rows[3].value).toBe('85.12');
+  });
+  it('涨跌 = 收盘 − 昨收，带符号与括号百分比；涨为 up=true', () => {
+    const c = ohlcCardData(bar, 84.99, 2);
+    expect(c.up).toBe(true);
+    expect(c.rows[4].value).toBe('+0.13 (+0.15%)');
+  });
+  it('跌为负号且 up=false；平盘（chg=0）按涨处理', () => {
+    const down = ohlcCardData({ ...bar, close: 84.2 }, 84.99, 2);
+    expect(down.up).toBe(false);
+    expect(down.rows[4].value).toBe('-0.79 (-0.93%)');
+    const flat = ohlcCardData({ ...bar, close: 84.99 }, 84.99, 2);
+    expect(flat.up).toBe(true);
+    expect(flat.rows[4].value).toBe('0.00 (0.00%)');
+  });
+  it('precision 透传：dec=3 时按 3 位小数格式化', () => {
+    const c = ohlcCardData(bar, 84.99, 3);
+    expect(c.rows[0].value).toBe('84.990');
+  });
+  it('昨收为 0 时不产生 NaN 百分比', () => {
+    const c = ohlcCardData({ ...bar, close: 85 }, 0, 2);
+    expect(c.rows[4].value).toBe('+85.00 (+0.00%)');
+  });
+  it('成交量行走缩写', () => {
+    const c = ohlcCardData(bar, 84.99, 2);
+    expect(c.rows[5].value).toBe('68.4K');
   });
 });
