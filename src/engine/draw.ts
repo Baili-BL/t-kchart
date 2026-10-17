@@ -91,8 +91,20 @@ export const DRAW_TOOLS: DrawToolDef[] = [
     icon: 'M9 2 L9 16' },
   { key: 'ray', label: '射线', points: 2, key2: 'r',
     icon: 'M3 14 L15 4 M11 4 L15 4 L15 8' },
+  { key: 'hray', label: '水平射线', points: 1, key2: 'y',
+    icon: 'M3 9 L16 9 M12 6 L16 9 L12 12' },
+  { key: 'extline', label: '延长线', points: 2, key2: 'e',
+    icon: 'M1 9 L17 9 M4 6 L1 9 L4 12 M14 6 L17 9 L14 12' },
+  { key: 'arrow', label: '箭头', points: 2, key2: 'w',
+    icon: 'M3 14 L14 4 M14 4 L9 4 M14 4 L14 9' },
   { key: 'rect', label: '矩形', points: 2, key2: 'b',
     icon: 'M3 5 L15 5 L15 14 L3 14 Z' },
+  { key: 'ellipse', label: '椭圆', points: 2, key2: 'o',
+    icon: 'M9 4 C13.5 4 16 6.2 16 9 C16 11.8 13.5 14 9 14 C4.5 14 2 11.8 2 9 C2 6.2 4.5 4 9 4 Z' },
+  { key: 'triangle', label: '三角形', points: 3, key2: 'i',
+    icon: 'M9 3 L16 14 L2 14 Z' },
+  { key: 'channel', label: '平行通道', points: 3, key2: 'c',
+    icon: 'M3 4 L15 4 M3 12 L15 12 M3 4 L3 12' },
   { key: 'fib', label: '斐波那契回撤', points: 2, key2: 'f',
     icon: 'M2 4 L16 4 M2 7.5 L16 7.5 M2 11 L16 11 M2 14.5 L16 14.5' },
   { key: 'text', label: '文字', points: 1, key2: 'x',
@@ -153,6 +165,36 @@ export function inRect(px: number, py: number, x0: number, y0: number, x1: numbe
   return px >= l && px <= r && py >= t && py <= b;
 }
 
+/** 点在三角形内（含边缘）：三条边的叉积同号即在内 */
+export function inTriangle(
+  px: number, py: number,
+  ax: number, ay: number, bx: number, by: number, cx: number, cy: number,
+): boolean {
+  const s1 = (bx - ax) * (py - ay) - (by - ay) * (px - ax);
+  const s2 = (cx - bx) * (py - by) - (cy - by) * (px - bx);
+  const s3 = (ax - cx) * (py - cy) - (ay - cy) * (px - cx);
+  return (s1 >= 0 && s2 >= 0 && s3 >= 0) || (s1 <= 0 && s2 <= 0 && s3 <= 0);
+}
+
+/**
+ * 点在平行四边形内：以 a 为原点、ab / ad 两个边向量做参数化，
+ * 两个投影参数都落在 [0,1] 即在内。channel 的命中用这个。
+ */
+export function inParallelogram(
+  px: number, py: number,
+  ax: number, ay: number, bx: number, by: number, dx: number, dy: number,
+): boolean {
+  const abx = bx - ax;
+  const aby = by - ay;
+  const apx = px - ax;
+  const apy = py - ay;
+  const dotAB = abx * abx + aby * aby;
+  const t = dotAB ? (apx * abx + apy * aby) / dotAB : 0;
+  const dotDD = dx * dx + dy * dy;
+  const u = dotDD ? (apx * dx + apy * dy) / dotDD : 0;
+  return t >= 0 && t <= 1 && u >= 0 && u <= 1;
+}
+
 /* ===========================================================================
  * 4. 绘图层
  * ========================================================================= */
@@ -167,6 +209,8 @@ export class DrawLayer {
 
   private nextId: number;
   private pending: Drawing | null;
+  /** 待定图形已放置的锚点数（≥1）。三点工具（三角形 / 平行通道）要放满 3 个才成型 */
+  private pendingPlaced: number;
   private drag: { d: Drawing; part: number | string; orig: DrawAnchor[]; px: number; py: number } | null = null;
   private snapshots: string[];
   private redoStack: string[];
@@ -182,6 +226,7 @@ export class DrawLayer {
     this.hidden = false;
     this.nextId = 1;
     this.pending = null;
+    this.pendingPlaced = 0;
     this.snapshots = [];
     this.redoStack = [];
   }
@@ -278,10 +323,46 @@ export class DrawLayer {
 
       const a = p[0];
       const b = p[1] || p[0];
+      const c = p[2] || p[1] || p[0];
       if (d.type === 'hline') {
         if (Math.abs(py - a.y) <= tol) return { d, part: 'body' };
+      } else if (d.type === 'hray') {
+        // 从锚点向右的半条水平线
+        if (distToSeg(px, py, a.x, a.y, ch.plot.r + 50, a.y) <= tol) return { d, part: 'body' };
       } else if (d.type === 'vline') {
         if (Math.abs(px - a.x) <= tol) return { d, part: 'body' };
+      } else if (d.type === 'extline') {
+        // 两端都延伸出绘图区
+        const l = rayToX(a.x, a.y, b.x, b.y, ch.plot.l - 50);
+        const r = rayToX(a.x, a.y, b.x, b.y, ch.plot.r + 50);
+        if (distToSeg(px, py, l.x, l.y, r.x, r.y) <= tol) return { d, part: 'body' };
+      } else if (d.type === 'ellipse') {
+        const cx = (a.x + b.x) / 2;
+        const cy = (a.y + b.y) / 2;
+        const rx = Math.abs(b.x - a.x) / 2;
+        const ry = Math.abs(b.y - a.y) / 2;
+        if (rx < 1 || ry < 1) {
+          // 退化成线段
+          if (distToSeg(px, py, a.x, a.y, b.x, b.y) <= tol) return { d, part: 'body' };
+        } else {
+          // 标准化椭圆方程；1.08 ≈ 边缘容差（短轴 40px 时约 2px）
+          const v = ((px - cx) / rx) ** 2 + ((py - cy) / ry) ** 2;
+          if (v <= 1.08) return { d, part: 'body' };
+        }
+      } else if (d.type === 'triangle') {
+        const onEdge =
+          distToSeg(px, py, a.x, a.y, b.x, b.y) <= tol ||
+          distToSeg(px, py, b.x, b.y, c.x, c.y) <= tol ||
+          distToSeg(px, py, c.x, c.y, a.x, a.y) <= tol;
+        if (onEdge || inTriangle(px, py, a.x, a.y, b.x, b.y, c.x, c.y)) return { d, part: 'body' };
+      } else if (d.type === 'channel') {
+        // 通道 = ab 线段沿 (c - a) 平移出的平行四边形；两条边线或内部都算命中
+        const wx = c.x - a.x;
+        const wy = c.y - a.y;
+        const onEdge =
+          distToSeg(px, py, a.x, a.y, b.x, b.y) <= tol ||
+          distToSeg(px, py, a.x + wx, a.y + wy, b.x + wx, b.y + wy) <= tol;
+        if (onEdge || inParallelogram(px, py, a.x, a.y, b.x, b.y, wx, wy)) return { d, part: 'body' };
       } else if (d.type === 'rect' || d.type === 'measure') {
         // 边框 或 内部
         const onEdge =
@@ -369,6 +450,7 @@ export class DrawLayer {
 
   setTool(t: string): void {
     this.pending = null;
+    this.pendingPlaced = 0;
     this.tool = t;
     this.applyCursor();
     this.host.invalidate();
@@ -433,6 +515,7 @@ export class DrawLayer {
     this.tool = doc.tool || 'cursor';
     this.activeId = null;
     this.pending = null;
+    this.pendingPlaced = 0;
     // id 不能和已有的撞
     let mx = 0;
     for (const d of this.drawings) mx = Math.max(mx, d.id || 0);
@@ -457,14 +540,18 @@ export class DrawLayer {
   onDown(px: number, py: number): boolean {
     const def = toolDef(this.tool);
 
-    // ① 正在画多锚点图形
+    // ① 正在画多锚点图形：放一个点，放满 def.points 个才成型
     if (this.pending) {
-      this.pending.pts[1] = this.anchorAt(px, py);
-      this.pushHistory();
-      this.drawings.push(this.pending);
-      this.activeId = this.pending.id;
-      this.pending = null;
-      this.setTool('cursor');
+      this.pending.pts[this.pendingPlaced] = this.anchorAt(px, py);
+      this.pendingPlaced++;
+      if (this.pendingPlaced >= this.pending.pts.length) {
+        this.pushHistory();
+        this.drawings.push(this.pending);
+        this.activeId = this.pending.id;
+        this.pending = null;
+        this.pendingPlaced = 0;
+        this.setTool('cursor');
+      }
       this.host.invalidate();
       return true;
     }
@@ -485,11 +572,12 @@ export class DrawLayer {
         this.pending = {
           id: this.nextId++,
           type: this.tool,
-          pts: [a, { time: a.time, price: a.price }],
+          pts: Array.from({ length: def.points }, () => ({ time: a.time, price: a.price })),
           style: drawStyle(this.tool === 'measure' ? '#787b86' : undefined),
           locked: false,
           visible: true,
         };
+        this.pendingPlaced = 1;
         this.host.invalidate();
       }
       return true;
@@ -515,7 +603,9 @@ export class DrawLayer {
 
   onMove(px: number, py: number): void {
     if (this.pending) {
-      this.pending.pts[1] = this.anchorAt(px, py);
+      // 预览点 = 下一个要放的位置（已放满时夹到最后一个，三点工具放点间隙也有预览）
+      const k = Math.min(this.pendingPlaced, this.pending.pts.length - 1);
+      this.pending.pts[k] = this.anchorAt(px, py);
       this.host.invalidate();
       return;
     }
@@ -560,7 +650,7 @@ export class DrawLayer {
     this.keyHandler = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement) && (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-      if (e.key === 'Escape') { this.pending = null; this.setTool('cursor'); this.select(null); return; }
+      if (e.key === 'Escape') { this.pending = null; this.pendingPlaced = 0; this.setTool('cursor'); this.select(null); return; }
       if (e.key === 'Delete' || e.key === 'Backspace') {
         if (this.removeActive()) e.preventDefault();
         return;
@@ -606,6 +696,7 @@ export class DrawLayer {
     if (!p.length) return;
     const a = p[0];
     const b = p[1] || p[0];
+    const c = p[2] || p[1] || p[0];
     const col = selected ? '#1f6feb' : d.style.color;
 
     ctx.save();
@@ -620,6 +711,20 @@ export class DrawLayer {
       ctx.lineTo(ch.plot.r, a.y);
       ctx.stroke();
       this.label(ctx, '  ' + d.pts[0].price.toFixed(2), ch.plot.l + 4, a.y - 4, col);
+    } else if (d.type === 'hray') {
+      // 从锚点向右的水平射线 + 起点价格标签
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(ch.plot.r, a.y);
+      ctx.stroke();
+      this.label(ctx, '  ' + d.pts[0].price.toFixed(2), a.x + 4, a.y - 4, col);
+    } else if (d.type === 'extline') {
+      const l = rayToX(a.x, a.y, b.x, b.y, ch.plot.l - 50);
+      const r = rayToX(a.x, a.y, b.x, b.y, ch.plot.r + 50);
+      ctx.beginPath();
+      ctx.moveTo(l.x, l.y);
+      ctx.lineTo(r.x, r.y);
+      ctx.stroke();
     } else if (d.type === 'vline') {
       ctx.beginPath();
       ctx.moveTo(a.x, ch.plot.t);
@@ -637,6 +742,52 @@ export class DrawLayer {
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
       ctx.lineTo(e.x, e.y);
+      ctx.stroke();
+    } else if (d.type === 'arrow') {
+      // 线段 + 实心箭头（箭头指向第二个锚点）
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+      const ang = Math.atan2(b.y - a.y, b.x - a.x);
+      const hl = 9 + 2 * d.style.width;
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.moveTo(b.x, b.y);
+      ctx.lineTo(b.x - hl * Math.cos(ang - 0.42), b.y - hl * Math.sin(ang - 0.42));
+      ctx.lineTo(b.x - hl * Math.cos(ang + 0.42), b.y - hl * Math.sin(ang + 0.42));
+      ctx.closePath();
+      ctx.fillStyle = col;
+      ctx.fill();
+    } else if (d.type === 'ellipse') {
+      const cx = (a.x + b.x) / 2;
+      const cy = (a.y + b.y) / 2;
+      const rx = Math.abs(b.x - a.x) / 2;
+      const ry = Math.abs(b.y - a.y) / 2;
+      ctx.beginPath();
+      if (rx < 1 || ry < 1) ctx.rect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.max(rx * 2, 0.5), Math.max(ry * 2, 0.5));
+      else ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    } else if (d.type === 'triangle') {
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.lineTo(c.x, c.y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    } else if (d.type === 'channel') {
+      // 两条平行线 + 中间带状填充（ab 沿 c-a 平移）
+      const wx = c.x - a.x;
+      const wy = c.y - a.y;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.lineTo(b.x + wx, b.y + wy);
+      ctx.lineTo(a.x + wx, a.y + wy);
+      ctx.closePath();
+      ctx.fill();
       ctx.stroke();
     } else if (d.type === 'fib') {
       const x0 = Math.min(a.x, b.x);
@@ -971,6 +1122,75 @@ export function drawSelfTest(): DrawTestResult {
     near(rayToX(0, 0, 10, 10, 100).y, 100) &&
     near(rayToX(0, 0, 10, 0, 100).y, 0));
   t('rayToX：垂直线不会除零', isFinite(rayToX(5, 0, 5, 100, 500).x));
+
+  // --- 2.8 新工具：每种至少 命中 on/off 两条；三点工具加交互断言 ---
+  const n28: Drawing[] = [];
+  {
+    const Lh2 = new DrawLayer(host);
+    n28.push(Lh2.add('hray', [{ time: host.bars[10].time, price: 105 }]));
+    const hp2 = Lh2.pixelPts(n28[0])[0];
+    t('水平射线：起点向右能命中', !!Lh2.hitTest(host.plot.r - 20, hp2.y));
+    t('水平射线：起点向左命中不到', Lh2.hitTest(hp2.x - 40, hp2.y) === null);
+
+    const Le = new DrawLayer(host);
+    const de = Le.add('extline', [
+      { time: host.bars[8].time, price: 96 },
+      { time: host.bars[45].time, price: 116 },
+    ]);
+    const pe = Le.pixelPts(de);
+    const ee = rayToX(pe[0].x, pe[0].y, pe[1].x, pe[1].y, host.plot.r - 10);
+    t('延长线：两端延伸段都能命中', !!Le.hitTest(ee.x, ee.y) && !!Le.hitTest((pe[0].x + pe[1].x) / 2, (pe[0].y + pe[1].y) / 2));
+    t('延长线：离线远点不命中', Le.hitTest((pe[0].x + pe[1].x) / 2, (pe[0].y + pe[1].y) / 2 + 40) === null);
+
+    const La = new DrawLayer(host);
+    n28.push(La.add('arrow', [
+      { time: host.bars[5].time, price: 98 },
+      { time: host.bars[35].time, price: 114 },
+    ]));
+    const pa2 = La.pixelPts(n28[1]);
+    t('箭头：线段中点能命中', !!La.hitTest((pa2[0].x + pa2[1].x) / 2, (pa2[0].y + pa2[1].y) / 2));
+    t('箭头：线段外不命中', La.hitTest((pa2[0].x + pa2[1].x) / 2, (pa2[0].y + pa2[1].y) / 2 + 40) === null);
+
+    const Ll = new DrawLayer(host);
+    n28.push(Ll.add('ellipse', [
+      { time: host.bars[10].time, price: 98 },
+      { time: host.bars[35].time, price: 114 },
+    ]));
+    const pl = Ll.pixelPts(n28[2]);
+    t('椭圆：内部命中（不只边缘）', !!Ll.hitTest((pl[0].x + pl[1].x) / 2, (pl[0].y + pl[1].y) / 2));
+    t('椭圆：外部不命中', Ll.hitTest((pl[0].x + pl[1].x) / 2, Math.min(pl[0].y, pl[1].y) - 40) === null);
+
+    // 三点交互：三角形两次点击仍待定，第三次成型
+    const Lt = new DrawLayer(host);
+    Lt.setTool('triangle');
+    Lt.onDown(100, 300);
+    Lt.onDown(500, 300);
+    t('三角形：两次点击仍是待定', Lt.drawings.length === 0);
+    Lt.onDown(300, 80);
+    t('三角形：第三次点击成型为 3 锚点', Lt.drawings.length === 1 && Lt.drawings[0].pts.length === 3);
+    const pt3 = Lt.pixelPts(Lt.drawings[0]);
+    t('三角形：内部与边命中、外部不命中',
+      !!Lt.hitTest((pt3[0].x + pt3[1].x + pt3[2].x) / 3, (pt3[0].y + pt3[1].y + pt3[2].y) / 3) &&
+      Lt.hitTest(pt3[1].x, pt3[1].y + 60) === null);
+
+    const Lc = new DrawLayer(host);
+    const dc = Lc.add('channel', [
+      { time: host.bars[8].time, price: 100 },
+      { time: host.bars[40].time, price: 100 },
+      { time: host.bars[8].time, price: 110 },
+    ]);
+    const pc = Lc.pixelPts(dc);
+    const topY = Math.min(pc[0].y, pc[2].y);
+    t('平行通道：带内与两条边都能命中',
+      !!Lc.hitTest((pc[0].x + pc[1].x) / 2 + (pc[2].x - pc[0].x) / 2, (pc[0].y + pc[1].y) / 2 + (pc[2].y - pc[0].y) / 2) &&
+      !!Lc.hitTest((pc[0].x + pc[1].x) / 2, pc[0].y) &&
+      !!Lc.hitTest((pc[0].x + pc[1].x) / 2, pc[2].y));
+    t('平行通道：带外不命中', Lc.hitTest((pc[0].x + pc[1].x) / 2, topY - 30) === null);
+
+    t('2.8 几何：inTriangle / inParallelogram',
+      inTriangle(5, 5, 0, 0, 10, 0, 5, 10) && !inTriangle(20, 20, 0, 0, 10, 0, 5, 10) &&
+      inParallelogram(5, 3, 0, 0, 10, 0, 0, 6) && !inParallelogram(5, 8, 0, 0, 10, 0, 0, 6));
+  }
 
   log('绘图层自检：' + pass + ' PASS / ' + fail + ' FAIL');
   return { pass, fail, names };

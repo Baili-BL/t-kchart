@@ -62,6 +62,20 @@ export function toolKeyForLabel(label: string): string | null {
       return 'hline';
     case '垂直线':
       return 'vline';
+    case '射线':
+      return 'ray';
+    case '水平射线':
+      return 'hray';
+    case '延长线':
+      return 'extline';
+    case '箭头':
+      return 'arrow';
+    case '平行通道':
+      return 'channel';
+    case '三角形形态':
+      return 'triangle';
+    case '椭圆':
+      return 'ellipse';
     case '斐波那契回撤':
       return 'fib';
     case '文字':

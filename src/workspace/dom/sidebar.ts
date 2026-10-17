@@ -48,9 +48,9 @@ const CSS = `
 .kc-sb-btn:hover .pill { background: rgb(242,242,242); }
 .kc-sb-btn.kc-sel .pill { background: rgb(235,235,235); }
 .kc-sb-btn.kc-on .pill { background: rgb(231,240,255); }
-/* —— 小箭头：默认隐藏，悬停浮现 —— */
+/* —— 小箭头：默认隐藏，悬停浮现。（z-index 必须高于主按钮：btn 在 DOM 里更靠后，否则箭头永远被盖住点不到） —— */
 .kc-sb-caret {
-  position: absolute; right: 0; top: 2px; width: 11px; height: 34px;
+  position: absolute; right: 0; top: 2px; width: 11px; height: 34px; z-index: 1;
   border: 0; padding: 0; background: transparent; cursor: pointer;
   border-radius: 4px 0 0 4px; opacity: 0; overflow: hidden;
   transition: opacity .1s ease;
@@ -100,14 +100,17 @@ const SECTIONS: Section[] = [
     { icon: CROSS, caret: CARET, label: '十字线', items: [['十字线', CROSS], ['光标', CROSS], ['点', CROSS], ['橡皮擦', CROSS]] },
   ]},
   { tools: [
-    { icon: TRENDLINE, caret: CARET, label: '趋势线', items: [['趋势线', TRENDLINE], ['水平线', TRENDLINE], ['垂直线', TRENDLINE], ['平行通道', TRENDLINE]] },
+    { icon: TRENDLINE, caret: CARET, label: '趋势线', items: [
+      ['趋势线', TRENDLINE], ['水平线', TRENDLINE], ['垂直线', TRENDLINE], ['射线', TRENDLINE],
+      ['水平射线', TRENDLINE], ['延长线', TRENDLINE], ['箭头', TRENDLINE], ['平行通道', TRENDLINE],
+    ] },
     { icon: FIB, caret: CARET, label: '斐波那契回撤', items: [['斐波那契回撤', FIB], ['斐波那契扩展', FIB], ['斐波那契通道', FIB]] },
   ]},
   { tools: [
     { icon: PATTERN, caret: CARET, label: 'XABCD形态', items: [['XABCD形态', PATTERN], ['三角形形态', PATTERN], ['头肩形态', PATTERN]] },
     { icon: LONG_POS, caret: CARET, label: '多头仓位', items: [['多头仓位', LONG_POS], ['空头仓位', LONG_POS]] },
     { icon: BRUSH, caret: CARET, label: '笔刷', items: [['笔刷', BRUSH], ['荧光笔', BRUSH], ['路径', BRUSH]] },
-    { icon: TEXT, caret: CARET, label: '文字', items: [['文字', TEXT], ['便签', TEXT], ['价格标签', TEXT], ['日期范围', TEXT]] },
+    { icon: TEXT, caret: CARET, label: '文字', items: [['文字', TEXT], ['椭圆', TEXT], ['便签', TEXT], ['价格标签', TEXT], ['日期范围', TEXT]] },
   ]},
   { tools: [
     { icon: STICKER, caret: CARET, label: '图标', items: [['图标', STICKER], ['旗帜', STICKER], ['箭头标记', STICKER]] },
