@@ -26,6 +26,15 @@ function fakeControls(): ChartControls & { log: string[] } {
       return a === 'play' ? { ok: false, message: '没在回放' } : { ok: true, message: 'ok' };
     },
     setIndicator: (i, v) => void log.push(`ind:${i}:${v}`),
+    addStudy: (q) => {
+      log.push('addStudy:' + q);
+      return q === 'zzz' ? { ok: false, message: '没有找到' } : { ok: true, message: '已添加 ' + q };
+    },
+    removeStudy: (q) => {
+      log.push('removeStudy:' + q);
+      return q === 'zzz' ? { ok: false, message: '没有找到' } : { ok: true, message: '已移除 ' + q };
+    },
+    listStudies: () => 'LIST',
     runPine: (code) => (code.includes('bad') ? { ok: false, message: 'parse error' } : { ok: true, message: 'ok' }),
     knownSymbols: () => ['TSLA', 'NVDA'],
     knownTimeframes: () => ['30m', '1h', '1D'],
@@ -107,6 +116,17 @@ describe('mock provider · 意图 → 工具调用', () => {
     expect(rep('切到 NVDA')).toBeUndefined();
   });
 
+  it('脚本指标关键词 → add_indicator / remove_indicator（visible=false）/ list_indicators', () => {
+    const ind = (t: string): unknown => planToolCalls(t).find((c) => c.name === 'add_indicator')?.arguments;
+    expect(ind('加一个 MACD')).toEqual({ indicator: 'MACD', visible: true });
+    expect(ind('帮我加上 rsi 指标')).toEqual({ indicator: 'RSI', visible: true });
+    expect(ind('去掉 RSI')).toEqual({ indicator: 'RSI', visible: false });
+    expect(ind('加 KDJ')).toEqual({ indicator: 'Stochastic oscillator', visible: true });
+    expect(ind('布林带')).toEqual({ indicator: 'bb', visible: true });
+    expect(planToolCalls('有哪些指标').map((c) => c.name)).toEqual(['list_indicators']);
+    expect(ind('切到 NVDA')).toBeUndefined();
+  });
+
   it('无关输入不产生任何调用', () => {
     expect(planToolCalls('今天天气怎么样')).toEqual([]);
   });
@@ -145,11 +165,13 @@ describe('工具运行时', () => {
     expect((await t.execute(call('set_layout', { rows: 9, cols: 1 }))).ok).toBe(false);
     expect((await t.execute(call('set_layout', { rows: 'x', cols: 1 }))).ok).toBe(false);
     expect((await t.execute(call('set_timeframe', { timeframe: '7m' }))).ok).toBe(false);
-    expect((await t.execute(call('add_indicator', { indicator: 'rsi' }))).ok).toBe(false);
+    expect((await t.execute(call('add_indicator', { indicator: 'zzz' }))).ok).toBe(false);
+    expect((await t.execute(call('add_indicator', {}))).ok).toBe(false);
+    expect((await t.execute(call('remove_indicator', {}))).ok).toBe(false);
     expect((await t.execute(call('set_chart_style', { style: 'renko' }))).ok).toBe(false);
     expect((await t.execute(call('set_chart_style', {}))).ok).toBe(false);
     expect((await t.execute(call('不存在的工具', {}))).ok).toBe(false);
-    expect(ctl.log).toEqual([]);
+    expect(ctl.log).toEqual(['addStudy:zzz']);   // 只有「找不到」这一次真的交给了图表，由它报错
   });
 
   it('大小写不敏感，并规范化后再交给图表', async () => {
@@ -158,6 +180,19 @@ describe('工具运行时', () => {
     await t.execute(call('set_symbol', { symbol: ' nvda ' }));
     await t.execute(call('set_timeframe', { timeframe: '1H' }));
     expect(ctl.log).toEqual(['symbol:NVDA', 'tf:1h']);
+  });
+
+  it('add_indicator：bb 走内置通道，其余按名称走脚本指标；visible=false 等于移除', async () => {
+    const ctl = fakeControls();
+    const t = createChartTools(ctl);
+    expect((await t.execute(call('add_indicator', { indicator: 'BB', visible: false }))).ok).toBe(true);
+    expect((await t.execute(call('add_indicator', { indicator: 'MACD' }))).ok).toBe(true);
+    expect((await t.execute(call('add_indicator', { indicator: 'MACD', visible: false }))).ok).toBe(true);
+    expect((await t.execute(call('remove_indicator', { indicator: 'RSI' }))).ok).toBe(true);
+    expect((await t.execute(call('remove_indicator', { indicator: 'bb' }))).ok).toBe(true);
+    const list = await t.execute(call('list_indicators', {}));
+    expect(list).toEqual({ ok: true, content: 'LIST' });
+    expect(ctl.log).toEqual(['ind:bb:false', 'addStudy:MACD', 'removeStudy:MACD', 'removeStudy:RSI', 'ind:bb:false']);
   });
 
   it('set_chart_style 规范化大小写后交给图表', async () => {

@@ -4,11 +4,17 @@ import type { KChart } from '../engine/chart';
 import { DrawLayer } from '../engine/draw';
 import { mockDataSource } from '../data/mockBars';
 import { useChartStore } from '../store/chartStore';
+import { useStudyStore } from '../store/studyStore';
 import { useAppStore } from '../store/appStore';
 import { registerGrid } from './gridRegistry';
 import { drawBus } from './drawBus';
+import { createDrawPropsBar } from './dom/DrawPropsBar';
+import { registerDrawLayer, unregisterDrawLayer } from '../dev/drawRegistry';
 import { replayController, useReplayStore } from '../store/replayStore';
 import type { ReplayState } from '../engine/replay';
+import { SYMBOL_BY_TICKER } from '../data/symbols';
+import { applyTo, useChartSettingsStore } from '../store/chartSettingsStore';
+import { useToast } from '../ui/toast';
 
 /** 美股习惯：涨绿跌红（引擎默认是 A 股的涨红跌绿） */
 const CHART_COLORS = { upColor: '#089981', downColor: '#f23645' };
@@ -36,17 +42,40 @@ export function ChartGridView(): JSX.Element {
       sync: st0.sync,
       chartOptions: CHART_COLORS,
       legendInset: 8,
+      symbolNameFor: (t) => SYMBOL_BY_TICKER.get(t)?.name ?? '',
     });
     registerGrid(grid);
+
+    /* ---------- 设置：建格后立即应用一次；之后每次变更都广播到所有格 ---------- */
+    applyTo(grid);
+    const unSettings = useChartSettingsStore.subscribe(() => applyTo(grid));
+
+    /* ---------- 指标：store 里是定义，每一格自己运行 ---------- */
+    grid.setStudyHandler((uid, action) => {
+      const ss = useStudyStore.getState();
+      if (action === 'remove') ss.removeStudy(uid);
+      else if (!ss.edit(uid)) useToast.getState().show('指标已锁定：先在左栏「锁定指标」解锁');
+    });
+    grid.setStudies(useStudyStore.getState().studies);
+    const unStudies = useStudyStore.subscribe((s, prev) => {
+      if (s.studies !== prev.studies) grid.setStudies(s.studies);
+    });
 
     /* ---------- 绘图层：每格一个，按需创建 ---------- */
     const layers = new Map<KChart, DrawLayer>();
     let keyed: DrawLayer | null = null;
 
+    /* 浮动绘图属性工具条：跟随「最近有选中图形」的那一层；
+       onDraw 每帧 sync 一次，拖动 / 平移缩放时工具条都贴着图形走 */
+    let barLayer: DrawLayer | null = null;
+    const propsBar = createDrawPropsBar(() => barLayer);
+
     const ensureLayers = (): void => {
       const live = new Set(grid.charts());
       for (const [c, l] of layers) {
         if (!live.has(c)) {
+          if (l === barLayer) { barLayer = null; propsBar.hide(); }
+          if (import.meta.env.DEV) unregisterDrawLayer(l);
           l.dispose();
           layers.delete(c);
         }
@@ -54,15 +83,34 @@ export function ChartGridView(): JSX.Element {
       for (const c of live) {
         if (layers.has(c)) continue;
         const layer = new DrawLayer(c);
+        const mod = (e?: { ctrlKey?: boolean; metaKey?: boolean }): boolean =>
+          !!(e && (e.ctrlKey || e.metaKey));
         c.setHooks({
-          onDown: (px: number, py: number) => layer.onDown(px, py),
+          onDown: (px: number, py: number, e: PointerEvent) => layer.onDown(px, py, mod(e)),
           onMove: (px: number, py: number) => layer.onMove(px, py),
           onUp: () => layer.onUp(),
-          onDraw: (ctx: CanvasRenderingContext2D) => layer.render(ctx),
+          // 橡皮擦要用自己的光标（官方是 32×32 的 .cur，热点 5,5）；其它工具交回图表
+          cursorFor: (px: number, py: number) => layer.cursorAt(px, py),
+          onLeave: () => layer.onLeave(),
+          // 画完一个图形 / Esc：图层自己回到光标，把工具名广播出去，左侧主按钮图标跟着拨回
+          onToolChange: (tool: string) => {
+            if (drawBus.tool !== tool) drawBus.setTool(tool);
+          },
+          onDraw: (ctx: CanvasRenderingContext2D) => {
+            layer.render(ctx);
+            if (layer.active()) barLayer = layer;
+            if (barLayer === layer) propsBar.sync();
+          },
+          // 轴上的测量起止标签：在坐标轴画完之后补一层（在 onDraw 里画会被轴色块盖掉）
+          onAxisDraw: (ctx: CanvasRenderingContext2D) => layer.renderAxisLabels(ctx),
         });
         layer.setTool(drawBus.tool);
         layer.setMagnet(drawBus.magnet);
         layer.setHidden(drawBus.hidden);
+        if (drawBus.lockAll) layer.setAllLocked(true);
+        layer.repeatDraw = drawBus.repeatDraw;
+        c.longPressTip = drawBus.longPressTip;
+        if (import.meta.env.DEV) registerDrawLayer(layer);
         layers.set(c, layer);
       }
       // 键盘只给活动格的绘图层，避免 Ctrl+Z 同时撤销好几张图
@@ -79,10 +127,18 @@ export function ChartGridView(): JSX.Element {
       if (ev.type === 'undo') return void keyed?.undo();
       if (ev.type === 'redo') return void keyed?.redo();
       for (const l of layers.values()) {
-        if (ev.type === 'tool') l.setTool(ev.tool);
+        if (ev.type === 'tool') {
+          l.setTool(ev.tool);
+          if (ev.char) l.emojiChar = ev.char;
+        }
         else if (ev.type === 'magnet') l.setMagnet(ev.on);
         else if (ev.type === 'hidden') l.setHidden(ev.on);
+        else if (ev.type === 'lock') l.setAllLocked(ev.on);
+        else if (ev.type === 'repeat') l.repeatDraw = ev.on;
         else if (ev.type === 'clear') l.clear();
+      }
+      if (ev.type === 'longPressTip') {
+        for (const c of layers.keys()) c.longPressTip = ev.on;
       }
     });
 
@@ -152,10 +208,12 @@ export function ChartGridView(): JSX.Element {
         if (!s.sync.interval) for (let i = oldTotal; i < total; i++) grid.setTileTimeframe(i, SECONDARY_TF);
         applyBb();
         ensureLayers();
+        applyTo(grid); // 新格子的外观也要跟上（布局变化会新建 tile）
         refreshLast();
       }
       if (s.symbol !== prev.symbol) {
         grid.setSymbol(s.symbol);
+        applyTo(grid); // 图例「名称」跟着标的换
         refreshLast();
       }
       if (s.timeframe !== prev.timeframe && s.timeframe !== grid.activeTimeframe()) {
@@ -170,14 +228,41 @@ export function ChartGridView(): JSX.Element {
       if (s.theme !== prev.theme) grid.setTheme(s.theme);
     });
 
+    /* ---------- 模拟实时报价：轻推活动格最后一根 bar（chart.update 是引擎的实时入口）。
+       演示数据没有真实行情源，警报触发 / PaperTrade / 图例最新价靠它活起来。 ---------- */
+    const tickTimer = window.setInterval(() => {
+      if (document.hidden) return;
+      const c = grid.charts()[grid.activeIndex()];
+      const last = c && c.bars.length ? c.bars[c.bars.length - 1] : null;
+      if (!last) return;
+      const close = last.close * (1 + (Math.random() - 0.5) * 0.0012);
+      c.update({
+        ...last,
+        close,
+        high: Math.max(last.high, close),
+        low: Math.min(last.low, close),
+        volume: last.volume + Math.round(Math.random() * last.volume * 0.002),
+      });
+      refreshLast();
+    }, 2000);
+
     return () => {
+      window.clearInterval(tickTimer);
       replayController.stop();
       unReplay();
       unsub();
+      unStudies();
       unTheme();
+      unSettings();
       unbindDraw();
+      propsBar.dispose();
       grid.el.removeEventListener('activechange', onActive);
-      for (const l of layers.values()) l.dispose();
+      for (const l of layers.values()) {
+        // dev 注册表也要清：StrictMode 双挂载会先建一层再销毁，
+        // 只 dispose 不反注册会留下「僵尸层」，E2E 读 drawings()[0] 会读到它
+        if (import.meta.env.DEV) unregisterDrawLayer(l);
+        l.dispose();
+      }
       layers.clear();
       registerGrid(null);
       grid.dispose();

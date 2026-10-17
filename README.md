@@ -1,6 +1,6 @@
 # t-kchart · 三栏量化工作台（TypeScript）
 
-左侧菜单 + 中间 Agent 面板 + 右侧专业图表软件风格的图表区。图表核心与 Pine v5 子集解释器是**零依赖**的纯 TypeScript 引擎（`src/engine`），外壳是 Vite + React + TypeScript。
+左侧菜单 + 中间 Agent 面板 + 右侧专业图表软件风格的图表区。图表核心与 Pine v5 / v6 子集解释器是**零依赖**的纯 TypeScript 引擎（`src/engine`），外壳是 Vite + React + TypeScript。
 
 > **路线图见 [`TODO.md`](TODO.md)**。本 README 讲「现在是什么」，TODO 讲「接下来做什么、怎么算做完」。
 
@@ -39,21 +39,24 @@ src/
   agent/
     types.ts          AgentProvider / AgentMessage / ToolCall / AgentEvent 接口
     runner.ts         Agent 循环：流式输出 → 执行工具 → 结果回灌 → 直到无新调用（maxSteps 兜底）
-    tools.ts          图表工具集（set_symbol / set_timeframe / set_range / set_layout / set_chart_style / add_indicator / run_pine）
+    tools.ts          图表工具集（set_symbol / set_timeframe / set_range / set_layout / set_chart_style / replay / add_indicator / remove_indicator / list_indicators / run_pine）
     registry.ts       模型下拉与 provider 选择（Auto：配了 harness 地址用 DeepSeek，否则 mock）
     providers/mock.ts       本地演示（关键字 → 工具调用）
     providers/deepseek.ts   DeepSeek harness 适配点（空壳）
     AgentPanel / Composer / MessageList
   workspace/
+    SymbolSearchDialog  商品代码搜索（屏幕正中的弹窗：搜索 / 10 个分类 / 国家·类型·板块过滤 / ↑↓ Enter Esc）
     ChartWorkspace / TopBar / RangeBar / PaperTrade / RightPanel / RightRail
     ChartGridView     ChartGrid 的 React 外壳（store ⇄ 引擎）
     DrawToolbar       包装 dom/sidebar.ts，经 drawBus 驱动各格 DrawLayer
     chartControls     Agent 工具的真实实现（ChartControls 接口）
     TopBar / RightRail  包装 dom/toolbar.ts / dom/rightbar.ts：store ⇄ 组件句柄（createToolbarHandle / createRightbarHandle）
     dom/              设计稿原生 DOM 组件（顶栏、绘图栏、右侧栏、策略报告面板）与图标
-  engine/       chart grid draw pine equity analytics（ESM，零依赖）
-  data/         mockBars（TSLA/AAPL/NVDA/MSFT/SPY，分钟/小时/日/周/月）
-  store/        zustand：appStore / chartStore / chatStore
+  engine/       chart grid paneLayout draw pine equity analytics studies layouts replay（ESM，零依赖）
+  engine/styleTest.ts   图表样式的浏览器自检（像素）
+  indicators/   内置指标库：catalog（全部是 Pine v6 脚本）/ runner（脚本 → 画得出的输出）/ studyTest（浏览器自检）
+  data/         symbols（商品代码目录：9 类共 97 个演示标的 + 搜索 / 过滤）/ mockBars（按 seed 生成的演示行情，分钟/小时/日/周/月）
+  store/        zustand：appStore / chartStore / chatStore / studyStore（图上的指标 + 收藏 + 对话框状态）
   styles/       tokens.css（设计变量，浅/深两套）+ app.css
   dev/          浏览器侧自检入口
 tests/          vitest
@@ -87,9 +90,12 @@ VITE_DEEPSEEK_MODEL=deepseek-chat
 | 层 | 命令 | 内容 |
 | --- | --- | --- |
 | 类型 | `npm run typecheck` | `strict: true`，0 错误 |
-| 引擎（Node） | `npm test` | 绘图 39 + Pine 49 + Pine 撮合 69 + 权益 26 + 统计 34 + 回放 27 + 布局目录 346 = 590（基线，只增不减） |
+| 引擎（Node） | `npm test` | 绘图 39 + Pine 74 + Pine 撮合 69 + 权益 26 + 统计 34 + 回放 27 + 布局目录 346 = 615（基线，只增不减） |
+| 商品代码目录（Node） | `npm test` | ticker / seed 唯一、9 类都有、每个标的都能出日线与小时线、搜索排序 / 中文 / `交易所:代码` / 过滤叠加、Agent 认代码与中文名（10 条） |
+| 图表样式（Node） | `npm test` | 平均K线手算对数、成交量蜡烛宽度、关键词 → 样式、不可用样式的原因、带标记线渐变色（8 条） |
+| 指标库（Node） | `npm test` | 36 个 v6 脚本全部跑通；约 30 个指标的数值与**独立 TS 参考实现**逐根对数；搜索 / 清单 / store / Agent 控制 |
 | Agent / 工作区 / 数据 | `npm test` | 意图解析、工具校验、runner 循环（含报错/中断/死循环兜底）、模拟账户不变式、范围高亮、mock 数据不变式 |
-| 引擎（浏览器，需 canvas） | 开发模式下控制台 `await __app.runBrowserSelfTests()` | 图表 76 + 网格 20 + 权益 37 + 统计 50 |
+| 引擎（浏览器，需 canvas） | 开发模式下控制台 `await __app.runBrowserSelfTests()` | 图表 76 + 网格 20 + 权益 37 + 统计 50 + 指标 31（副图布局 / 窗格拖拽·最大化·折叠 / 像素 / 指针分流 / 回放 / 实时 tick）+ 样式 52（13 种样式的价格轴口径 + 像素） |
 
 `__app` 只在 `npm run dev` 下挂到 `window`，生产包里没有。
 
@@ -132,7 +138,12 @@ VITE_DEEPSEEK_MODEL=deepseek-chat
 
 - **Layout + Sync**：1 到 16 格、55 种排法，每格是**独立的 `KChart` 实例**
   （各自有坐标轴、图例、指标、缩放）；联动项：十字线 / 时间 / 日期范围 / 商品代码 / 周期
-- **主图样式**：K 线 / 美国线 / 线形图（收盘价折线）/ 面积图，`KChart.setStyle()` 切换；线形与面积的价格轴只按收盘价取范围；`ChartGrid.setChartStyle()` 让所有格一起变
+- **主图样式**：13 种，`KChart.setStyle()` 切换，`ChartGrid.setChartStyle()` 让所有格一起变。**全部是纯显示层变换**——数据、指标、回放、联动都仍跑在真实 OHLC 上：
+  - 蜡烛族：`candles` K线 / `bars` 美国线 / `hollow` 空心K线（涨空心跌实心）/ `volcandles` 成交量蜡烛（实体宽度 ∝ 成交量，见 `volCandleWidth`）/ `heikin` 平均K线（`heikinAshi()` 纯函数，带缓存，实时 tick 改最后一根会失效）
+  - 折线族（价格轴只按收盘价取范围）：`line` / `linemarkers` 带标记线（紫→蓝纵向渐变折线 + 实心圆点，渐变锚在可见范围最高 / 最低收盘价）/ `step` 阶梯线 / `area` 面积 / `baseline` 基准线（基准价 = 可见收盘价中点，之上涨色之下跌色）/ `columns` 柱状图
+  - 区间族（按最高最低价取范围）：`hlcarea` HLC 区域 / `highlow` 高-低
+  - 菜单里有但**做不了**的 8 个（灰显，点了只提示原因，Agent 点名也会如实说明，不会悄悄换成别的样式）：成交量轨迹 / 时间价格机会 / 交易时段成交量分布图（需要逐笔或更小周期数据，数据源只有 OHLC）；砖形图 / 新价线 / 卡吉图 / 点数图 / 范围图（非时间序列，会改变 bar 数量与时间轴，指标 / 回放 / 联动要跟着重做）
+  - 顶栏菜单是设计稿的 6 组 21 行，每行有 `?`（说明）与 `☆`（收藏：工具栏上出现该样式的快捷按钮，存 localStorage `kc.style.favorites`）
 - 联动**按时间对齐**（`viewTimes()` / `setViewTimes()` / `indexAtTime()` 二分），不按像素 —— 见 §10
 
 **Pine 引擎（`pine.ts`）—— T3 Phase 1，见 §12**
@@ -148,7 +159,11 @@ VITE_DEEPSEEK_MODEL=deepseek-chat
 
 ## 引擎 §4 刻意没做（T2 / T3 的边界）
 
-- **同一张图里的多副图（pane）** —— 上下叠在一个画布里、拖分隔条改高度。
+- ~~同一张图里的多副图（pane）—— 上下叠在一个画布里、拖分隔条改高度~~ → **已做（2.6）**：
+  布局纯函数在 `engine/paneLayout.ts`（vitest 直测），交互在 `chart.ts`（命中 + 拖拽 + 绘制）。
+  默认等高（与旧公式一致，主图至少留 40%）；拖主图↔副图分隔条改总面积、拖副图间分隔条权重此消彼长；
+  图例按钮 □ 最大化（主图压成细条、其余副图收窄，再点还原）、▼ 折叠成 22px 细条；
+  双击分隔条重置布局；每个副图有自己的量程与刻度（密度随自身高度自适应）。
   这和 §10 的多图网格不是一回事：网格是 N 个独立实例，副图是 1 个实例切 N 块。
 - 绘图工具（趋势线/射线/矩形/斐波那契 + 命中检测 + 手柄 + 磁吸 + undo/redo）→ T2
 - 数据源协议（反向分页、订阅、交易日历）、布局存档（localStorage）→ T2
@@ -384,7 +399,7 @@ onDown(px, py, e): boolean   // 返回 true = 这次点击被图层接管，KCha
 
 ---
 
-## 引擎 §12 Pine v5 子集引擎（`pine.ts`）
+## 引擎 §12 Pine v5 / v6 子集引擎（`pine.ts`）
 
 **先说清楚它不是什么**：这是**子集**，不是 Pine 兼容实现。我不承诺、也不假装它能跑任意脚本。
 理由不是我懒 —— 是这件事本身就很难。**成熟的专用 Pine 引擎一样会翻车**：
@@ -411,23 +426,44 @@ Pine 的语法很浅，真正决定数值对不对的是执行模型。这三条
 ### 支持
 
 ```
-//@version=5 / indicator() / strategy() / input.*
-变量：x =   x :=   var x =   [a, b] = f()
-控制：if / else / if 当表达式 / for [to] [by] / while / 三元
+//@version=5 或 6（缺省按 5；其它版本拒绝）/ indicator() / strategy() / input.*
+变量：x =   x :=   var x =   [a, b] = f()    类型前缀：float x = …  var int n = 0
+赋值：:=  += -= *= /= %=      颜色字面量：#RRGGBB  #RRGGBBAA
+控制：if / else / if 当表达式 / for [to] [by] / while（含 break / continue）/ 三元
 函数：f(a, b) => expr   和   多行缩进体（最后一条表达式的值即返回值）
 序列：x[n]，以及 ta.sma(...)[n] 这类兜底
 算子：+ - * / %   == != < <= > >=   and or not   ?:   字符串 +
 内置：ta.{sma,ema,rma,wma,rsi,atr,tr,highest,lowest,change,roc,stdev,cum,
-       crossover,crossunder,barssince,valuewhen,macd,bb}
-      math.* / nz / na / fixnan / str.tostring / str.length / color.*
-      plot / plotshape / plotchar / bgcolor / hline
+       crossover,crossunder,barssince,valuewhen,macd,bb,
+       highestbars,lowestbars,dev,cci,mom,cmo,vwma,alma,hma,wpr,stoch,mfi,correlation,dmi}
+      ta.tr / ta.obv / ta.accdist（不带括号的内置变量）
+      math.*（math.sum 是滚动求和）/ nz / na / fixnan / str.tostring / str.length / color.*
+      plot（位置参数、逐根颜色、display=none、返回句柄）/ plotshape / plotchar / bgcolor / hline / fill
       strategy.{entry,close,close_all,exit,cancel,cancel_all}
       strategy.{position_size,position_avg_price,equity,netprofit,openprofit,
                 initial_capital,opentrades,closedtrades}（只读变量）
 ```
 
 **明确不支持**（遇到就抛错，不静默给 na）：`strategy.*` 里除上面之外的（limit/stop 入场单、`risk.*`、`order` …）、数组/矩阵/map、
-`request.*` / `table.*` / `label.*` / `line.*` / `box.*`、`fill()`、`barstate.*`。
+`request.*` / `table.*` / `label.*` / `line.*` / `box.*`、`barstate.*`、`ta.pivothigh/pivotlow`。
+
+**v6 与 v5 的差异**：`strategy.entry/close/exit` 的 `when=` 参数在 v6 里被移除，引擎对 v6 脚本写了 `when=` 会直接报错（提示改用 `if`）；
+`//@version=4`、`7` 等其它版本一律拒绝，不假装兼容。
+
+### 12.2 指标库（`src/indicators/` + `studies.ts`）
+
+**每个内置指标都是一份 `//@version=6` 脚本**（`catalog.ts`），由上面的 Pine 引擎执行，没有任何指标是 TypeScript 手写的计算。
+
+- 清单：36 个可用 + 12 个**明确标为「不可用」并写了原因**的（涨跌线 / 涨跌比 / Correlation / Cumulative volume index 需要全市场数据或第二个标的、CVD 需要更小周期数据、
+  Auto fib ×2 / pitchfork / trendlines / key levels 需要 `line.*`、`label.*` 与枢轴检测、Chop zone 的官方配色依赖 `math.acos`），点了只提示原因，不会给一个近似值糊弄。
+- 运行：`chart.setStudies(defs)`；每一格图在**自己的数据**上各自运行同一份定义；`overlay=true` 画在主图并参与自动量程，其余各占一个副图
+  （默认等高、总高封顶 60% 主图至少留 40%；拖分隔条改高、□ 最大化、▼ 折叠，见 §4；时间轴始终贴最底部）。回放时 `bars` 是截断的前缀，所以指标天然只看得到过去，实时 tick 也会重算。
+- 输出：`plot`（line / histogram / columns / area / stepline / cross / circles，逐根颜色）、`hline`、`fill`（plot 或 hline 两端）。
+- 出错隔离：某个指标脚本出错（语法 / 未实现的写法 / 运行时），只在它自己的图例行显示 ⚠ 与原因，其它指标与图表照常。
+- 参数：脚本里的 `input.*` 被引擎登记（标题 / 类型 / 默认值 / 范围），图例上点 ⚙ 即可改（`input.source` 可在 open/high/low/close/hl2/hlc3/ohlc4/hlcc4 间切换）。
+- 对数：测试里为约 30 个指标各写了一份**独立**的 TS 参考实现，逐根比对（容差 1e-7）。这一步直接发现并修正了引擎里 `ta.wma` 权重写反的老 bug。
+- 入口：顶栏「指标」按钮 → 「指标、衡量标准和策略」对话框（搜索 / 分区 / 收藏 / BETA 标签）；Agent 说「加一个 MACD / 去掉 RSI / 有哪些指标」。
+- 还没有的：策略 / 简介 / 形态 / Options 分类的脚本（胶囊在，内容为空态）、基本面与社区分区（空态）、脚本编辑器（「我的脚本」为空态）。
 
 ### 12.1 `strategy.*` 撮合口径（`strategy.ts`）
 
@@ -550,9 +586,10 @@ KChart 是「蜡烛 + 多通道」的骨架，这张图有三处根本不同：
 
 ### 关于参考图底部那条色带
 
-我按**持仓区间**实现了（`setPositions()`，长仓 = 盈利色，画在绘图区最底一条 2px 色带）。
-**这是我的猜测，不确定和原图一致。** 如果你知道它到底是什么（买持基准？多空状态？），
-告诉我，接口已经在了，改语义是几行的事。
+**语义已定稿（2.4）**：按 TradingView 策略测试器的口径实现——色带 = 策略**持仓区间**
+（`setPositions()`，画在绘图区最底一条 2px 色带）：多头段 = 上涨色、空头段 = 下跌色、
+未平仓段（`open` 标记）同方向色但更透明。有像素断言盯着（浏览器自检「权益图自检」组）。
+如果你的参考图语义不是这个（比如时间轴 scrubber），改 `drawPositions()` 一处即可，接口不变。
 
 ---
 

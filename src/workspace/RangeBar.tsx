@@ -4,12 +4,6 @@ import { getGrid, onGridChange } from './gridRegistry';
 import { daysBetween, matchRange } from './rangeMatch';
 import { useChartStore } from '../store/chartStore';
 
-interface BtnState {
-  key: string;
-  label: string;
-  ok: boolean;
-}
-
 function useUtcClock(): string {
   const fmt = (): string => new Date().toISOString().slice(11, 19);
   const [t, setT] = useState(fmt);
@@ -24,9 +18,10 @@ function useUtcClock(): string {
  * 底部显示范围条。
  * 注意：这是「视口覆盖多长时间」，不是 K 线周期（README §9）。
  * 高亮按当前视口跨度反推，不记「上次点了哪个」。
+ * 所有按钮始终可点：请求的跨度超过数据长度时 setRange 自动退化为「显示全部」
+ * （之前按数据长度禁用 3M/6M/YTD/1Y/5Y，用户反馈改为可点）。
  */
 export function RangeBar(): JSX.Element {
-  const [btns, setBtns] = useState<BtnState[]>(() => RANGES.map((r) => ({ key: r.key, label: r.label, ok: false })));
   const [active, setActive] = useState<string | null>(null);
   const [session, setSession] = useState<'RTH' | 'ETH'>('RTH');
   const clock = useUtcClock();
@@ -38,7 +33,6 @@ export function RangeBar(): JSX.Element {
   const refresh = useCallback((): void => {
     const g = getGrid();
     if (!g) return;
-    setBtns(g.rangeAvailability());
     const chart = g.charts()[g.activeIndex()];
     if (!chart || !chart.bars.length) return setActive(null);
     const vt = chart.viewTimes();
@@ -82,9 +76,9 @@ export function RangeBar(): JSX.Element {
 
   useEffect(refresh, [refresh, symbol, timeframe, activeTile]);
 
-  const pick = (key: string, ok: boolean): void => {
+  const pick = (key: string): void => {
     const g = getGrid();
-    if (!g || !ok) return;
+    if (!g) return;
     g.setRange(key);
     refresh();
   };
@@ -92,17 +86,16 @@ export function RangeBar(): JSX.Element {
   return (
     <div className="rangebar">
       <div className="range-btns" role="group" aria-label="显示范围">
-        {btns.map((b, i) => (
-          <span key={b.key} className="range-cell">
-            {b.key === 'ALL' && i > 0 && <span className="range-sep" />}
+        {RANGES.map((r, i) => (
+          <span key={r.key} className="range-cell">
+            {r.key === 'ALL' && i > 0 && <span className="range-sep" />}
             <button
               type="button"
-              className={'range-btn' + (active === b.key ? ' on' : '') + (b.ok ? '' : ' off')}
-              disabled={!b.ok}
-              aria-pressed={active === b.key}
-              onClick={() => pick(b.key, b.ok)}
+              className={'range-btn' + (active === r.key ? ' on' : '')}
+              aria-pressed={active === r.key}
+              onClick={() => pick(r.key)}
             >
-              {b.label}
+              {r.label}
             </button>
           </span>
         ))}

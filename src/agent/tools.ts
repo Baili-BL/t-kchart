@@ -18,7 +18,14 @@ export interface ChartControls {
   setLayoutId(id: string): void;
   /** 切换主图样式，所有格一起变 */
   setChartStyle(style: ChartStyle): void;
+  /** 主图自带的布林带通道显示 / 隐藏 */
   setIndicator(indicator: string, visible: boolean): void;
+  /** 按名称 / 缩写 / 中文关键词把内置指标（Pine v6 脚本）加到图上；找不到或不可用时 ok=false 并说明原因 */
+  addStudy(query: string): { ok: boolean; message: string };
+  /** 把图上这类指标全部移除 */
+  removeStudy(query: string): { ok: boolean; message: string };
+  /** 指标清单：可用的 + 不可用的（带原因）+ 图上已有的 */
+  listStudies(): string;
   /** K 线回放控制；状态不对（比如没在回放就 play）时返回 ok=false 并说明原因 */
   replay(action: ReplayActionName, value?: number): { ok: boolean; message: string };
   /** 运行 Pine 脚本并画到活动图上；失败时返回错误文本 */
@@ -34,8 +41,31 @@ export type ReplayActionName = (typeof REPLAY_ACTION_NAMES)[number];
 export const REPLAY_SPEED_VALUES = [1, 2, 5, 10, 30];
 
 /** 主图样式（与引擎 ChartStyle 同构；Agent 层不依赖引擎，故在此重复声明） */
-export type ChartStyle = 'candles' | 'bars' | 'line' | 'area';
-export const CHART_STYLE_KEYS: ChartStyle[] = ['candles', 'bars', 'line', 'area'];
+export type ChartStyle =
+  | 'candles' | 'bars' | 'hollow' | 'volcandles'
+  | 'line' | 'linemarkers' | 'step'
+  | 'area' | 'hlcarea' | 'baseline'
+  | 'columns' | 'highlow'
+  | 'heikin';
+export const CHART_STYLE_KEYS: ChartStyle[] = [
+  'candles', 'bars', 'hollow', 'volcandles',
+  'line', 'linemarkers', 'step',
+  'area', 'hlcarea', 'baseline',
+  'columns', 'highlow',
+  'heikin',
+];
+
+/** 菜单里有、但目前做不了的样式（key → 原因）。Agent 点名要这些时，把原因原样告诉用户，而不是悄悄换成别的 */
+export const UNAVAILABLE_STYLES: Record<string, string> = {
+  renko: '砖形图是按价格变动而不是按时间出 bar 的非时间序列图，会改变 bar 的数量与时间轴，指标 / 回放 / 联动都要跟着改，暂未实现',
+  linebreak: '新价线（三线反转）是按价格变动出 bar 的非时间序列图，暂未实现',
+  kagi: '卡吉图是按价格反转出线的非时间序列图，暂未实现',
+  pnf: '点数图（圈叉图）是按价格变动出列的非时间序列图，暂未实现',
+  range: '范围图需要根内逐笔数据才能准确切分，现有数据源只有 OHLC，暂未实现',
+  footprint: '成交量轨迹需要逐笔 / 更小周期的买卖成交量，现有数据源只有 OHLC，暂不可用',
+  tpo: '时间价格机会（TPO）需要日内更小周期数据，现有数据源只有 OHLC，暂不可用',
+  sessionvp: '交易时段成交量分布图需要日内更小周期数据，现有数据源只有 OHLC，暂不可用',
+};
 
 export const CHART_TOOL_DEFINITIONS: ToolDefinition[] = [
   {
@@ -82,7 +112,7 @@ export const CHART_TOOL_DEFINITIONS: ToolDefinition[] = [
   },
   {
     name: 'set_chart_style',
-    description: '切换主图样式：candles K线 / bars 美国线 / line 收盘价折线 / area 面积图。',
+    description: '切换主图样式：candles K线 / bars 美国线 / hollow 空心K线 / volcandles 成交量蜡烛 / line 折线 / linemarkers 带标记线 / step 阶梯线 / area 面积 / hlcarea HLC 区域 / baseline 基准线 / columns 柱状图 / highlow 高-低 / heikin 平均K线。',
     parameters: {
       type: 'object',
       properties: { style: { type: 'string', enum: CHART_STYLE_KEYS } },
@@ -105,19 +135,36 @@ export const CHART_TOOL_DEFINITIONS: ToolDefinition[] = [
   },
   {
     name: 'add_indicator',
-    description: '显示或隐藏指标。目前支持 bb（布林带通道）。',
+    description:
+      '添加（或移除）指标。indicator 可以是英文全名 / 缩写 / 中文名，如 "MACD"、"RSI"、"Exponential moving average"、"布林带"。' +
+      '特例：bb = 主图自带的布林带通道（visible 控制显示隐藏）。所有指标都是 Pine v6 脚本；visible=false 表示移除这类指标。' +
+      '不知道有哪些时先调 list_indicators。',
     parameters: {
       type: 'object',
       properties: {
-        indicator: { type: 'string', enum: ['bb'] },
-        visible: { type: 'boolean', description: '默认 true' },
+        indicator: { type: 'string', description: '指标名称或缩写' },
+        visible: { type: 'boolean', description: '默认 true；false = 移除' },
       },
       required: ['indicator'],
     },
   },
   {
+    name: 'remove_indicator',
+    description: '把图上某类指标全部移除（按名称 / 缩写 / 中文名匹配）。',
+    parameters: {
+      type: 'object',
+      properties: { indicator: { type: 'string' } },
+      required: ['indicator'],
+    },
+  },
+  {
+    name: 'list_indicators',
+    description: '列出内置指标清单（哪些可用、哪些不可用及原因）和图上已添加的指标。',
+    parameters: { type: 'object', properties: {} },
+  },
+  {
     name: 'run_pine',
-    description: '在活动图上运行 Pine v5 子集脚本（仅支持引擎已实现的内置，见 README §12）。',
+    description: '在活动图上运行 Pine 脚本（v5 / v6 子集，仅支持引擎已实现的内置，见 README §12）。',
     parameters: {
       type: 'object',
       properties: { code: { type: 'string', description: '完整的 Pine 源码' } },
@@ -146,7 +193,11 @@ export function createChartTools(ctl: ChartControls): ToolRuntime {
         case 'set_symbol': {
           const s = str(a.symbol)?.toUpperCase();
           if (!s) return fail('缺少参数 symbol');
-          if (!ctl.knownSymbols().includes(s)) return fail(`未知标的 ${s}，可选：${ctl.knownSymbols().join(', ')}`);
+          const known = ctl.knownSymbols();
+          if (!known.includes(s)) {
+            const head = known.slice(0, 12).join(', ');
+            return fail(`未知标的 ${s}，可选（共 ${known.length} 个，仅列前 12 个；也可让用户用顶栏的商品代码搜索）：${head}`);
+          }
           ctl.setSymbol(s);
           return ok(`标的已切换为 ${s}`);
         }
@@ -193,6 +244,7 @@ export function createChartTools(ctl: ChartControls): ToolRuntime {
           const raw = str(a.style)?.toLowerCase();
           if (!raw) return fail('缺少参数 style');
           const style = CHART_STYLE_KEYS.find((k) => k === raw);
+          if (!style && UNAVAILABLE_STYLES[raw]) return fail(`样式 ${raw} 暂不可用：${UNAVAILABLE_STYLES[raw]}`);
           if (!style) return fail(`未知样式 ${raw}，可选：${CHART_STYLE_KEYS.join(', ')}`);
           ctl.setChartStyle(style);
           return ok(`主图样式已切换为 ${style}`);
@@ -214,12 +266,28 @@ export function createChartTools(ctl: ChartControls): ToolRuntime {
           return r.ok ? ok(r.message) : fail(r.message);
         }
         case 'add_indicator': {
-          const ind = str(a.indicator)?.toLowerCase();
-          if (ind !== 'bb') return fail('目前只支持 indicator = "bb"');
+          const raw = str(a.indicator);
+          if (!raw) return fail('缺少参数 indicator');
           const visible = a.visible === undefined ? true : a.visible === true || a.visible === 'true';
-          ctl.setIndicator('bb', visible);
-          return ok(`布林带已${visible ? '显示' : '隐藏'}`);
+          if (raw.toLowerCase() === 'bb') {
+            ctl.setIndicator('bb', visible);
+            return ok(`布林带已${visible ? '显示' : '隐藏'}`);
+          }
+          const r = visible ? ctl.addStudy(raw) : ctl.removeStudy(raw);
+          return r.ok ? ok(r.message) : fail(r.message);
         }
+        case 'remove_indicator': {
+          const raw = str(a.indicator);
+          if (!raw) return fail('缺少参数 indicator');
+          if (raw.toLowerCase() === 'bb') {
+            ctl.setIndicator('bb', false);
+            return ok('布林带已隐藏');
+          }
+          const r = ctl.removeStudy(raw);
+          return r.ok ? ok(r.message) : fail(r.message);
+        }
+        case 'list_indicators':
+          return ok(ctl.listStudies());
         case 'run_pine': {
           const code = str(a.code);
           if (!code) return fail('缺少参数 code');

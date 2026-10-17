@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { Icon } from '../ui/icons';
+import { Select } from '../ui/Select';
 import { useChatStore } from '../store/chatStore';
 import { MODEL_OPTIONS } from './registry';
 
@@ -12,7 +13,6 @@ const PLACEHOLDERS = [
 
 export function Composer(): JSX.Element {
   const [text, setText] = useState('');
-  const [menuOpen, setMenuOpen] = useState(false);
   const [phIdx, setPhIdx] = useState(0);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
@@ -24,19 +24,10 @@ export function Composer(): JSX.Element {
   const teach = useChatStore((s) => s.teachMode);
   const setTeach = useChatStore((s) => s.setTeachMode);
 
-  const model = MODEL_OPTIONS.find((m) => m.id === modelId) ?? MODEL_OPTIONS[0];
-
   useEffect(() => {
     const t = setInterval(() => setPhIdx((i) => (i + 1) % PLACEHOLDERS.length), 5000);
     return () => clearInterval(t);
   }, []);
-
-  useEffect(() => {
-    if (!menuOpen) return;
-    const close = (): void => setMenuOpen(false);
-    window.addEventListener('click', close);
-    return () => window.removeEventListener('click', close);
-  }, [menuOpen]);
 
   const submit = (): void => {
     const v = text.trim();
@@ -94,30 +85,16 @@ export function Composer(): JSX.Element {
             <Icon name="plus" size={14} />
           </button>
 
-          <div className="model-wrap" onClick={(e) => e.stopPropagation()}>
-            <button type="button" className="model-btn" onClick={() => setMenuOpen((v) => !v)}>
-              {model.label}
-              <Icon name="chevronDown" size={12} />
-            </button>
-            {menuOpen && (
-              <ul className="menu model-menu" role="listbox">
-                {MODEL_OPTIONS.map((m) => (
-                  <li key={m.id}>
-                    <button
-                      type="button"
-                      className={m.id === modelId ? 'sel' : ''}
-                      onClick={() => {
-                        setModel(m.id);
-                        setMenuOpen(false);
-                      }}
-                    >
-                      <span className="menu-check">{m.id === modelId && <Icon name="check" size={13} />}</span>
-                      {m.label}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
+          <div className="model-wrap">
+            <Select
+              variant="ghost"
+              size="sm"
+              placement="top"
+              label="模型"
+              value={modelId}
+              options={MODEL_OPTIONS.map((m) => ({ value: m.id, label: m.label }))}
+              onChange={(v) => setModel(String(v))}
+            />
           </div>
 
           <span className="composer-spacer" />

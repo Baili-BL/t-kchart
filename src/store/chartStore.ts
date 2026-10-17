@@ -6,8 +6,17 @@ import { DEFAULT_LAYOUT_ID, layoutById, uniformLayoutId } from '../engine/layout
 export const STYLE_LABELS: Record<ChartStyle, string> = {
   candles: 'K线图',
   bars: '美国线',
+  hollow: '空心K线图',
+  volcandles: '成交量蜡烛',
   line: '线形图',
+  linemarkers: '带标记线',
+  step: '阶梯线',
   area: '面积图',
+  hlcarea: 'HLC区域',
+  baseline: '基准线',
+  columns: '柱状图',
+  highlow: '高-低',
+  heikin: '平均K线图',
 };
 
 export function styleFromLabel(label: string): ChartStyle | null {

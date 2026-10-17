@@ -1,33 +1,14 @@
 import { Icon } from '../ui/icons';
 import { useAppStore } from '../store/appStore';
-import { useChartStore } from '../store/chartStore';
-import { MOCK_SYMBOLS } from '../data/mockBars';
+import { WatchlistPanel } from './WatchlistPanel';
+import { AlertsPanel } from './AlertsPanel';
 
 const WATCHLIST_LABEL = '自选表、详情和新闻';
-
-function Watchlist(): JSX.Element {
-  const symbol = useChartStore((s) => s.symbol);
-  const setSymbol = useChartStore((s) => s.setSymbol);
-  return (
-    <ul className="watchlist">
-      {MOCK_SYMBOLS.map((s) => (
-        <li key={s.ticker}>
-          <button type="button" className={s.ticker === symbol ? 'sel' : ''} onClick={() => setSymbol(s.ticker)}>
-            <span className="wl-main">
-              <b>{s.ticker}</b>
-              <small>{s.name}</small>
-            </span>
-            <span className="wl-last">{s.last.toFixed(2)}</span>
-          </button>
-        </li>
-      ))}
-    </ul>
-  );
-}
+const ALERTS_LABEL = '警报';
 
 /**
  * 右侧面板：由右侧图标栏的选中项决定内容。
- * 自选表已可用（点一行切换标的）；其余只是带标题的空态，等对应功能做出来再换。
+ * 自选表（分组 / 列头 / 行情行）与警报（警报 / 日志）已可用；其余是带标题的空态，等对应功能做出来再换。
  */
 export function RightPanel(): JSX.Element | null {
   const kind = useAppStore((s) => s.rightPanel);
@@ -42,7 +23,9 @@ export function RightPanel(): JSX.Element | null {
         </button>
       </header>
       {kind === WATCHLIST_LABEL ? (
-        <Watchlist />
+        <WatchlistPanel />
+      ) : kind === ALERTS_LABEL ? (
+        <AlertsPanel />
       ) : (
         <div className="right-panel-empty">
           <Icon name="panel" size={22} />

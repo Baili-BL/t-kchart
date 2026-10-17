@@ -8,9 +8,13 @@ import { STYLE_LABELS, styleFromLabel, useChartStore } from '../store/chartStore
 import { LAYOUT_COUNTS, layoutsOfCount } from '../engine/layouts';
 import { LayoutIcon } from '../ui/LayoutIcon';
 import type { SyncState } from '../store/chartStore';
-import { MOCK_SYMBOLS } from '../data/mockBars';
 import { drawBus } from './drawBus';
 import { replayController } from '../store/replayStore';
+import { useSymbolSearchStore } from '../store/symbolSearchStore';
+import { useAlertDialogStore } from '../store/alertDialogStore';
+import { useSettingsDialogStore } from '../store/settingsDialogStore';
+import { useStudyStore } from '../store/studyStore';
+import { useChartSettingsStore } from '../store/chartSettingsStore';
 import { toggleReplay } from './replayActions';
 
 const SYNC_LABELS: { key: keyof SyncState; label: string }[] = [
@@ -20,42 +24,6 @@ const SYNC_LABELS: { key: keyof SyncState; label: string }[] = [
   { key: 'time', label: '时间' },
   { key: 'range', label: '日期范围' },
 ];
-
-function SymbolPicker({ close }: { close: () => void }): JSX.Element {
-  const [q, setQ] = useState('');
-  const symbol = useChartStore((s) => s.symbol);
-  const setSymbol = useChartStore((s) => s.setSymbol);
-  const list = MOCK_SYMBOLS.filter(
-    (s) => s.ticker.includes(q.trim().toUpperCase()) || s.name.toLowerCase().includes(q.trim().toLowerCase()),
-  );
-  return (
-    <div className="symbol-picker">
-      <div className="symbol-search">
-        <Icon name="search" size={14} />
-        <input autoFocus value={q} placeholder="搜索标的" onChange={(e) => setQ(e.target.value)} />
-      </div>
-      <ul className="menu">
-        {list.map((s) => (
-          <li key={s.ticker}>
-            <button
-              type="button"
-              className={s.ticker === symbol ? 'sel' : ''}
-              onClick={() => {
-                setSymbol(s.ticker);
-                close();
-              }}
-            >
-              <b>{s.ticker}</b>
-              <span className="menu-sub">{s.name}</span>
-              <span className="menu-tag">{s.exchange}</span>
-            </button>
-          </li>
-        ))}
-        {list.length === 0 && <li className="menu-empty">没有匹配的标的</li>}
-      </ul>
-    </div>
-  );
-}
 
 function LayoutMenu({ close }: { close: () => void }): JSX.Element {
   const layoutId = useChartStore((s) => s.layoutId);
@@ -138,7 +106,7 @@ function LayoutNameMenu({ close }: { close: () => void }): JSX.Element {
   );
 }
 
-type FloatKind = 'symbol' | 'layout' | 'rename';
+type FloatKind = 'layout' | 'rename';
 
 /** 工具栏下方的浮层：点外部 / Esc 关闭。位置由 CSS 类决定。 */
 function Float({ kind, onClose, children }: { kind: FloatKind; onClose: () => void; children: ReactNode }): JSX.Element {
@@ -182,24 +150,21 @@ export function TopBar(): JSX.Element {
     if (!host) return;
     const st = (): ReturnType<typeof useChartStore.getState> => useChartStore.getState();
     const tb = createToolbarHandle(host, {
-      onSymbol: () => setFloat('symbol'),
-      onQuickSearch: () => setFloat('symbol'),
+      onSymbol: () => useSymbolSearchStore.getState().openSearch(),
+      onQuickSearch: () => useSymbolSearchStore.getState().openSearch(),
       onCompare: () => toast('比较商品尚未实现'),
       onDataType: () => toast('数据类型切换尚未实现（当前为演示数据）'),
       onInterval: (_label, code) => st().setTimeframe(code),
-      onStyle: (label) => {
+      onStyle: (label, unavailable) => {
+        if (unavailable) {
+          toast(`「${label}」暂不可用：${unavailable}`);
+          return;
+        }
         const style = styleFromLabel(label);
         if (style) st().setChartStyle(style);
       },
-      onIndicators: () => {
-        const on = !st().bbVisible;
-        st().setBb(on);
-        toast(on ? '已开启布林带（BB 20 SMA close 2）' : '已关闭布林带');
-      },
-      onAlert: () => {
-        toast('警报尚未实现');
-        tbRef.current?.setAlertOn(false);
-      },
+      onIndicators: () => useStudyStore.getState().openDialog(),
+      onAlert: () => useAlertDialogStore.getState().openDialog(),
       onReplay: () => {
         const r = toggleReplay();
         if (!r.ok) toast(r.message);
@@ -210,26 +175,48 @@ export function TopBar(): JSX.Element {
       onLayout: () => setFloat('layout'),
       onSave: () => toast('布局存档尚未实现（TODO 2.9）'),
       onManageLayouts: () => setFloat('rename'),
-      onSettings: () => toast('设置尚未实现'),
+      onSettings: () => useSettingsDialogStore.getState().openDialog(),
       onSnapshot: () => toast('快照尚未实现'),
     });
     tbRef.current = tb;
     tb.setUndoRedo(true, true);
+    // 顶栏「交易」开关：交易面板默认隐藏，点这里才出现（dom/toolbar.ts 是设计稿原 DOM 不动，
+    // 按钮由接线层在运行时挂到其根节点，复用 kc-tb-btn 的视觉与深色反相）
+    const tradeBtn = document.createElement('button');
+    tradeBtn.type = 'button';
+    tradeBtn.id = 'header-toolbar-trading';
+    tradeBtn.className = 'kc-tb-btn kc-tb-trade';
+    tradeBtn.title = '交易面板';
+    tradeBtn.innerHTML = '<span>交易</span>';
+    tradeBtn.addEventListener('click', () => {
+      const s = useChartSettingsStore.getState();
+      s.set({ buySell: !s.settings.buySell });
+    });
+    const syncTrade = (s: { settings: { buySell: boolean } }): void => {
+      tradeBtn.classList.toggle('kc-on', s.settings.buySell);
+      tradeBtn.setAttribute('aria-pressed', String(s.settings.buySell));
+    };
+    syncTrade(useChartSettingsStore.getState());
+    const unTrade = useChartSettingsStore.subscribe(syncTrade);
+    tb.root.appendChild(tradeBtn);
     const push = (s: ReturnType<typeof useChartStore.getState>): void => {
       tb.setSymbol(s.symbol);
       tb.setInterval(s.timeframe);
       tb.setLayoutName(s.layoutName);
-      tb.setIndicatorsOn(s.bbVisible);
+      tb.setIndicatorsOn(s.bbVisible || useStudyStore.getState().studies.length > 0);
       tb.setStyle(STYLE_LABELS[s.chartStyle]);
     };
     push(st());
     const unsub = useChartStore.subscribe(push);
+    const unStudy = useStudyStore.subscribe(() => push(st()));
     // 回放被别处结束（换标的、切格、控制条「退出」、Agent）时，顶栏按钮要跟着弹起
     tb.setReplayOn(replayController.state().active);
     const unReplay = replayController.subscribe((r) => tb.setReplayOn(r.active));
     return () => {
       unReplay();
       unsub();
+      unStudy();
+      unTrade();
       tbRef.current = null;
       tb.root.remove();
     };
@@ -241,7 +228,6 @@ export function TopBar(): JSX.Element {
       <div ref={hostRef} className="topbar" />
       {float && (
         <Float kind={float} onClose={close}>
-          {float === 'symbol' && <SymbolPicker close={close} />}
           {float === 'layout' && <LayoutMenu close={close} />}
           {float === 'rename' && <LayoutNameMenu close={close} />}
         </Float>

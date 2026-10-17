@@ -23,11 +23,11 @@ function failures(r: SelfTestResult): string[] {
 }
 
 describe('引擎自检', () => {
-  it('绘图层 ≥ 39 条且全部通过', () => {
+  it('绘图层 ≥ 116 条且全部通过', () => {
     const r = drawSelfTest() as SelfTestResult;
     expect(failures(r)).toEqual([]);
     expect(r.fail).toBe(0);
-    expect(r.pass).toBeGreaterThanOrEqual(39);
+    expect(r.pass).toBeGreaterThanOrEqual(116);
   });
 
   it('Pine 引擎 ≥ 49 条且全部通过', () => {

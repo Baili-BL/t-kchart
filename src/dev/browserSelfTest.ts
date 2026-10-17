@@ -10,12 +10,18 @@ import { selfTest } from '../engine/chart';
 import { ChartGrid, gridSelfTest } from '../engine/grid';
 import { equitySelfTest } from '../engine/equity';
 import { analyticsSelfTest } from '../engine/analytics';
+import { studySelfTest } from '../indicators/studyTest';
+import { styleSelfTest } from '../engine/styleTest';
+import { drawSelfTest } from '../engine/draw';
 
 export interface BrowserSelfTestResult {
   chart: { pass: number; fail: number };
   grid: { pass: number; fail: number };
   equity: { pass: number; fail: number };
   analytics: { pass: number; fail: number };
+  study: { pass: number; fail: number };
+  styles: { pass: number; fail: number };
+  draw: { pass: number; fail: number };
 }
 
 export function runBrowserSelfTests(): BrowserSelfTestResult {
@@ -28,11 +34,17 @@ export function runBrowserSelfTests(): BrowserSelfTestResult {
     const g = gridSelfTest(grid);
     const e = equitySelfTest();
     const a = analyticsSelfTest();
+    const sy = studySelfTest(grid.charts()[1]);
+    const st = styleSelfTest(grid.charts()[2]);
+    const dw = drawSelfTest(); // 纯几何（假宿主），Node / 浏览器都能跑；2.8 起纳入浏览器基线
     return {
       chart: { pass: c.pass, fail: c.fail },
       grid: { pass: g.pass, fail: g.fail },
       equity: { pass: e.pass, fail: e.fail },
       analytics: { pass: a.pass, fail: a.fail },
+      study: { pass: sy.pass, fail: sy.fail },
+      styles: { pass: st.pass, fail: st.fail },
+      draw: { pass: dw.pass, fail: dw.fail },
     };
   } finally {
     grid.dispose();
