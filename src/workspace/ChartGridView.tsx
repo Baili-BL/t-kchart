@@ -8,6 +8,7 @@ import { useStudyStore } from '../store/studyStore';
 import { useAppStore } from '../store/appStore';
 import { registerGrid } from './gridRegistry';
 import { drawBus } from './drawBus';
+import { createDrawPropsBar } from './dom/DrawPropsBar';
 import { replayController, useReplayStore } from '../store/replayStore';
 import type { ReplayState } from '../engine/replay';
 import { SYMBOL_BY_TICKER } from '../data/symbols';
@@ -62,10 +63,16 @@ export function ChartGridView(): JSX.Element {
     const layers = new Map<KChart, DrawLayer>();
     let keyed: DrawLayer | null = null;
 
+    /* 浮动绘图属性工具条：跟随「最近有选中图形」的那一层；
+       onDraw 每帧 sync 一次，拖动 / 平移缩放时工具条都贴着图形走 */
+    let barLayer: DrawLayer | null = null;
+    const propsBar = createDrawPropsBar(() => barLayer);
+
     const ensureLayers = (): void => {
       const live = new Set(grid.charts());
       for (const [c, l] of layers) {
         if (!live.has(c)) {
+          if (l === barLayer) { barLayer = null; propsBar.hide(); }
           l.dispose();
           layers.delete(c);
         }
@@ -77,7 +84,11 @@ export function ChartGridView(): JSX.Element {
           onDown: (px: number, py: number) => layer.onDown(px, py),
           onMove: (px: number, py: number) => layer.onMove(px, py),
           onUp: () => layer.onUp(),
-          onDraw: (ctx: CanvasRenderingContext2D) => layer.render(ctx),
+          onDraw: (ctx: CanvasRenderingContext2D) => {
+            layer.render(ctx);
+            if (layer.active()) barLayer = layer;
+            if (barLayer === layer) propsBar.sync();
+          },
         });
         layer.setTool(drawBus.tool);
         layer.setMagnet(drawBus.magnet);
@@ -225,6 +236,7 @@ export function ChartGridView(): JSX.Element {
       unTheme();
       unSettings();
       unbindDraw();
+      propsBar.dispose();
       grid.el.removeEventListener('activechange', onActive);
       for (const l of layers.values()) l.dispose();
       layers.clear();

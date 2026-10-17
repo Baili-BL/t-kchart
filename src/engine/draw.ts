@@ -601,6 +601,8 @@ export class DrawLayer {
   hidden: boolean;
   /** emoji 工具待放置的字符（由左侧「图标」面板选中后经 drawBus 同步） */
   emojiChar = '😀';
+  /** 「重复绘制」：画完一个图形后不切回光标，继续用当前工具（设计稿浮动条 aria-pressed 按钮） */
+  repeatDraw = false;
 
   private nextId: number;
   private pending: Drawing | null;
@@ -747,10 +749,11 @@ export class DrawLayer {
   hitTest(px: number, py: number): { d: Drawing; part: number | string } | null {
     const ch = this.host;
     const tol = 5;
-    // 从后往前测：后画的在上面
+    // 从后往前测：后画的在上面。锁定的图形也参与命中 —— 选中它才好弹属性工具条去解锁，
+    // 「不能动」由 onDown 的 drag 分支保证（见 ③）
     for (let k = this.drawings.length - 1; k >= 0; k--) {
       const d = this.drawings[k];
-      if (!d.visible || this.hidden || d.locked) continue;
+      if (!d.visible || this.hidden) continue;
       const p = this.pixelPts(d);
       if (!p.length) continue;
 
@@ -1090,7 +1093,10 @@ export class DrawLayer {
   }
 
   removeActive(): boolean {
-    return this.activeId == null ? false : this.remove(this.activeId);
+    if (this.activeId == null) return false;
+    const d = this.find(this.activeId);
+    if (d && d.locked) return false; // 锁定的受保护：先解锁再删
+    return this.remove(this.activeId);
   }
 
   clear(): void {
@@ -1104,6 +1110,79 @@ export class DrawLayer {
   select(id: number | null): void {
     this.activeId = id;
     this.host.invalidate();
+  }
+
+  /** 「重复绘制」开关（浮动属性工具条的 aria-pressed 按钮） */
+  setRepeat(on: boolean): void {
+    this.repeatDraw = !!on;
+  }
+
+  /**
+   * 改某个图形的样式（颜色 / 线宽 / 线型……）。先 pushHistory，样式改动可撤销可重做。
+   * @returns 找不到图形返回 false
+   */
+  setStyle(id: number, patch: Partial<DrawStyle>): boolean {
+    const d = this.find(id);
+    if (!d) return false;
+    this.pushHistory();
+    Object.assign(d.style, patch);
+    this.host.invalidate();
+    return true;
+  }
+
+  /**
+   * 锁定 / 解锁。锁定的图形：能被选中（好弹工具条解锁），但不能拖动，
+   * 橡皮擦与 Delete 键也删不掉。同样入撤销栈。
+   */
+  setLocked(id: number, on: boolean): boolean {
+    const d = this.find(id);
+    if (!d) return false;
+    this.pushHistory();
+    d.locked = !!on;
+    this.host.invalidate();
+    return true;
+  }
+
+  /**
+   * 克隆：复制一份并按像素偏移 (48px, -36px) 换位，新副本自动选中。
+   * 挂在浮动工具条「⋯」菜单里。
+   */
+  clone(id: number): Drawing | null {
+    const d = this.find(id);
+    if (!d) return null;
+    const off = d.pts.map((p) => {
+      const x = this.timeToX(p.time);
+      const y = this.host.yOf(p.price);
+      return { time: this.xToTime(x + 48), price: this.host.pOf(y - 36) };
+    });
+    return this.add(d.type, off, JSON.parse(JSON.stringify(d.style)));
+  }
+
+  /**
+   * 选中图形的浮动属性工具条锚点（画布像素坐标）：图形包围盒水平居中、
+   * 放在盒顶上方 46px（放不下就翻转到盒底下方 8px）。
+   * 未选中 / 隐藏 / 图形不可见时返回 null。
+   */
+  selectionToolbarAnchor(): { x: number; y: number } | null {
+    if (this.activeId == null || this.hidden) return null;
+    const d = this.find(this.activeId);
+    if (!d || !d.visible) return null;
+    const p = this.pixelPts(d);
+    if (!p.length) return null;
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (const q of p) {
+      if (q.x < x0) x0 = q.x;
+      if (q.x > x1) x1 = q.x;
+      if (q.y < y0) y0 = q.y;
+      if (q.y > y1) y1 = q.y;
+    }
+    const plot = this.host.plot;
+    const BAR_W = 190; // 工具条估宽，用于水平方向夹取
+    const x = Math.min(Math.max((x0 + x1) / 2 - BAR_W / 2, plot.l + 4), Math.max(plot.l + 4, plot.r - BAR_W - 4));
+    let y = y0 - 46;
+    if (y < plot.t + 4) y = y1 + 8; // 顶部放不下 → 底部
+    if (y > plot.b - 44) y = plot.b - 44;
+    return { x, y };
   }
 
   setTool(t: string): void {
@@ -1215,10 +1294,11 @@ export class DrawLayer {
       return true;
     }
 
-    // ⓪' 橡皮擦：点中谁删谁（remove 内部先 pushHistory，可撤销）；点空也消费掉这次点击（不平移）
+    // ⓪' 橡皮擦：点中谁删谁（remove 内部先 pushHistory，可撤销）；点空也消费掉这次点击（不平移）。
+    //     锁定的图形受保护：橡皮擦擦不掉（先解锁再删）
     if (this.tool === 'eraser') {
       const hit = this.hitTest(px, py);
-      if (hit) this.remove(hit.d.id);
+      if (hit && !hit.d.locked) this.remove(hit.d.id);
       this.host.invalidate();
       return true;
     }
@@ -1233,7 +1313,8 @@ export class DrawLayer {
         this.activeId = this.pending.id;
         this.pending = null;
         this.pendingPlaced = 0;
-        this.setTool('cursor');
+        // 「重复绘制」开着时留在当前工具，方便连画
+        if (!this.repeatDraw) this.setTool('cursor');
       }
       this.host.invalidate();
       return true;
@@ -1252,7 +1333,7 @@ export class DrawLayer {
           style = { text: this.emojiChar, fontSize: EMOJI_SIZE };
         }
         this.add(this.tool, [a, a], style);
-        this.setTool('cursor');
+        if (!this.repeatDraw) this.setTool('cursor');
       } else {
         this.pending = {
           id: this.nextId++,
@@ -1268,13 +1349,15 @@ export class DrawLayer {
       return true;
     }
 
-    // ③ 光标模式：命中就拖，没命中就让 KChart 平移
+    // ③ 光标模式：命中就拖，没命中就让 KChart 平移。
+    //     锁定的图形：只选中（弹属性工具条解锁），不进入拖拽
     const hit = this.hitTest(px, py);
     if (!hit) {
       if (this.activeId != null) this.select(null);
       return false;
     }
     this.select(hit.d.id);
+    if (hit.d.locked) return true;
     this.drag = {
       d: hit.d,
       part: hit.part,
@@ -1339,7 +1422,7 @@ export class DrawLayer {
       this.activeId = this.pending.id;
       this.pending = null;
       this.pendingPlaced = 0;
-      this.setTool('cursor');
+      if (!this.repeatDraw) this.setTool('cursor');
     }
     this.drag = null;
   }
@@ -2349,12 +2432,47 @@ export function drawSelfTest(): DrawTestResult {
   t('光标模式点已有图形返回 true（接管，不平移）', L.onDown(300, 250) === true);
   L.onUp();
 
-  // --- 锁定后不可命中 ---
+  // --- 锁定：仍可命中（选中弹属性条解锁），但拖不动、橡皮擦与 Delete 都删不掉 ---
   const lockMe = L.drawings[L.drawings.length - 1];
-  lockMe.locked = true;
+  const lockPt = L.pixelPts(lockMe)[0];
+  const lockMid = (() => { const q = L.pixelPts(lockMe); return { x: (q[0].x + q[1].x) / 2, y: (q[0].y + q[1].y) / 2 }; })();
+  L.setLocked(lockMe.id, true);
   L.select(null);
-  t('锁定后 hitTest 跳过它', L.hitTest(300, 250) === null || L.hitTest(300, 250)!.d.id !== lockMe.id);
-  lockMe.locked = false;
+  const lockHit = L.hitTest(lockMid.x, lockMid.y);
+  t('锁定后仍能命中（可选中弹属性工具条）', !!lockHit && lockHit.d.id === lockMe.id);
+  t('锁定后 onDown 只选中不拖拽、onMove 不改锚点',
+    (() => {
+      L.onDown(lockMid.x, lockMid.y);
+      const dragOn = L['drag'] != null;
+      L.onMove(lockMid.x + 50, lockMid.y + 30);
+      L.onUp();
+      const q = L.find(lockMe.id)!.pts;
+      const orig = L['drag'] === null && !dragOn && q[0].time === lockMe.pts[0].time;
+      return L.activeId === lockMe.id && !dragOn && orig;
+    })());
+  t('锁定后 Delete 键（removeActive）删不掉',
+    (() => { const n = L.drawings.length; const ok = !L.removeActive() && L.drawings.length === n; L.select(null); return ok; })());
+  L.setLocked(lockMe.id, false);
+  t('setLocked 两次入撤销栈：undo 一次回到「锁定」，再 undo 回「未锁」',
+    (() => {
+      const wasLocked = L.find(lockMe.id)!.locked;
+      L.undo();
+      const afterOne = L.find(lockMe.id)!.locked;
+      L.undo();
+      const afterTwo = L.find(lockMe.id)!.locked;
+      L.redo(); L.redo();
+      return !wasLocked && afterOne && !afterTwo;
+    })());
+  t('锁定图形手柄不参与拖动（part 返回下标但 drag 为空）', (() => {
+    L.setLocked(lockMe.id, true);
+    L.select(lockMe.id);
+    const h = L.hitTest(lockPt.x, lockPt.y);
+    L.onDown(lockPt.x, lockPt.y);
+    const noDrag = L['drag'] === null;
+    L.onUp();
+    L.setLocked(lockMe.id, false);
+    return !!h && h.part === 0 && noDrag;
+  })());
 
   // --- 隐藏 ---
   L.setHidden(true);
@@ -2881,6 +2999,80 @@ export function drawSelfTest(): DrawTestResult {
         const c = Math.hypot(phb[1].x - phb[0].x, phb[1].y - phb[0].y) / 2;
         const vtxX = vx + Math.max(c * 0.45, 6);
         return !!Lsh.hitTest(mid.x, mid.y) && !!Lsh.hitTest(vtxX, vy);
+      })());
+
+    // —— 浮动属性工具条（设计稿「画图时线的设置与删除」）相关引擎能力 ——
+    const Lpb = new DrawLayer(host);
+    const dp = Lpb.add('trend', [
+      { time: host.bars[10].time, price: 100 },
+      { time: host.bars[30].time, price: 110 },
+    ]);
+    t('setStyle：改颜色 / 线宽立即生效，undo 退回，redo 复原',
+      (() => {
+        const c0 = dp.style.color;
+        const w0 = dp.style.width;
+        Lpb.setStyle(dp.id, { color: '#f23645', width: 4 });
+        const after = Lpb.find(dp.id)!.style;
+        Lpb.undo();
+        const back = Lpb.find(dp.id)!.style;
+        Lpb.redo();
+        const again = Lpb.find(dp.id)!.style;
+        return after.color === '#f23645' && after.width === 4 &&
+          back.color === c0 && back.width === w0 &&
+          again.color === '#f23645' && again.width === 4;
+      })());
+    t('setStyle：未知 id 返回 false 且不入撤销栈',
+      (() => { const n = Lpb['snapshots'].length; return Lpb.setStyle(99999, { width: 8 }) === false && Lpb['snapshots'].length === n; })());
+    t('selectionToolbarAnchor：无选中为 null；选中后 x 居中、y 在包围盒上方 46px',
+      (() => {
+        Lpb.select(null);
+        if (Lpb.selectionToolbarAnchor() !== null) return false;
+        Lpb.select(dp.id);
+        const p = Lpb.pixelPts(Lpb.find(dp.id)!);
+        const a = Lpb.selectionToolbarAnchor();
+        if (!a) return false;
+        const cx = (p[0].x + p[1].x) / 2 - 95; // BAR_W/2 = 95
+        const top = Math.min(p[0].y, p[1].y);
+        return Math.abs(a.x - Math.min(Math.max(cx, Lpb.host.plot.l + 4), Lpb.host.plot.r - 194)) < 0.5 &&
+          Math.abs(a.y - (top - 46)) < 0.5;
+      })());
+    t('selectionToolbarAnchor：图形贴近顶部时翻转到下方',
+      (() => {
+        const dup = Lpb.add('trend', [
+          { time: host.bars[10].time, price: host.scale.max },
+          { time: host.bars[30].time, price: host.scale.max - 0.001 },
+        ]);
+        const a = Lpb.selectionToolbarAnchor();
+        Lpb.remove(dup.id);
+        return !!a && a.y > Lpb.host.plot.t;
+      })());
+    t('repeatDraw：开启后两点工具成型不切回光标；关闭后恢复',
+      (() => {
+        const Lq = new DrawLayer(host);
+        Lq.setTool('trend');
+        Lq.setRepeat(true);
+        Lq.onDown(host.xCenter(10), host.yOf(105));
+        Lq.onDown(host.xCenter(20), host.yOf(108));
+        const stay = Lq.tool === 'trend' && Lq.drawings.length === 1;
+        Lq.setRepeat(false);
+        Lq.onDown(host.xCenter(24), host.yOf(106));
+        Lq.onDown(host.xCenter(34), host.yOf(109));
+        return stay && Lq.tool === 'cursor' && Lq.drawings.length === 2;
+      })());
+    t('clone：副本偏移 +48px/-36px、样式一致、自动选中、一次 undo 消失',
+      (() => {
+        const src = Lpb.find(dp.id)!;
+        const cp = Lpb.clone(src.id);
+        if (!cp) return false;
+        const sp = Lpb.pixelPts(src);
+        const pp = Lpb.pixelPts(cp);
+        const dx = pp[0].x - sp[0].x;
+        const dy = pp[0].y - sp[0].y;
+        const okGeom = Math.abs(dx - 48) < 2 && Math.abs(dy + 36) < 2;
+        const okStyle = JSON.stringify(cp.style) === JSON.stringify(src.style);
+        Lpb.undo();
+        const gone = Lpb.find(cp.id) === null;
+        return okGeom && okStyle && Lpb.activeId !== cp.id && gone;
       })());
   }
 

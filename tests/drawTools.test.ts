@@ -1547,3 +1547,186 @@ describe('emoji 标注（图标按钮 → 分类面板 → 放置）', () => {
     expect(L.find(d.id)!.pts[0].price).not.toBe(105);
   });
 });
+
+/* ===========================================================================
+ * 设计稿「画图时线的设置与删除」：选中图形后的浮动属性工具条（引擎侧能力）
+ *   —— setStyle / setLocked / repeatDraw / clone / selectionToolbarAnchor
+ * ========================================================================= */
+
+describe('浮动属性工具条：setStyle 改颜色/线宽/线型，可撤销可重做', () => {
+  const L = new DrawLayer(HOST);
+  const d = L.add('trend', [anchor(10, 100), anchor(30, 110)]);
+  const c0 = d.style.color;
+  const w0 = d.style.width;
+
+  it('setStyle：改颜色 + 线宽立即生效', () => {
+    expect(L.setStyle(d.id, { color: '#f23645', width: 4 })).toBe(true);
+    expect(d.style.color).toBe('#f23645');
+    expect(d.style.width).toBe(4);
+  });
+  it('undo 退回原样式，redo 复原新样式', () => {
+    L.undo();
+    expect(L.find(d.id)!.style.color).toBe(c0);
+    expect(L.find(d.id)!.style.width).toBe(w0);
+    L.redo();
+    expect(L.find(d.id)!.style.color).toBe('#f23645');
+    expect(L.find(d.id)!.style.width).toBe(4);
+  });
+  it('线型 dash 同样走 setStyle', () => {
+    expect(L.setStyle(d.id, { dash: [8, 5] })).toBe(true);
+    expect(L.find(d.id)!.style.dash).toEqual([8, 5]);
+    L.undo();
+    expect(L.find(d.id)!.style.dash).toEqual([]);
+  });
+  it('未知 id 返回 false 且不入撤销栈', () => {
+    const n = L.canUndo();
+    expect(L.setStyle(99999, { width: 8 })).toBe(false);
+    expect(L.canUndo()).toBe(n);
+  });
+  it('改样式后渲染不抛错且走描边分支', () => {
+    const { ctx, ops } = makeCtx();
+    expect(() => L.render(ctx)).not.toThrow();
+    expect(ops.stroke).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('浮动属性工具条：锁定 setLocked —— 可选中、拖不动、删不掉', () => {
+  const L = new DrawLayer(HOST);
+  const d = L.add('trend', [anchor(8, 100), anchor(28, 112)]);
+  const mid = (() => { const p = L.pixelPts(d); return { x: (p[0].x + p[1].x) / 2, y: (p[0].y + p[1].y) / 2 }; })();
+  L.setLocked(d.id, true);
+
+  it('锁定后仍能命中（选中才好弹工具条解锁）', () => {
+    L.select(null);
+    const hit = L.hitTest(mid.x, mid.y);
+    expect(hit && hit.d.id === d.id).toBe(true);
+  });
+  it('onDown 只选中不进入拖拽；onMove 不改锚点', () => {
+    L.onDown(mid.x, mid.y);
+    expect(L.activeId).toBe(d.id);
+    L.onMove(mid.x + 50, mid.y + 30);
+    L.onUp();
+    expect(d.pts[0]).toEqual(anchor(8, 100));
+    expect(d.pts[1]).toEqual(anchor(28, 112));
+  });
+  it('removeActive（Delete 键路径）删不掉；remove 也被工具条禁用侧保护', () => {
+    expect(L.removeActive()).toBe(false);
+    expect(L.drawings.length).toBe(1);
+  });
+  it('橡皮擦路径：锁定图形受保护（erase 保护在 onDown 分支，这里验证 hit 后手动判 locked）', () => {
+    // 引擎里橡皮擦调用 this.remove 前会检查 hit.d.locked；remove 本身不拦（工具条 trash 用 disabled 拦）
+    expect(L.remove(d.id)).toBe(true); // 引擎级 remove 不拦锁定（无 UI 语义），工具条层面禁用
+    L.undo();
+    expect(L.drawings.length).toBe(1);
+  });
+  it('setLocked 两次入撤销栈：undo 回锁定，再 undo 回未锁，redo 复原', () => {
+    L.setLocked(d.id, false);
+    expect(L.find(d.id)!.locked).toBe(false);
+    L.undo();
+    expect(L.find(d.id)!.locked).toBe(true);
+    L.undo();
+    expect(L.find(d.id)!.locked).toBe(false);
+    L.redo();
+    L.redo();
+    expect(L.find(d.id)!.locked).toBe(false);
+  });
+  it('解锁后恢复可拖', () => {
+    const dd = L.find(d.id)!;
+    const p = L.pixelPts(dd);
+    L.select(dd.id);
+    L.onDown(p[0].x, p[0].y);
+    L.onMove(p[0].x, p[0].y + 40);
+    L.onUp();
+    expect(L.find(d.id)!.pts[0].price).not.toBe(100);
+  });
+});
+
+describe('浮动属性工具条：repeatDraw 重复绘制', () => {
+  it('开启后两点工具成型不切回光标，可连续画', () => {
+    const L = new DrawLayer(HOST);
+    L.setTool('trend');
+    L.setRepeat(true);
+    expect(L.repeatDraw).toBe(true);
+    L.onDown(HOST.xCenter(10), HOST.yOf(105));
+    L.onDown(HOST.xCenter(20), HOST.yOf(108));
+    expect(L.tool).toBe('trend');
+    expect(L.drawings.length).toBe(1);
+    L.onDown(HOST.xCenter(24), HOST.yOf(106));
+    L.onDown(HOST.xCenter(34), HOST.yOf(109));
+    expect(L.drawings.length).toBe(2);
+  });
+  it('关闭后恢复画完自动切回光标', () => {
+    const L = new DrawLayer(HOST);
+    L.setTool('hline');
+    L.setRepeat(false);
+    L.onDown(HOST.xCenter(12), HOST.yOf(104));
+    L.onUp();
+    expect(L.tool).toBe('cursor');
+    expect(L.drawings.length).toBe(1);
+  });
+  it('repeat 画出的一笔 undo 一次消失', () => {
+    const L = new DrawLayer(HOST);
+    L.setTool('trend');
+    L.setRepeat(true);
+    L.onDown(HOST.xCenter(10), HOST.yOf(105));
+    L.onDown(HOST.xCenter(20), HOST.yOf(108));
+    L.undo();
+    expect(L.drawings.length).toBe(0);
+  });
+});
+
+describe('浮动属性工具条：clone 克隆副本', () => {
+  const L = new DrawLayer(HOST);
+  const d = L.add('trend', [anchor(10, 100), anchor(30, 110)]);
+  const cp = L.clone(d.id)!;
+
+  it('副本存在、样式一致、按 (48px, -36px) 偏移', () => {
+    expect(cp).not.toBeNull();
+    const sp = L.pixelPts(d);
+    const pp = L.pixelPts(cp);
+    expect(pp[0].x - sp[0].x).toBeCloseTo(48, 0);
+    expect(pp[0].y - sp[0].y).toBeCloseTo(-36, 0);
+    expect(JSON.stringify(cp.style)).toBe(JSON.stringify(d.style));
+  });
+  it('副本自动选中；一次 undo 后消失', () => {
+    expect(L.activeId).toBe(cp.id);
+    L.undo();
+    expect(L.find(cp.id)).toBeNull();
+  });
+  it('未知 id 克隆返回 null', () => {
+    expect(L.clone(424242)).toBeNull();
+  });
+});
+
+describe('浮动属性工具条：selectionToolbarAnchor 定位', () => {
+  const L = new DrawLayer(HOST);
+
+  it('无选中返回 null', () => {
+    expect(L.selectionToolbarAnchor()).toBeNull();
+  });
+  it('选中后 x = 包围盒中心 − 95，y = 盒顶 − 46（含 plot 夹取）', () => {
+    const d = L.add('trend', [anchor(10, 100), anchor(30, 110)]);
+    L.select(d.id);
+    const p = L.pixelPts(d);
+    const a = L.selectionToolbarAnchor()!;
+    const cx = (p[0].x + p[1].x) / 2 - 95;
+    const clampedX = Math.min(Math.max(cx, HOST.plot.l + 4), HOST.plot.r - 194);
+    expect(a.x).toBeCloseTo(clampedX, 6);
+    expect(a.y).toBeCloseTo(Math.min(p[0].y, p[1].y) - 46, 6);
+  });
+  it('图形贴近顶部时翻转到包围盒下方', () => {
+    const d = L.add('trend', [anchor(10, HOST.scale.max), anchor(30, HOST.scale.max - 0.001)]);
+    L.select(d.id);
+    const a = L.selectionToolbarAnchor()!;
+    expect(a.y).toBeGreaterThan(HOST.plot.t);
+    L.remove(d.id);
+  });
+  it('隐藏整层时返回 null', () => {
+    const d = L.add('trend', [anchor(10, 100), anchor(30, 110)]);
+    L.select(d.id);
+    L.setHidden(true);
+    expect(L.selectionToolbarAnchor()).toBeNull();
+    L.setHidden(false);
+    expect(L.selectionToolbarAnchor()).not.toBeNull();
+  });
+});
