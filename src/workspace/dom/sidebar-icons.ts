@@ -103,3 +103,52 @@ export const GANNBOX_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\
 export const GANNSQF_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\"><path d=\"M4 4 H24 V24 H4 Z M10.6 4 V24 M17.3 4 V24 M4 10.6 H24 M4 17.3 H24 M4 4 L24 24 M24 4 L4 24\"></path></svg>";
 
 export const GANNSQ_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\"><path d=\"M4 9 H21 V24 H4 Z M9.6 9 V24 M15.3 9 V24 M4 14 H21 M4 19 H21\"></path></svg>";
+
+/* —— 设计稿「图表形态」子菜单（图表形态 + 艾略特波浪 + 循环组）图标 —— */
+// 形态/波浪类：zigzag 折线 + 锚点小圆
+const ZIG = (d: string, dots: string): string =>
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"></path>${dots}</svg>`;
+const dotsAt = (pts: [number, number][]): string =>
+  pts.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="1.6"></circle>`).join('');
+
+export const XABCD_ICON = ZIG('M4 22 L10 8 L15 18 L20 10 L24 16',
+  dotsAt([[4, 22], [10, 8], [15, 18], [20, 10], [24, 16]]));
+
+export const SHARK_ICON = ZIG('M4 9 L9 19 L14 7 L19 16 L24 11',
+  dotsAt([[4, 9], [9, 19], [14, 7], [19, 16], [24, 11]]));
+
+export const HS_ICON = ZIG('M3 17 L8 9 L11 12 L14 5 L17 12 L20 9 L25 17',
+  dotsAt([[3, 17], [8, 9], [11, 12], [14, 5], [17, 12], [20, 9], [25, 17]]));
+
+export const ABCD_ICON = ZIG('M4 21 L10 8 L16 17 L24 6',
+  dotsAt([[4, 21], [10, 8], [16, 17], [24, 6]]));
+
+export const TRIPAT_ICON = ZIG('M3 20 L9 8 L15 16 L20 10 L24 13',
+  dotsAt([[3, 20], [9, 8], [15, 16], [20, 10], [24, 13]]));
+
+export const DRV3_ICON = ZIG('M3 21 L7 12 L11 17 L16 7 L20 13 L24 4',
+  dotsAt([[3, 21], [7, 12], [11, 17], [16, 7], [20, 13], [24, 4]]));
+
+export const EW_IMP_ICON = ZIG('M3 20 L7 6 L11 16 L16 5 L20 14 L24 8',
+  dotsAt([[3, 20], [7, 6], [11, 16], [16, 5], [20, 14], [24, 8]]));
+
+export const EW_CORR_ICON = ZIG('M4 7 L9 18 L15 8 L21 16',
+  dotsAt([[4, 7], [9, 18], [15, 8], [21, 16]]));
+
+export const EW_TRI_ICON = ZIG('M3 7 L8 15 L13 9 L18 15 L23 11',
+  dotsAt([[3, 7], [8, 15], [13, 9], [18, 15], [23, 11]]));
+
+export const EW_WXY_ICON = ZIG('M4 6 L8 17 L12 10 L18 19',
+  dotsAt([[4, 6], [8, 17], [12, 10], [18, 19]]));
+
+export const EW_WXYZ_ICON = ZIG('M3 6 L7 17 L11 10 L16 19 L22 12',
+  dotsAt([[3, 6], [7, 17], [11, 10], [16, 19], [22, 12]]));
+
+// 循环线：每周期一对垂直线
+export const CYCLE_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\"><path d=\"M5 6 V22 M7 6 V22 M12 6 V22 M14 6 V22 M19 6 V22 M21 6 V22\"></path></svg>";
+
+// 时间循环：每周期一根垂直线
+export const TIMECYC_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\"><path d=\"M5 6 V22 M11 6 V22 M17 6 V22 M23 6 V22\"></path></svg>";
+
+// 正弦线：两个整周期的正弦曲线
+export const SINE_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\"><path d=\"M3 14 C5.5 5 8.5 5 11 14 C13.5 23 16.5 23 19 14 C20.4 9.4 22.5 7.5 25 10\"></path></svg>";

@@ -303,11 +303,14 @@ describe('2.8 几何纯函数与回归', () => {
     expect(L.drawings.length).toBe(1);
     expect(L.drawings[0].pts.length).toBe(2);
   });
-  it('工具表：9 → 34 种，新工具的锚点数与快捷键就位', () => {
-    expect(DRAW_TOOLS.length).toBe(34);
+  it('工具表：9 → 48 种，新工具的锚点数与快捷键就位', () => {
+    expect(DRAW_TOOLS.length).toBe(48);
     const want: Record<string, number> = {
       hray: 1, extline: 2, arrow: 2, ellipse: 2, triangle: 3, channel: 3,
       dot: 1, highlight: 0, eraser: 0, infoline: 2, angle: 2, crossline: 1,
+      xabcd: 5, shark: 5, hs: 5, abcd: 4, tri: 5, threedrives: 6,
+      ewimpulse: 6, ewcorrection: 4, ewtriangle: 5, ewdouble: 4, ewtriple: 5,
+      cycle: 2, timecycle: 2, sine: 2,
     };
     for (const [key, points] of Object.entries(want)) {
       expect(DRAW_TOOLS.find((t) => t.key === key)?.points === points).toBe(true);
@@ -794,5 +797,166 @@ describe('设计稿「斐波那契/江恩」组：13 种工具 × 四判据（�
     expect(FIB_RATIOS).toContain(0.618);
     expect(FIB_EXTENSIONS[0]).toBe(1);
     expect(FIB_EXTENSIONS[FIB_EXTENSIONS.length - 1]).toBeCloseTo(6.854, 2);
+  });
+});
+
+/* ===========================================================================
+ * 设计稿「图表形态」子菜单（图表形态 + 艾略特波浪 + 循环组）：14 种新工具 × 四判据
+ * 数据驱动：形态/波浪类 inside = 折线段中点；循环组 inside = 垂直线/采样点。
+ * ========================================================================= */
+
+import { PATTERN_LABELS, sinePts, CYCLE_PAIR_OFF, TIMECYCLE_COUNT } from '../src/engine/draw';
+
+interface PatSpec {
+  key: string;
+  pts: { time: number; price: number }[];
+  inside: (L: DrawLayer, d: Drawing) => { x: number; y: number };
+  outside: (L: DrawLayer, d: Drawing) => { x: number; y: number };
+  minStrokes: number;
+}
+
+/** 形态/波浪类通用探针：折线 p1→p2 段的中点命中；中点下方 50px 不命中 */
+function zigSpec(key: string, prices: number[], minStrokes: number): PatSpec {
+  return {
+    key,
+    pts: prices.map((price, i) => anchor(6 + i * 7, price)),
+    inside: (L, d) => {
+      const p = L.pixelPts(d);
+      return { x: (p[1].x + p[2].x) / 2, y: (p[1].y + p[2].y) / 2 };
+    },
+    outside: (L, d) => {
+      const p = L.pixelPts(d);
+      return { x: (p[1].x + p[2].x) / 2, y: (p[1].y + p[2].y) / 2 + 50 };
+    },
+    minStrokes,
+  };
+}
+
+const PAT_SPECS: PatSpec[] = [
+  zigSpec('xabcd', [100, 108, 102, 110, 104], 6),
+  zigSpec('shark', [100, 108, 102, 110, 104], 6),
+  zigSpec('hs', [110, 102, 106, 98, 106], 6),
+  zigSpec('abcd', [100, 108, 102, 110], 5),
+  zigSpec('tri', [100, 108, 102, 106, 104], 6),
+  zigSpec('threedrives', [110, 102, 106, 98, 103, 96], 7),
+  zigSpec('ewimpulse', [100, 108, 102, 110, 104, 112], 7),
+  zigSpec('ewcorrection', [100, 108, 102, 110], 5),
+  zigSpec('ewtriangle', [100, 108, 102, 106, 104], 6),
+  zigSpec('ewdouble', [100, 108, 102, 110], 5),
+  zigSpec('ewtriple', [100, 108, 102, 110, 104], 6),
+  {
+    key: 'cycle',
+    pts: [anchor(10, 100), anchor(20, 100)],
+    inside: (L, d) => {
+      const p = L.pixelPts(d);
+      return { x: p[0].x + 2 * (p[1].x - p[0].x) + CYCLE_PAIR_OFF * (p[1].x - p[0].x), y: 200 };
+    },
+    outside: (L, d) => {
+      const p = L.pixelPts(d);
+      return { x: p[0].x + 0.5 * (p[1].x - p[0].x), y: 200 };
+    },
+    minStrokes: 10,
+  },
+  {
+    key: 'timecycle',
+    pts: [anchor(10, 100), anchor(20, 100)],
+    inside: (L, d) => {
+      const p = L.pixelPts(d);
+      return { x: p[0].x + 3 * (p[1].x - p[0].x), y: 200 };
+    },
+    outside: (L, d) => {
+      const p = L.pixelPts(d);
+      return { x: p[0].x + 3.5 * (p[1].x - p[0].x), y: 200 };
+    },
+    minStrokes: 8,
+  },
+  {
+    key: 'sine',
+    pts: [anchor(8, 105), anchor(40, 105)],
+    inside: (L, d) => {
+      const p = L.pixelPts(d);
+      const poly = sinePts(p[0].x, p[0].y, p[1].x, p[1].y);
+      return poly[Math.floor(poly.length * 0.125)]; // 第一个波峰
+    },
+    outside: (L, d) => {
+      const p = L.pixelPts(d);
+      // 弦中点处波形回到弦上，振幅 0.18×320px≈58px —— 上方 70px 必在波外
+      return { x: (p[0].x + p[1].x) / 2, y: p[0].y - 70 };
+    },
+    minStrokes: 1,
+  },
+];
+
+describe('设计稿「图表形态」组：14 种工具 × 四判据（数据驱动）', () => {
+  for (const spec of PAT_SPECS) {
+    describe(spec.key, () => {
+      const { L, d } = draw(spec.key, spec.pts);
+
+      it(`① 画法：render 不抛错且 stroke ≥ ${spec.minStrokes}`, () => {
+        const { ctx, ops } = makeCtx();
+        expect(() => L.render(ctx)).not.toThrow();
+        expect(ops.stroke).toBeGreaterThanOrEqual(spec.minStrokes);
+      });
+      it('② 命中：图形上的点能命中', () => {
+        const pt = spec.inside(L, d);
+        const hit = L.hitTest(pt.x, pt.y);
+        expect(hit && hit.d.id === d.id).toBe(true);
+      });
+      it('③ 命中外：图形外的点不命中', () => {
+        const pt = spec.outside(L, d);
+        expect(L.hitTest(pt.x, pt.y)).toBeNull();
+      });
+      it('④ 手柄+撤销：拖 0 号手柄只动 p0，undo×2 退回 / redo 复原', () => {
+        const p0px = L.pixelPts(d)[0];
+        L.select(d.id);
+        expect(L.hitTest(p0px.x, p0px.y)!.part).toBe(0);
+        const orig1 = { ...d.pts[1] };
+        L.onDown(p0px.x, p0px.y);
+        L.onMove(p0px.x + 40, p0px.y + 20);
+        L.onUp();
+        expect(d.pts[1].time).toBe(orig1.time);
+        expect(d.pts[1].price).toBeCloseTo(orig1.price, 9);
+        const movedTime = L.find(d.id)!.pts[0].time;
+        expect(movedTime).not.toBe(spec.pts[0].time);
+        L.undo(); // 退回拖拽
+        expect(L.find(d.id)!.pts[0].time).toBe(spec.pts[0].time);
+        L.undo(); // 移除图形
+        expect(L.drawings.length).toBe(0);
+        L.redo();
+        expect(L.drawings.length).toBe(1);
+      });
+    });
+  }
+
+  it('PATTERN_LABELS：每种形态/波浪的标签数与锚点数一致', () => {
+    expect(Object.keys(PATTERN_LABELS).length).toBe(11);
+    for (const [key, labels] of Object.entries(PATTERN_LABELS)) {
+      expect(labels.length).toBe(DRAW_TOOLS.find((t) => t.key === key)?.points);
+    }
+  });
+  it('循环组常量：CYCLE_PAIR_OFF / TIMECYCLE_COUNT 就位', () => {
+    expect(CYCLE_PAIR_OFF).toBeGreaterThan(0);
+    expect(CYCLE_PAIR_OFF).toBeLessThan(0.5);
+    expect(TIMECYCLE_COUNT).toBeGreaterThanOrEqual(4);
+  });
+  it('sinePts：起点终点在弦上、峰谷振幅 = 0.18 × 弦长、2 个整周期', () => {
+    const poly = sinePts(0, 0, 200, 0);
+    expect(poly[0].y).toBe(0);
+    expect(poly[poly.length - 1].y).toBeCloseTo(0, 9);
+    expect(Math.max(...poly.map((q) => q.y))).toBeCloseTo(200 * 0.18, 6);
+    expect(Math.min(...poly.map((q) => q.y))).toBeCloseTo(-200 * 0.18, 6);
+  });
+  it('多锚点交互：xabcd 五次点击才成型，中间是待定态', () => {
+    const L = new DrawLayer(HOST);
+    L.setTool('xabcd');
+    L.onDown(HOST.xCenter(5), HOST.yOf(100));
+    L.onDown(HOST.xCenter(12), HOST.yOf(108));
+    L.onDown(HOST.xCenter(19), HOST.yOf(102));
+    L.onDown(HOST.xCenter(26), HOST.yOf(110));
+    expect(L.drawings.length).toBe(0); // 还差一点，待定
+    L.onDown(HOST.xCenter(33), HOST.yOf(104));
+    expect(L.drawings.length).toBe(1);
+    expect(L.drawings[0].pts.length).toBe(5);
+    expect(L.tool).toBe('cursor');
   });
 });

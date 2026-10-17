@@ -15,6 +15,9 @@ import {
   FIBEXT_ICON, FIBCHAN_ICON, FIBTZ_ICON, FIBFAN_ICON, FIBTTZ_ICON,
   FIBCIRC_ICON, FIBSPI_ICON, FIBARC_ICON, FIBWEDGE_ICON, TILTFAN_ICON,
   GANNBOX_ICON, GANNSQF_ICON, GANNSQ_ICON,
+  XABCD_ICON, SHARK_ICON, HS_ICON, ABCD_ICON, TRIPAT_ICON, DRV3_ICON,
+  EW_IMP_ICON, EW_CORR_ICON, EW_TRI_ICON, EW_WXY_ICON, EW_WXYZ_ICON,
+  CYCLE_ICON, TIMECYC_ICON, SINE_ICON,
 } from './sidebar-icons';
 
 /* ------------------------------------------------------------------ 工具 */
@@ -197,7 +200,28 @@ const SECTIONS: Section[] = [
     ] },
   ]},
   { tools: [
-    { icon: PATTERN, caret: CARET, label: 'XABCD形态', items: [['XABCD形态', PATTERN], ['三角形形态', PATTERN], ['头肩形态', PATTERN]] },
+    { icon: PATTERN, caret: CARET, label: 'XABCD形态', groups: [
+      { label: '图表形态', items: [
+        ['XABCD形态', XABCD_ICON],
+        ['赛福形态', SHARK_ICON],
+        ['头肩形态', HS_ICON],
+        ['ABCD形态', ABCD_ICON],
+        ['三角形态', TRIPAT_ICON],
+        ['三驱形态', DRV3_ICON],
+      ] },
+      { label: '艾略特波浪', items: [
+        ['艾略特脉冲波（1-2-3-4-5）', EW_IMP_ICON],
+        ['艾略特修正波（A-B-C）', EW_CORR_ICON],
+        ['艾略特三角波（A-B-C-D-E）', EW_TRI_ICON],
+        ['艾略特双重组合浪（W-X-Y）', EW_WXY_ICON],
+        ['艾略特三重组合浪（W-X-Y-Z）', EW_WXYZ_ICON],
+      ] },
+      { label: '循环', items: [
+        ['循环线', CYCLE_ICON],
+        ['时间循环', TIMECYC_ICON],
+        ['正弦线', SINE_ICON],
+      ] },
+    ] },
     { icon: LONG_POS, caret: CARET, label: '多头仓位', items: [['多头仓位', LONG_POS], ['空头仓位', LONG_POS]] },
     { icon: BRUSH, caret: CARET, label: '笔刷', items: [['笔刷', BRUSH], ['荧光笔', BRUSH], ['路径', BRUSH]] },
     { icon: TEXT, caret: CARET, label: '文字', items: [['文字', TEXT], ['椭圆', TEXT], ['便签', TEXT], ['价格标签', TEXT], ['日期范围', TEXT]] },

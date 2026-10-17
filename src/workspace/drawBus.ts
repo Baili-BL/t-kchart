@@ -124,6 +124,35 @@ export function toolKeyForLabel(label: string): string | null {
       return 'gannsqf';
     case '江恩正方':
       return 'gannsq';
+    // —— 设计稿「图表形态」子菜单（图表形态 + 艾略特波浪 + 循环组） ——
+    case 'XABCD形态':
+      return 'xabcd';
+    case '赛福形态':
+      return 'shark';
+    case '头肩形态':
+      return 'hs';
+    case 'ABCD形态':
+      return 'abcd';
+    case '三角形态':
+      return 'tri';
+    case '三驱形态':
+      return 'threedrives';
+    case '艾略特脉冲波（1-2-3-4-5）':
+      return 'ewimpulse';
+    case '艾略特修正波（A-B-C）':
+      return 'ewcorrection';
+    case '艾略特三角波（A-B-C-D-E）':
+      return 'ewtriangle';
+    case '艾略特双重组合浪（W-X-Y）':
+      return 'ewdouble';
+    case '艾略特三重组合浪（W-X-Y-Z）':
+      return 'ewtriple';
+    case '循环线':
+      return 'cycle';
+    case '时间循环':
+      return 'timecycle';
+    case '正弦线':
+      return 'sine';
     case '文字':
       return 'text';
     case '测量':

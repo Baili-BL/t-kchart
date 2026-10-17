@@ -154,6 +154,35 @@ export const DRAW_TOOLS: DrawToolDef[] = [
     icon: 'M3 3 L15 3 L15 15 L3 15 Z M7 3 L7 15 M11 3 L11 15 M3 7 L15 7 M3 11 L15 11 M3 3 L15 15' },
   { key: 'gannsq', label: '江恩正方', points: 2,
     icon: 'M3 6 L12 6 L12 15 L3 15 Z M6 6 L6 15 M9 6 L9 15 M3 9 L12 9 M3 12 L12 12' },
+  // —— 设计稿「图表形态」子菜单新增的十四种（图表形态 + 艾略特波浪 + 循环） ——
+  { key: 'xabcd', label: 'XABCD形态', points: 5,
+    icon: 'M2 14 L6 4 L10 12 L13 6 L16 10' },
+  { key: 'shark', label: '赛福形态', points: 5,
+    icon: 'M2 6 L6 13 L10 4 L14 10 L16 6' },
+  { key: 'hs', label: '头肩形态', points: 5,
+    icon: 'M2 13 L5 6 L7 10 L10 3 L13 10 L15 7 L16 9' },
+  { key: 'abcd', label: 'ABCD形态', points: 4,
+    icon: 'M2 13 L7 4 L11 11 L16 5' },
+  { key: 'tri', label: '三角形态', points: 5,
+    icon: 'M2 5 L7 12 L11 6 L14 10 L16 8' },
+  { key: 'threedrives', label: '三驱形态', points: 6,
+    icon: 'M2 14 L5 8 L8 11 L11 5 L14 8 L16 4' },
+  { key: 'ewimpulse', label: '艾略特脉冲波（1-2-3-4-5）', points: 6,
+    icon: 'M2 13 L5 5 L8 11 L11 4 L14 10 L16 6' },
+  { key: 'ewcorrection', label: '艾略特修正波（A-B-C）', points: 4,
+    icon: 'M2 6 L6 12 L10 5 L15 10' },
+  { key: 'ewtriangle', label: '艾略特三角波（A-B-C-D-E）', points: 5,
+    icon: 'M2 4 L6 10 L10 6 L13 10 L16 8' },
+  { key: 'ewdouble', label: '艾略特双重组合浪（W-X-Y）', points: 4,
+    icon: 'M2 5 L5 11 L8 7 L12 12' },
+  { key: 'ewtriple', label: '艾略特三重组合浪（W-X-Y-Z）', points: 5,
+    icon: 'M2 5 L5 11 L8 7 L11 12 L15 9' },
+  { key: 'cycle', label: '循环线', points: 2,
+    icon: 'M3 4 L3 14 M5 4 L5 14 M8 4 L8 14 M10 4 L10 14 M13 4 L13 14 M15 4 L15 14' },
+  { key: 'timecycle', label: '时间循环', points: 2,
+    icon: 'M3 4 L3 14 M7 4 L7 14 M11 4 L11 14 M15 4 L15 14' },
+  { key: 'sine', label: '正弦线', points: 2,
+    icon: 'M2 9 C4 4 6 4 8 9 C10 14 12 14 14 9 C15 6.5 16 6 16 7' },
 ];
 
 export const FIB_LEVELS: { l: number; c: string }[] = [
@@ -191,6 +220,48 @@ export const FIB_EXTENSIONS: number[] = [1, 1.618, 2.618, 4.236, 6.854];
 
 /** 江恩网格分割（1/8） */
 export const GANN_DIVS: number[] = [0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1];
+
+/** 循环线：绘制的周期数（每周期一对垂直线，副线在周期起点右侧 18% 处） */
+export const CYCLE_COUNT: number = 6;
+export const CYCLE_PAIR_OFF: number = 0.18;
+
+/** 时间循环：绘制的垂直线根数（每个周期一根，带序号标签） */
+export const TIMECYCLE_COUNT: number = 8;
+
+/**
+ * 形态/波浪类工具的锚点字母标签（渲染与自检共用；键 = 工具 key）。
+ * 锚点按 zigzag 顺序放置，峰顶（屏幕 y 更小）标签画在点上方，谷底画在下方。
+ */
+export const PATTERN_LABELS: { [key: string]: string[] } = {
+  xabcd: ['X', 'A', 'B', 'C', 'D'],
+  shark: ['0', 'X', 'A', 'B', 'C'],
+  hs: ['A', 'B', 'C', 'D', 'E'],
+  abcd: ['A', 'B', 'C', 'D'],
+  tri: ['A', 'B', 'C', 'D', 'E'],
+  threedrives: ['0', '1', 'A', '2', 'B', '3'],
+  ewimpulse: ['0', '1', '2', '3', '4', '5'],
+  ewcorrection: ['0', 'A', 'B', 'C'],
+  ewtriangle: ['A', 'B', 'C', 'D', 'E'],
+  ewdouble: ['0', 'W', 'X', 'Y'],
+  ewtriple: ['0', 'W', 'X', 'Y', 'Z'],
+};
+
+/** 正弦线采样：沿 p0→p1 的弦线叠加指定个整周期正弦，振幅 = 弦长 × 0.18 */
+export function sinePts(
+  ax: number, ay: number, bx: number, by: number,
+  periods = 2, samples = 64,
+): { x: number; y: number }[] {
+  const out: { x: number; y: number }[] = [];
+  const amp = Math.hypot(bx - ax, by - ay) * 0.18;
+  for (let i = 0; i <= samples; i++) {
+    const t = i / samples;
+    out.push({
+      x: ax + (bx - ax) * t,
+      y: ay + (by - ay) * t + amp * Math.sin(t * periods * 2 * Math.PI),
+    });
+  }
+  return out;
+}
 
 export function drawStyle(color?: string): DrawStyle {
   return {
@@ -608,6 +679,23 @@ export class DrawLayer {
           if (distToSeg(px, py, s.x1, s.y1, s.x2, s.y2) <= tol) return { d, part: 'body' };
         }
         if (inRect(px, py, a.x, a.y, ex, ey)) return { d, part: 'body' };
+      } else if (PATTERN_LABELS[d.type]) {
+        // 形态/波浪类：折线段上或锚点附近
+        if (distToPolyline(px, py, p) <= tol) return { d, part: 'body' };
+      } else if (d.type === 'cycle' || d.type === 'timecycle') {
+        // 循环线（每周期一对垂直线）/ 时间循环（每周期一根）
+        const unit = b.x - a.x;
+        const n = d.type === 'cycle' ? CYCLE_COUNT : TIMECYCLE_COUNT;
+        for (let i = 0; i < n; i++) {
+          const xs = d.type === 'cycle'
+            ? [a.x + i * unit, a.x + i * unit + unit * CYCLE_PAIR_OFF]
+            : [a.x + i * unit];
+          for (const x of xs) {
+            if (Math.abs(px - x) <= tol) return { d, part: 'body' };
+          }
+        }
+      } else if (d.type === 'sine') {
+        if (distToPolyline(px, py, sinePts(a.x, a.y, b.x, b.y)) <= tol) return { d, part: 'body' };
       } else if (d.type === 'text') {
         const w = Math.max(24, d.style.text.length * 7);
         if (inRect(px, py, a.x - 2, a.y - 10, a.x + w, a.y + 6)) return { d, part: 'body' };
@@ -1294,6 +1382,52 @@ export class DrawLayer {
         ctx.lineTo(s.x2, s.y2);
         ctx.stroke();
       }
+    } else if (PATTERN_LABELS[d.type]) {
+      // 形态/波浪类：锚点折线 + 空心圆点 + 字母标签（峰顶标上方、谷底标下方）
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.moveTo(p[0].x, p[0].y);
+      for (let i = 1; i < p.length; i++) ctx.lineTo(p[i].x, p[i].y);
+      ctx.stroke();
+      const labels = PATTERN_LABELS[d.type];
+      for (let i = 0; i < p.length; i++) {
+        ctx.beginPath();
+        ctx.arc(p[i].x, p[i].y, 3, 0, Math.PI * 2);
+        ctx.stroke();
+        const prev = p[i - 1] || p[i];
+        const next = p[i + 1] || p[i];
+        const above = p[i].y <= prev.y && p[i].y <= next.y; // 屏幕 y 向下：y 小 = 峰顶
+        this.label(ctx, labels[i] || '', p[i].x + 5, p[i].y + (above ? -5 : 13), col);
+      }
+    } else if (d.type === 'cycle' || d.type === 'timecycle') {
+      // 循环线 / 时间循环：垂直线组（循环线每周期一对：主线 + 18% 处副线）
+      const unit = b.x - a.x;
+      const n = d.type === 'cycle' ? CYCLE_COUNT : TIMECYCLE_COUNT;
+      ctx.strokeStyle = '#787b86';
+      ctx.setLineDash([]);
+      for (let i = 0; i < n; i++) {
+        const xs = d.type === 'cycle'
+          ? [a.x + i * unit, a.x + i * unit + unit * CYCLE_PAIR_OFF]
+          : [a.x + i * unit];
+        for (const x of xs) {
+          if (x < ch.plot.l - 2 || x > ch.plot.r + 2) continue;
+          ctx.beginPath();
+          ctx.moveTo(x, ch.plot.t);
+          ctx.lineTo(x, ch.plot.b);
+          ctx.stroke();
+        }
+        if (d.type === 'timecycle') {
+          this.label(ctx, String(i), a.x + i * unit + 3, ch.plot.t + 14, '#787b86');
+        }
+      }
+    } else if (d.type === 'sine') {
+      // 正弦线：沿弦线叠加 2 个整周期正弦
+      const poly = sinePts(a.x, a.y, b.x, b.y);
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.moveTo(poly[0].x, poly[0].y);
+      for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i].x, poly[i].y);
+      ctx.stroke();
     } else if (d.type === 'text') {
       ctx.setLineDash([]);
       this.label(ctx, d.style.text || '文字', a.x, a.y, col, d.style.fontSize);
@@ -1686,8 +1820,8 @@ export function drawSelfTest(): DrawTestResult {
     const dd = Ld.add('dot', [{ time: host.bars[20].time, price: 105 }]);
     const pd = Ld.pixelPts(dd)[0];
     t('圆点：圆心命中 / 40px 外不命中', !!Ld.hitTest(pd.x, pd.y) && Ld.hitTest(pd.x + 40, pd.y) === null);
-    t('光标组：工具表 34 种且新三项就位',
-      DRAW_TOOLS.length === 34 &&
+    t('光标组：工具表 48 种且新三项就位',
+      DRAW_TOOLS.length === 48 &&
       toolDef('dot').points === 1 && toolDef('highlight').points === 0 && toolDef('eraser').points === 0);
     t('线组：信息线/趋势角度/横线 就位',
       toolDef('infoline').points === 2 && toolDef('angle').points === 2 && toolDef('crossline').points === 1 &&
@@ -1696,6 +1830,61 @@ export function drawSelfTest(): DrawTestResult {
       toolDef('fib').key3 === '⌥F' &&
       ['fibext', 'fibchannel', 'fibttz'].every((k) => toolDef(k).points === 3) &&
       ['fibtz', 'fibfan', 'fibcirc', 'fibspiral', 'fibarc', 'fibwedge', 'tiltfan', 'gannbox', 'gannsqf', 'gannsq'].every((k) => toolDef(k).points === 2));
+
+    // --- 设计稿「图表形态」子菜单：形态/波浪 + 循环组 ---
+    t('形态/波浪组：11 种工具就位（标签数 = 锚点数）',
+      ['xabcd', 'shark', 'hs', 'abcd', 'tri', 'threedrives', 'ewimpulse', 'ewcorrection', 'ewtriangle', 'ewdouble', 'ewtriple']
+        .every((k) => PATTERN_LABELS[k].length === toolDef(k).points));
+
+    const Lp = new DrawLayer(host);
+    const dpat = Lp.add('xabcd', [
+      { time: host.bars[6].time, price: 100 },
+      { time: host.bars[12].time, price: 108 },
+      { time: host.bars[18].time, price: 102 },
+      { time: host.bars[26].time, price: 110 },
+      { time: host.bars[34].time, price: 104 },
+    ]);
+    const pp = Lp.pixelPts(dpat);
+    const segMid = { x: (pp[1].x + pp[2].x) / 2, y: (pp[1].y + pp[2].y) / 2 };
+    t('XABCD 形态：折线段与锚点都能命中 / 远点不命中',
+      !!Lp.hitTest(segMid.x, segMid.y) && !!Lp.hitTest(pp[3].x, pp[3].y) &&
+      Lp.hitTest(segMid.x, segMid.y + 50) === null);
+
+    const Lcy = new DrawLayer(host);
+    const dcy = Lcy.add('cycle', [
+      { time: host.bars[10].time, price: 100 },
+      { time: host.bars[20].time, price: 100 },
+    ]);
+    const pcy = Lcy.pixelPts(dcy);
+    const cunit = pcy[1].x - pcy[0].x;
+    t('循环线：每周期主线与 18% 副线都能命中 / 周期中间不命中',
+      !!Lcy.hitTest(pcy[0].x + 2 * cunit, 200) &&
+      !!Lcy.hitTest(pcy[0].x + 2 * cunit + 0.18 * cunit, 200) &&
+      Lcy.hitTest(pcy[0].x + 0.5 * cunit, 200) === null);
+
+    const Ltc = new DrawLayer(host);
+    const dtc = Ltc.add('timecycle', [
+      { time: host.bars[10].time, price: 100 },
+      { time: host.bars[20].time, price: 100 },
+    ]);
+    const ptc = Ltc.pixelPts(dtc);
+    t('时间循环：第 3 根垂直线命中 / 两根之间不命中',
+      !!Ltc.hitTest(ptc[0].x + 3 * (ptc[1].x - ptc[0].x), 200) &&
+      Ltc.hitTest(ptc[0].x + 3.5 * (ptc[1].x - ptc[0].x), 200) === null);
+
+    const Lsi = new DrawLayer(host);
+    const dsi = Lsi.add('sine', [
+      { time: host.bars[8].time, price: 105 },
+      { time: host.bars[40].time, price: 105 },
+    ]);
+    const psi = Lsi.pixelPts(dsi);
+    const spoly = sinePts(psi[0].x, psi[0].y, psi[1].x, psi[1].y);
+    const sm2 = spoly[Math.floor(spoly.length * 0.25)];
+    t('正弦线：波峰附近采样点能命中 / 远离弦线不命中',
+      !!Lsi.hitTest(sm2.x, sm2.y) && Lsi.hitTest(psi[0].x + 100, psi[0].y - 90) === null);
+    t('几何：sinePts 起点在弦上、振幅 = 0.18 × 弦长',
+      near(spoly[0].x, psi[0].x, 0.5) && near(spoly[0].y, psi[0].y, 0.5) &&
+      near(Math.max(...spoly.map((q) => q.y)) - psi[0].y, Math.hypot(psi[1].x - psi[0].x, psi[1].y - psi[0].y) * 0.18, 1));
 
     // --- 斐波那契/江恩组抽测：时区垂直线 + 江恩箱网格 + 螺旋折线 ---
     const Lz = new DrawLayer(host);
