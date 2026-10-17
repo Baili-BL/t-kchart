@@ -18,7 +18,7 @@ const HOST: DrawHost = makeFakeHost(CLOSES, 10);
 
 /** 计数 stub：renderOne 只依赖这十几个方法 */
 function makeCtx() {
-  const ops = { stroke: 0, fill: 0, text: 0, ellipse: 0, path: 0 };
+  const ops = { stroke: 0, fill: 0, text: 0, ellipse: 0, path: 0, arc: 0 };
   const ctx: any = {
     save() { /* no-op */ },
     restore() { /* no-op */ },
@@ -27,7 +27,9 @@ function makeCtx() {
     lineTo() { /* no-op */ },
     closePath() { /* no-op */ },
     rect() { /* no-op */ },
+    strokeRect() { /* no-op */ },
     ellipse() { ops.ellipse++; },
+    arc() { ops.arc++; },
     stroke() { ops.stroke++; },
     fill() { ops.fill++; },
     fillRect() { /* no-op */ },
@@ -301,13 +303,139 @@ describe('2.8 几何纯函数与回归', () => {
     expect(L.drawings.length).toBe(1);
     expect(L.drawings[0].pts.length).toBe(2);
   });
-  it('工具表：9 → 15 种，新工具的锚点数与快捷键就位', () => {
-    expect(DRAW_TOOLS.length).toBe(15);
-    const want: Record<string, number> = { hray: 1, extline: 2, arrow: 2, ellipse: 2, triangle: 3, channel: 3 };
+  it('工具表：9 → 18 种，新工具的锚点数与快捷键就位', () => {
+    expect(DRAW_TOOLS.length).toBe(18);
+    const want: Record<string, number> = {
+      hray: 1, extline: 2, arrow: 2, ellipse: 2, triangle: 3, channel: 3,
+      dot: 1, highlight: 0, eraser: 0,
+    };
     for (const [key, points] of Object.entries(want)) {
       const def = DRAW_TOOLS.find((t) => t.key === key);
       expect(def && def.points === points).toBe(true);
       expect(def && def.key2 && def.key2.length === 1).toBe(true);
     }
+  });
+});
+
+/* ===========================================================================
+ * 设计稿「十字线」子菜单新增的三种工具：圆点 / 荧光笔 / 橡皮擦
+ * ========================================================================= */
+
+describe('光标组新工具：圆点 dot', () => {
+  const { L, d } = draw('dot', [anchor(20, 105)]);
+  const p = L.pixelPts(d)[0];
+
+  it('画法：render 产生实心填充（arc 圆）', () => {
+    const { ctx, ops } = makeCtx();
+    expect(() => L.render(ctx)).not.toThrow();
+    expect(ops.arc).toBeGreaterThanOrEqual(1);
+    expect(ops.fill).toBeGreaterThanOrEqual(1);
+  });
+  it('命中：圆心命中、40px 外不命中', () => {
+    const hit = L.hitTest(p.x, p.y);
+    expect(hit && hit.d.id === d.id).toBe(true);
+    expect(L.hitTest(p.x + 40, p.y)).toBeNull();
+  });
+  it('手柄：唯一锚点即手柄，拖动改价格不改时间', () => {
+    L.select(d.id);
+    expect(L.hitTest(p.x, p.y)!.part).toBe(0);
+    L.onDown(p.x, p.y);
+    L.onMove(p.x, p.y + 50);
+    L.onUp();
+    expect(d.pts[0].time).toBe(HOST.bars[20].time);
+    expect(d.pts[0].price).not.toBe(105);
+  });
+  it('撤销（拖过手柄，历史两个快照）', () => {
+    const n = L.drawings.length;
+    L.undo();
+    L.undo();
+    expect(L.drawings.length).toBe(n - 1);
+    L.redo();
+    expect(L.drawings.length).toBe(n);
+  });
+});
+
+describe('光标组新工具：荧光笔 highlight（自由笔迹）', () => {
+  it('交互：按下→拖动采点→松手收笔，一笔一次 undo；收笔自动回光标', () => {
+    const L = new DrawLayer(HOST);
+    L.setTool('highlight');
+    L.onDown(HOST.xCenter(10), HOST.yOf(105));
+    expect(L.drawings.length).toBe(0); // 拖动中待定
+    L.onMove(HOST.xCenter(16), HOST.yOf(105));
+    L.onMove(HOST.xCenter(22), HOST.yOf(105));
+    L.onMove(HOST.xCenter(28), HOST.yOf(105));
+    L.onUp();
+    expect(L.drawings.length).toBe(1);
+    const d0 = L.drawings[0];
+    expect(d0.type).toBe('highlight');
+    expect(d0.pts.length).toBeGreaterThanOrEqual(3); // 采了 ≥3 个轨迹点
+    expect(L.tool).toBe('cursor');
+    const n = L.drawings.length;
+    L.undo();
+    expect(L.drawings.length).toBe(n - 1); // 一笔 = 一次快照
+    L.redo();
+    expect(L.drawings.length).toBe(n);
+  });
+
+  const { L, d } = draw('highlight', [
+    anchor(10, 105), anchor(14, 105), anchor(18, 105), anchor(22, 105),
+  ]);
+  const p = L.pixelPts(d);
+
+  it('画法：render 产生描边、不抛错', () => {
+    const { ctx, ops } = makeCtx();
+    expect(() => L.render(ctx)).not.toThrow();
+    expect(ops.stroke).toBeGreaterThanOrEqual(1);
+  });
+  it('命中：笔迹段上命中、离轨迹 40px 不命中；荧光笔无逐锚点手柄', () => {
+    const hit = L.hitTest((p[1].x + p[2].x) / 2, p[1].y);
+    expect(hit && hit.d.id === d.id).toBe(true);
+    expect(hit!.part).toBe('body');
+    expect(L.hitTest(p[1].x, p[1].y + 40)).toBeNull();
+    L.select(d.id);
+    // 手柄优先级逻辑对 highlight 关闭：锚点处命中的也是 body（整体拖）
+    expect(L.hitTest(p[1].x, p[1].y)!.part).toBe('body');
+  });
+  it('拖动：整体平移，轨迹点数不变', () => {
+    const before = d.pts.map((q) => ({ ...q }));
+    L.onDown(p[1].x, p[1].y);
+    L.onMove(p[1].x + 30, p[1].y + 25);
+    L.onUp();
+    expect(d.pts.length).toBe(before.length);
+    expect(d.pts[0].price).toBeCloseTo(before[0].price + (HOST.pOf(p[1].y + 25) - HOST.pOf(p[1].y)), 6);
+    expect(d.pts[3].time).toBeCloseTo(before[3].time + (HOST.bars[17].time - HOST.bars[14].time), -1);
+  });
+  it('撤销（拖过 body，历史两个快照）', () => {
+    const n = L.drawings.length;
+    L.undo();
+    L.undo();
+    expect(L.drawings.length).toBe(n - 1);
+    L.redo();
+    expect(L.drawings.length).toBe(n);
+  });
+});
+
+describe('光标组新工具：橡皮擦 eraser', () => {
+  it('点中删除 / 点空不删但消费点击 / undo 复原', () => {
+    const L = new DrawLayer(HOST);
+    const h = L.add('hline', [anchor(10, 105)]);
+    L.add('dot', [anchor(30, 112)]);
+    L.setTool('eraser');
+
+    // 点空：什么都不删，但这次点击不落空（不平移）
+    const empty = L.onDown(HOST.xCenter(40), HOST.yOf(130));
+    expect(empty).toBe(true);
+    expect(L.drawings.length).toBe(2);
+
+    // 点中 hline：删除
+    const y = L.pixelPts(h)[0].y;
+    L.onDown(HOST.xCenter(20), y);
+    expect(L.drawings.length).toBe(1);
+    expect(L.find(h.id)).toBeNull();
+
+    // undo 复原
+    L.undo();
+    expect(L.drawings.length).toBe(2);
+    expect(L.find(h.id)).not.toBeNull();
   });
 });

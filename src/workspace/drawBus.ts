@@ -6,6 +6,7 @@ export type DrawEvent =
   | { type: 'tool'; tool: string }
   | { type: 'magnet'; on: boolean }
   | { type: 'hidden'; on: boolean }
+  | { type: 'longPressTip'; on: boolean }
   | { type: 'clear' }
   | { type: 'undo' }
   | { type: 'redo' };
@@ -14,6 +15,8 @@ class DrawBus {
   tool = 'cursor';
   magnet = false;
   hidden = false;
+  /** 设计稿「长按时显示数值工具提示」开关，默认开 */
+  longPressTip = true;
   private listeners = new Set<(ev: DrawEvent) => void>();
 
   subscribe(fn: (ev: DrawEvent) => void): () => void {
@@ -37,6 +40,10 @@ class DrawBus {
     this.hidden = on;
     this.emit({ type: 'hidden', on });
   }
+  setLongPressTip(on: boolean): void {
+    this.longPressTip = on;
+    this.emit({ type: 'longPressTip', on });
+  }
   clear(): void {
     this.emit({ type: 'clear' });
   }
@@ -56,6 +63,12 @@ export function toolKeyForLabel(label: string): string | null {
     case '十字线':
     case '光标':
       return 'cursor';
+    case '圆点':
+      return 'dot';
+    case '荧光笔':
+      return 'highlight';
+    case '橡皮擦':
+      return 'eraser';
     case '趋势线':
       return 'trend';
     case '水平线':

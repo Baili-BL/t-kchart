@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { createSidebar } from './dom/sidebar';
+import { createSidebar, LONGPRESS_TIP_LABEL } from './dom/sidebar';
 import { useToast } from '../ui/toast';
 import { drawBus, isMagnetLabel, toolKeyForLabel } from './drawBus';
 
@@ -33,6 +33,7 @@ export function DrawToolbar(): JSX.Element {
         if (label === '隐藏所有图形') drawBus.setHidden(on);
         else if (label === '移除对象' && on) drawBus.clear();
         else if (label === '锁定绘图和指标') toast('锁定暂未实现');
+        else if (label === LONGPRESS_TIP_LABEL) drawBus.setLongPressTip(on);
       },
     });
     return () => {

@@ -82,6 +82,7 @@ export function ChartGridView(): JSX.Element {
         layer.setTool(drawBus.tool);
         layer.setMagnet(drawBus.magnet);
         layer.setHidden(drawBus.hidden);
+        c.longPressTip = drawBus.longPressTip;
         layers.set(c, layer);
       }
       // 键盘只给活动格的绘图层，避免 Ctrl+Z 同时撤销好几张图
@@ -102,6 +103,9 @@ export function ChartGridView(): JSX.Element {
         else if (ev.type === 'magnet') l.setMagnet(ev.on);
         else if (ev.type === 'hidden') l.setHidden(ev.on);
         else if (ev.type === 'clear') l.clear();
+      }
+      if (ev.type === 'longPressTip') {
+        for (const c of layers.keys()) c.longPressTip = ev.on;
       }
     });
 

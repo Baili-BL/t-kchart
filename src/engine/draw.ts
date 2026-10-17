@@ -111,6 +111,13 @@ export const DRAW_TOOLS: DrawToolDef[] = [
     icon: 'M4 4 L14 4 M9 4 L9 15' },
   { key: 'measure', label: '测量', points: 2, key2: 'm',
     icon: 'M3 12 L14 5 M5 13 L6 11 M7 11 L8 9 M9 9 L10 7 M11 7 L12 5' },
+  // —— 设计稿「十字线」子菜单新增的三种 ——
+  { key: 'dot', label: '圆点', points: 1, key2: 'd',
+    icon: 'M9 6.5 A2.5 2.5 0 1 0 9 11.5 A2.5 2.5 0 1 0 9 6.5 Z' },
+  { key: 'highlight', label: '荧光笔', points: 0, key2: 'g',
+    icon: 'M3 14 L6 11 M6 11 L11 3 L14 6 L9 14 Z' },
+  { key: 'eraser', label: '橡皮擦', points: 0, key2: 'q',
+    icon: 'M5 14 L2 11 L9 3 L14 8 L9 14 Z M5 14 L14 14' },
 ];
 
 export const FIB_LEVELS: { l: number; c: string }[] = [
@@ -312,8 +319,8 @@ export class DrawLayer {
       const p = this.pixelPts(d);
       if (!p.length) continue;
 
-      // 先测手柄（选中态才有），手柄优先级最高
-      if (this.activeId === d.id) {
+      // 先测手柄（选中态才有），手柄优先级最高。荧光笔是自由笔迹，只整体拖动，不提供逐锚点手柄
+      if (this.activeId === d.id && d.type !== 'highlight') {
         for (let i = 0; i < p.length; i++) {
           if (Math.abs(px - p[i].x) <= tol && Math.abs(py - p[i].y) <= tol) {
             return { d, part: i };
@@ -326,6 +333,14 @@ export class DrawLayer {
       const c = p[2] || p[1] || p[0];
       if (d.type === 'hline') {
         if (Math.abs(py - a.y) <= tol) return { d, part: 'body' };
+      } else if (d.type === 'dot') {
+        // 圆心附近（半径 4px + 容差）
+        if (Math.hypot(px - a.x, py - a.y) <= 4 + tol) return { d, part: 'body' };
+      } else if (d.type === 'highlight') {
+        // 自由笔迹：任意一段的宽笔画带内
+        for (let i = 0; i < p.length - 1; i++) {
+          if (distToSeg(px, py, p[i].x, p[i].y, p[i + 1].x, p[i + 1].y) <= 5 + 6) return { d, part: 'body' };
+        }
       } else if (d.type === 'hray') {
         // 从锚点向右的半条水平线
         if (distToSeg(px, py, a.x, a.y, ch.plot.r + 50, a.y) <= tol) return { d, part: 'body' };
@@ -540,6 +555,31 @@ export class DrawLayer {
   onDown(px: number, py: number): boolean {
     const def = toolDef(this.tool);
 
+    // ⓪ 荧光笔：按下开始采点，拖动收集轨迹，onUp 收笔成一笔
+    if (this.tool === 'highlight') {
+      if (this.pending) return true;
+      const a = this.anchorAt(px, py);
+      this.pending = {
+        id: this.nextId++,
+        type: 'highlight',
+        pts: [a],
+        style: Object.assign(drawStyle(), { color: '#f7c52f' }),
+        locked: false,
+        visible: true,
+      };
+      this.pendingPlaced = 1;
+      this.host.invalidate();
+      return true;
+    }
+
+    // ⓪' 橡皮擦：点中谁删谁（remove 内部先 pushHistory，可撤销）；点空也消费掉这次点击（不平移）
+    if (this.tool === 'eraser') {
+      const hit = this.hitTest(px, py);
+      if (hit) this.remove(hit.d.id);
+      this.host.invalidate();
+      return true;
+    }
+
     // ① 正在画多锚点图形：放一个点，放满 def.points 个才成型
     if (this.pending) {
       this.pending.pts[this.pendingPlaced] = this.anchorAt(px, py);
@@ -602,6 +642,17 @@ export class DrawLayer {
   }
 
   onMove(px: number, py: number): void {
+    // 荧光笔：轨迹采点 —— 距上一锚点 ≥6px 才记一个，太密了笔迹数据爆炸
+    if (this.pending && this.pending.type === 'highlight') {
+      const a = this.anchorAt(px, py);
+      const pts = this.pending.pts;
+      const last = pts[pts.length - 1];
+      const dx = this.timeToX(a.time) - this.timeToX(last.time);
+      const dy = this.host.yOf(a.price) - this.host.yOf(last.price);
+      if (Math.hypot(dx, dy) >= 6) pts.push(a);
+      this.host.invalidate();
+      return;
+    }
     if (this.pending) {
       // 预览点 = 下一个要放的位置（已放满时夹到最后一个，三点工具放点间隙也有预览）
       const k = Math.min(this.pendingPlaced, this.pending.pts.length - 1);
@@ -632,6 +683,19 @@ export class DrawLayer {
   }
 
   onUp(): void {
+    // 荧光笔收笔：一笔 = 一次快照（undo 一次退一整笔）；单击无轨迹时补成一个小短划
+    if (this.pending && this.pending.type === 'highlight') {
+      if (this.pending.pts.length < 2) {
+        const a = this.pending.pts[0];
+        this.pending.pts.push({ time: a.time, price: a.price });
+      }
+      this.pushHistory();
+      this.drawings.push(this.pending);
+      this.activeId = this.pending.id;
+      this.pending = null;
+      this.pendingPlaced = 0;
+      this.setTool('cursor');
+    }
     this.drag = null;
   }
 
@@ -711,6 +775,45 @@ export class DrawLayer {
       ctx.lineTo(ch.plot.r, a.y);
       ctx.stroke();
       this.label(ctx, '  ' + d.pts[0].price.toFixed(2), ch.plot.l + 4, a.y - 4, col);
+    } else if (d.type === 'dot') {
+      // 实心圆点，大小不随缩放变（锚点只定圆心）
+      ctx.setLineDash([]);
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.arc(a.x, a.y, 4, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (d.type === 'highlight') {
+      // 荧光笔迹：宽笔画 + 半透明 + 圆头，视觉上是「划过一道」
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 0.35;
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 10;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(p[0].x, p[0].y);
+      if (p.length === 1) {
+        // 单击：画一个小圆斑，保证至少留下痕迹
+        ctx.arc(p[0].x, p[0].y, 5, 0, Math.PI * 2);
+        ctx.fillStyle = col;
+        ctx.fill();
+      } else {
+        for (let i = 1; i < p.length; i++) ctx.lineTo(p[i].x, p[i].y);
+        ctx.stroke();
+      }
+      ctx.restore();
+      // 选中态只描一个包围盒，不做逐锚点手柄
+      if (selected) {
+        let l = Infinity, t = Infinity, r2 = -Infinity, b2 = -Infinity;
+        for (const q of p) { l = Math.min(l, q.x); t = Math.min(t, q.y); r2 = Math.max(r2, q.x); b2 = Math.max(b2, q.y); }
+        ctx.save();
+        ctx.strokeStyle = '#1f6feb';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 3]);
+        ctx.strokeRect(l - 8, t - 8, r2 - l + 16, b2 - t + 16);
+        ctx.restore();
+      }
+      return;
     } else if (d.type === 'hray') {
       // 从锚点向右的水平射线 + 起点价格标签
       ctx.beginPath();
@@ -1190,6 +1293,43 @@ export function drawSelfTest(): DrawTestResult {
     t('2.8 几何：inTriangle / inParallelogram',
       inTriangle(5, 5, 0, 0, 10, 0, 5, 10) && !inTriangle(20, 20, 0, 0, 10, 0, 5, 10) &&
       inParallelogram(5, 3, 0, 0, 10, 0, 0, 6) && !inParallelogram(5, 8, 0, 0, 10, 0, 0, 6));
+
+    // --- 光标组新工具：圆点 / 荧光笔 / 橡皮擦（设计稿「十字线」子菜单） ---
+    const Ld = new DrawLayer(host);
+    const dd = Ld.add('dot', [{ time: host.bars[20].time, price: 105 }]);
+    const pd = Ld.pixelPts(dd)[0];
+    t('圆点：圆心命中 / 40px 外不命中', !!Ld.hitTest(pd.x, pd.y) && Ld.hitTest(pd.x + 40, pd.y) === null);
+    t('光标组：工具表 18 种且新三项就位',
+      DRAW_TOOLS.length === 18 &&
+      toolDef('dot').points === 1 && toolDef('highlight').points === 0 && toolDef('eraser').points === 0);
+
+    const Lh = new DrawLayer(host);
+    Lh.setTool('highlight');
+    Lh.onDown(host.xCenter(10), host.yOf(105));
+    Lh.onMove(host.xCenter(16), host.yOf(105));
+    Lh.onMove(host.xCenter(22), host.yOf(105));
+    Lh.onUp();
+    const dh = Lh.drawings[0];
+    t('荧光笔：拖动采点收笔成型，一笔一次 undo',
+      !!dh && dh.type === 'highlight' && dh.pts.length >= 3 && Lh.tool === 'cursor' &&
+      (() => { const n = Lh.drawings.length; Lh.undo(); const ok = Lh.drawings.length === n - 1; Lh.redo(); return ok && Lh.drawings.length === n; })());
+    const ph = Lh.pixelPts(dh);
+    t('荧光笔：笔迹段命中 / 远点不命中 / 无逐锚点手柄',
+      !!Lh.hitTest((ph[1].x + ph[2].x) / 2, ph[1].y) &&
+      Lh.hitTest(ph[1].x, ph[1].y + 40) === null &&
+      Lh.hitTest(ph[1].x, ph[1].y)!.part === 'body');
+
+    const Lr = new DrawLayer(host);
+    const dr0 = Lr.add('hline', [{ time: host.bars[10].time, price: 105 }]);
+    Lr.add('dot', [{ time: host.bars[30].time, price: 112 }]);
+    Lr.setTool('eraser');
+    Lr.onDown(host.xCenter(40), host.yOf(130));
+    const kept1 = Lr.drawings.length === 2;
+    Lr.onDown(host.xCenter(20), Lr.pixelPts(Lr.drawings.find((x) => x.id === dr0.id)!)[0].y);
+    t('橡皮擦：点空消费点击不误删', kept1);
+    const erased = Lr.drawings.length === 1;
+    Lr.undo();
+    t('橡皮擦：点中删除且 undo 复原', erased && Lr.drawings.length === 2);
   }
 
   log('绘图层自检：' + pass + ' PASS / ' + fail + ' FAIL');

@@ -602,6 +602,14 @@ export class KChart {
   private dragging = false;
   private dragX = 0;
 
+  /* —— 长按数值工具提示（设计稿「长按时显示数值工具提示」开关） —— */
+  /** 开关由左侧「十字线」子菜单控制（drawBus → ChartGridView → 这里） */
+  longPressTip = true;
+  private lpTimer: ReturnType<typeof setTimeout> | null = null;
+  private lpDown: { x: number; y: number } | null = null;
+  /** 非 null = 长按已触发，提示框显示在这个位置 */
+  private lpPos: { x: number; y: number } | null = null;
+
   /**
    * 回放期间保存的**完整**数据；null = 没在回放。
    * `bars` 在回放时是它的前缀（原地改写，外面拿着的数组引用不会变孤儿）。
@@ -1335,6 +1343,17 @@ export class KChart {
       if (!taken) {
         this.dragging = true;
         this.dragX = e.clientX;
+        // 长按数值提示：未被任何工具接管的按下，按住 ~600ms 触发
+        this.clearLongPress();
+        this.lpDown = { x: px, y: py };
+        this.lpTimer = setTimeout(() => {
+          this.lpTimer = null;
+          if (!this.longPressTip || !this.lpDown) return;
+          this.lpPos = { x: this.lpDown.x, y: this.lpDown.y };
+          this.invalidate();
+        }, 600);
+      } else {
+        this.clearLongPress();
       }
       this.invalidate();
     }, sig);
@@ -1348,6 +1367,11 @@ export class KChart {
         this.paneResize.lastY = e.clientY;
         this.dragSeparator(this.paneResize.boundary, dy);
         return;
+      }
+      // 长按等待/显示中，指针移出 8px 视为拖动，取消提示
+      if ((this.lpTimer != null || this.lpPos) && this.lpDown
+        && Math.hypot(px - this.lpDown.x, py - this.lpDown.y) > 8) {
+        this.clearLongPress(true);
       }
       if (py < this.plot.b && this.hooks && this.hooks.onMove) this.hooks.onMove(px, py, e);
       this.hoverSep = this.hitSeparator(px, py);
@@ -1366,6 +1390,7 @@ export class KChart {
     }, sig);
 
     const endDrag = (e: PointerEvent) => {
+      this.clearLongPress(true);
       if (this.paneResize) {
         this.paneResize = null;
         this.invalidate();
@@ -1382,6 +1407,7 @@ export class KChart {
     c.addEventListener('pointerleave', () => {
       this.pointer = null;
       this.hoverSep = -1;
+      this.clearLongPress(true);
       this.notifyCrosshair();
       this.invalidate();
     }, sig);
@@ -1569,6 +1595,7 @@ export class KChart {
     this.drawTimeAxis(i0, i1);
     this.drawLastPrice();
     this.drawCrosshairLabels(i0, i1);
+    this.drawLongPressTip();
     this.drawLegend(i0, i1);
     this.drawPaneLegends(i1);
   }
@@ -2428,8 +2455,55 @@ export class KChart {
     ctx.fillText(label, p.r + 8, y);
   }
 
-  private drawCrosshairLabels(i0: number, i1: number): void {
-    const ptr = this.pointer;
+  /** 取消长按提示（计时器 + 已显示的框）。redraw=true 时顺带重绘 */
+  private clearLongPress(redraw = false): void {
+    if (this.lpTimer != null) { clearTimeout(this.lpTimer); this.lpTimer = null; }
+    this.lpDown = null;
+    if (this.lpPos) {
+      this.lpPos = null;
+      if (redraw) this.invalidate();
+    }
+  }
+
+  /** 长按数值提示：深色小浮窗 = 光标处价格 + 所在 bar 时间 */
+  private drawLongPressTip(): void {
+    const lp = this.lpPos;
+    if (!lp || !this.bars.length) return;
+    const ctx = this.ctx;
+    const p = this.plot;
+    const i = clamp(Math.round(this.iOf(lp.x)), 0, this.bars.length - 1);
+    const b = this.bars[i];
+    const dec = this.dec();
+    const spanDays = (this.bars[this.bars.length - 1].time - this.bars[0].time) / 86400000;
+    const priceLine = this.pOf(lp.y).toFixed(dec);
+    const timeLine = fmtCrossTime(b.time, spanDays);
+    ctx.save();
+    ctx.font = this.o.font;
+    const w1 = ctx.measureText(priceLine).width;
+    const w2 = ctx.measureText(timeLine).width;
+    const bw = Math.max(w1, w2) + 16;
+    const bh = 34;
+    // 浮窗贴在光标右下，出界往回翻
+    let bx = lp.x + 12;
+    let by = lp.y + 12;
+    if (bx + bw > p.r) bx = lp.x - bw - 12;
+    if (by + bh > p.b) by = lp.y - bh - 12;
+    ctx.fillStyle = 'rgba(14,17,22,0.9)';
+    ctx.beginPath();
+    const rr = (ctx as unknown as { roundRect?: (x: number, y: number, w: number, h: number, r: number) => void }).roundRect;
+    if (rr) rr.call(ctx, bx, by, bw, bh, 6);
+    else ctx.rect(bx, by, bw, bh);
+    ctx.fill();
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(priceLine, bx + 8, by + 12);
+    ctx.fillStyle = 'rgba(255,255,255,0.62)';
+    ctx.fillText(timeLine, bx + 8, by + 25);
+    ctx.restore();
+  }
+
+  private drawCrosshairLabels(i0: number, i1: number): void {    const ptr = this.pointer;
     const i = this.snapIndex();
     if (!ptr && i == null) return;
     const ctx = this.ctx;

@@ -8,6 +8,7 @@
 import {
   CROSS, TRENDLINE, FIB, PATTERN, LONG_POS, BRUSH, TEXT, STICKER,
   MEASURE, ZOOM, MAGNET, STAY_DRAWING, LOCK, HIDE_ALL, TRASH, CARET,
+  DOT, ARROW_ICON, HIGHLIGHTER, ERASER,
 } from './sidebar-icons';
 
 /* ------------------------------------------------------------------ 工具 */
@@ -73,7 +74,27 @@ const CSS = `
 }
 .kc-sb-menu li:hover { background: rgb(242,242,242); }
 .kc-sb-menu li > svg { flex: 0 0 auto; }
-.kc-sb-menu li.sel { color: rgb(41,98,255); }
+/* 选中项：整行灰底（设计稿 rgb(240,240,243)），文字保持墨色 */
+.kc-sb-menu li.sel { background: rgb(240,240,243); color: rgb(15,15,15); }
+/* —— 子菜单内的分隔线 + 开关行（设计稿「长按时显示数值工具提示」） —— */
+.kc-sb-menu .kc-menu-div { height: 1px; margin: 5px 12px; padding: 0; background: rgb(218,218,218); cursor: default; }
+.kc-sb-menu .kc-menu-div:hover { background: rgb(218,218,218); }
+.kc-menu-toggle {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  height: 34px; padding: 0 12px; font-size: 13px; cursor: pointer; white-space: nowrap;
+  transition: background-color .06s ease;
+}
+.kc-menu-toggle:hover { background: rgb(242,242,242); }
+.kc-menu-switch {
+  position: relative; flex: 0 0 auto; width: 34px; height: 20px; border-radius: 10px;
+  background: rgb(15,15,15); transition: background-color .15s ease;
+}
+.kc-menu-switch::after {
+  content: ''; position: absolute; left: 15px; top: 2px; width: 16px; height: 16px;
+  border-radius: 50%; background: #fff; transition: left .15s ease;
+}
+.kc-menu-toggle.off .kc-menu-switch { background: rgb(200,200,200); }
+.kc-menu-toggle.off .kc-menu-switch::after { left: 3px; }
 `;
 
 function injectStyle(): void {
@@ -85,19 +106,25 @@ function injectStyle(): void {
 }
 
 /* ------------------------------------------------------------- 子菜单数据 */
-// 主图标 / 箭头图标 / 悬停标题 / 子菜单项（标签 + 图标；未捕获到原稿子菜单内容，
-// 按常见图表软件的工具分组给出常用项）
-interface ToolDef { icon: string; caret?: string; label: string; items?: Array<[string, string]> }
+// 主图标 / 箭头图标 / 悬停标题 / 子菜单项（标签 + 图标）。
+// 「十字线」子菜单 = 光标工具组，按设计稿：十字线/圆点/箭头/荧光笔/橡皮擦 + 长按提示开关。
+interface ToolDef {
+  icon: string; caret?: string; label: string;
+  items?: Array<[string, string]>;
+  /** 子菜单末尾（分隔线之下）的开关行；点击走 onToggle */
+  toggle?: { label: string; on?: boolean };
+}
+type Section = { pad?: string; tools: ToolDef[] };
+
+export const LONGPRESS_TIP_LABEL = '长按时显示数值工具提示';
 
 // 分段与原稿分隔线位置一致：十字线 | 趋势/斐波 | 形态/仓位/笔刷/文字 | 图标 |
 // 测量/放大 | 磁铁/继续/锁定/隐藏 | 移除。
-// 子菜单内容原稿未捕获（均为收起态），按常见图表软件的工具分组给出常用项。
-interface ToolDef { icon: string; caret?: string; label: string; items?: Array<[string, string]> }
-type Section = { pad?: string; tools: ToolDef[] };
-
 const SECTIONS: Section[] = [
   { tools: [
-    { icon: CROSS, caret: CARET, label: '十字线', items: [['十字线', CROSS], ['光标', CROSS], ['点', CROSS], ['橡皮擦', CROSS]] },
+    { icon: CROSS, caret: CARET, label: '十字线', items: [
+      ['十字线', CROSS], ['圆点', DOT], ['箭头', ARROW_ICON], ['荧光笔', HIGHLIGHTER], ['橡皮擦', ERASER],
+    ], toggle: { label: LONGPRESS_TIP_LABEL, on: true } },
   ]},
   { tools: [
     { icon: TRENDLINE, caret: CARET, label: '趋势线', items: [
@@ -195,6 +222,19 @@ export function createSidebar(mount: HTMLElement, cb: SidebarCallbacks = {}): HT
             pick(btn, label);
           });
           menu.appendChild(li);
+        }
+        // 子菜单末尾的开关行（设计稿：分隔线 + 「长按时显示数值工具提示」）
+        if (t.toggle) {
+          const div = el('li', 'kc-menu-div');
+          menu.appendChild(div);
+          const row = el('div', 'kc-menu-toggle' + (t.toggle.on === false ? ' off' : ''));
+          row.innerHTML = `<span>${t.toggle.label}</span><span class="kc-menu-switch"></span>`;
+          row.addEventListener('click', e => {
+            e.stopPropagation();
+            const on = row.classList.toggle('off') === false;
+            cb.onToggle?.(t.toggle!.label, on);
+          });
+          menu.appendChild(row);
         }
         caret.addEventListener('click', e => {
           e.stopPropagation();

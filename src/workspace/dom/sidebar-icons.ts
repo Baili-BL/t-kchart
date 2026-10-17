@@ -32,3 +32,16 @@ export const HIDE_ALL = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"28\" 
 export const TRASH = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\"><path fill=\"currentColor\" d=\"M18 7h5v1h-2.01l-1.33 14.64a1.5 1.5 0 0 1-1.5 1.36H9.84a1.5 1.5 0 0 1-1.49-1.36L7.01 8H5V7h5V6c0-1.1.9-2 2-2h4a2 2 0 0 1 2 2v1Zm-6-2a1 1 0 0 0-1 1v1h6V6a1 1 0 0 0-1-1h-4ZM8.02 8l1.32 14.54a.5.5 0 0 0 .5.46h8.33a.5.5 0 0 0 .5-.46L19.99 8H8.02Z\"></path></svg>";
 
 export const CARET = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 16\" width=\"10\" height=\"16\"><path d=\"M.6 1.4l1.4-1.4 8 8-8 8-1.4-1.4 6.389-6.532-6.389-6.668z\"></path></svg>";
+
+/* —— 设计稿「十字线」子菜单（光标工具组）新增项 —— */
+// 圆点：实心小圆
+export const DOT = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\"><circle cx=\"14\" cy=\"14\" r=\"3.6\" fill=\"currentColor\"></circle></svg>";
+
+// 箭头：斜向箭头（指向右上）
+export const ARROW_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M7.5 20.5 L19 9 M12 8.5 h7.5 V16\"></path></svg>";
+
+// 荧光笔：斜握的记号笔
+export const HIGHLIGHTER = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 22 l1.5-4.5 L18 7 a1.8 1.8 0 0 1 3 3 L10.5 20.5 Z M15.5 9.5 l3 3\"></path></svg>";
+
+// 橡皮擦：斜放的方块橡皮 + 底部横线
+export const ERASER = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12.5 5.5 L22.5 15.5 L16 22 H10 L5.5 17.5 a2 2 0 0 1 0-2.8 Z M11 12 l5.5 5.5 M6 25 h16\"></path></svg>";
