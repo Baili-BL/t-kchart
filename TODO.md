@@ -35,7 +35,7 @@
 | `src/engine/pine.ts` | Pine v5 / v6 子集解释器 |
 | `src/data/symbols.ts`、`src/workspace/SymbolSearchDialog.tsx` | 商品代码目录（9 类 97 个演示标的）+ 屏幕正中的「商品代码搜索」弹窗 |
 | `src/engine/studies.ts`、`src/indicators/` | 指标（study）模型与画法（副图 / 叠加 / fill）+ 内置指标库（全部 Pine v6 脚本）+ 浏览器自检 |
-| `src/engine/draw.ts` | 绘图工具层（72 种：线组/光标组/斐波那契组/江恩组/图表形态组/艾略特波浪组/循环组/预测组/成交量组/测量组/笔刷箭头形状组 + emoji 标注） |
+| `src/engine/draw.ts` | 绘图工具层（89 种：线组/光标组/斐波那契组（含音叉族 5）/江恩组/图表形态组/艾略特波浪组/循环组/预测组/成交量组/测量组/笔刷箭头形状组/文本标注组 7 + emoji 标注） |
 | `src/engine/equity.ts` | 权益曲线 + 双均线回测口径 |
 | `src/engine/analytics.ts` | 收益分布 / 交易环形图 / 季节性叠加线 |
 | `src/agent/` | Agent 抽象（provider / runner / 工具集）+ mock provider + DeepSeek 空壳 |
@@ -53,12 +53,12 @@ Pine 编辑器、权益曲线、统计组件目前**没有对应的 UI 入口**�
 ```
 npm run typecheck                          0 错误（strict）
 npm test (vitest)                          引擎 615 PASS（绘图 39 + Pine 74 + Pine 撮合 69 + 权益 26 + 统计 34 + 回放 27 + 布局目录 346）
-                                           共 461 个 vitest 用例（含 Agent / 工作区 / 数据 / 回放 / 布局 / 指标库 15 / 图表样式 8 / 商品代码 10 / 颜色选择器 5 / paneLayout 10 / 绘图工具扩充 252 + 绘图属性工具条 22 + 长按信息卡 9）
+                                           共 530 个 vitest 用例（含 Agent / 工作区 / 数据 / 回放 / 布局 / 指标库 15 / 图表样式 8 / 商品代码 10 / 颜色选择器 5 / paneLayout 10 / 绘图工具扩充 321 + 绘图属性工具条 22 + 长按信息卡 9）
 浏览器侧（dev 控制台 __app.runBrowserSelfTests()）
                                            图表 76（改造前 48，新增 setRange 回归 1 条 + 图表样式 8 条 + revealSpan 4 条 + 回放 15 条）+ 网格 20（含 55 种布局抽样的像素位置、时间联动）
-                                           + 权益 39（含 2.4 持仓色带像素断言 2 条）+ 统计 50 + 指标 31（含 2.6 窗格拖拽 / 最大化 / 折叠 / 坐标轴 12 条）+ 样式 52 + 绘图 105（2.8 起纳入；含光标组、线组、斐波那契/江恩组 13 种、图表形态/艾略特波浪/循环组 14 种、预测/成交量/测量组 12 种、笔刷/箭头/形状组 11 种、emoji 标注与浮动属性工具条（setStyle/setLocked/repeatDraw/clone/selectionToolbarAnchor）断言）
+                                           + 权益 39（含 2.4 持仓色带像素断言 2 条）+ 统计 50 + 指标 31（含 2.6 窗格拖拽 / 最大化 / 折叠 / 坐标轴 12 条）+ 样式 52 + 绘图 113（2.8 起纳入；含光标组、线组、斐波那契/江恩组 13 种、音叉族 5 种、图表形态/艾略特波浪/循环组 14 种、预测/成交量/测量组 12 种、笔刷/箭头/形状组 16 种、文本标注组 7 种、emoji 标注与浮动属性工具条（setStyle/setLocked/repeatDraw/clone/selectionToolbarAnchor）断言）
 E2E（puppeteer 驱动 headless Chrome，未入库）  布局 13 + 指标 36 + 样式 38 + 商品代码搜索 28 PASS / 0 FAIL（早先的整页 E2E 79 条已随脚本被覆盖，未重跑）
-                                           近期功能 E2E：自选 15 + 告警 23 + 设置 20 + 交易 25 + 交易复刻 13 + 颜色选择器 13 + 副图窗格 8 + 右栏布局 13 + 绘图子菜单 23/26/26 + emoji 面板 14 + 绘图属性工具条 30 + 长按信息卡 6 PASS / 0 FAIL
+                                           近期功能 E2E：自选 15 + 告警 23 + 设置 20 + 交易 25 + 交易复刻 13 + 颜色选择器 13 + 副图窗格 8 + 右栏布局 13 + 绘图子菜单 23/26/26 + emoji 面板 14 + 绘图属性工具条 30 + 长按信息卡 6 + 对齐 charting_library 143 PASS / 0 FAIL
 ```
 
 **任何改动之后这套数字必须只增不减。** 加功能要加断言，改逻辑不能让已有断言变红。
@@ -218,7 +218,7 @@ E2E（puppeteer 驱动 headless Chrome，未入库）  布局 13 + 指标 36 + �
 > 真实 UI E2E 8 条（指标对话框加 RSI+MACD → 真鼠标拖分隔条 → 点 □ 最大化 / 还原 → 点 ▼ 折叠 → 重置）。
 > 踩坑：真实鼠标路径上交易面板（.trade 浮层）会拦截事件，E2E 前先关「买/卖按钮」。
 | 2.7 | 数据源协议：反向分页、订阅、交易日历 | ⬜ | 中 | 假数据源跑通「首屏 + 向左补历史 + 实时推送」三段；`time` 必须是 open time/毫秒 |
-| 2.8 | 绘图工具扩充（9 → 15 种） | ✅（本轮 6 种） | 每种 30~80 行 | 每种工具：画法 + 命中 + 手柄 + 撤销，四条都要有断言 |
+| 2.8 | 绘图工具扩充（9 → 89 种） | ✅ | 每种 30~110 行 | 每种工具：画法 + 命中 + 手柄 + 撤销，四条都要有断言 |
 
 > **2.8 完成情况（实跑，2026-10-17）**：新增 **6 种**——水平射线（1 点）、延长线（2 点，双向延伸）、
 > 箭头（2 点，实心箭头）、椭圆（2 点，标准化椭圆方程命中）、三角形（3 点）、平行通道（3 点，平行四边形带状填充）。
@@ -258,7 +258,7 @@ E2E（puppeteer 驱动 headless Chrome，未入库）  布局 13 + 指标 36 + �
 > 左栏接线：`toolKeyForLabel` 新增 12 条映射（「文字」子菜单里的「日期范围」也随之从 toast 变为真工具），
 > 12 个新图标入 `sidebar-icons.ts`。诚实边界更新：多空仓位、日期范围、笔刷（真·自由笔迹）、
 > 箭头标记、向上/向下箭头、矩形⌥R、旋转矩形、路径、圆、折线、弧形、曲线、双曲线已实现；
-> 便签 / 价格标签等仍是「暂未实现」toast。
+> 便签 / 价格标签等当时仍是「暂未实现」toast（后由 2.8.7 补齐）。
 
 ### 2.8.6 设计稿「笔刷」子菜单（magicpatterns 26eac53c）——笔刷/箭头/形状三组 11 种新工具 ✅
 > 笔刷按钮 3 项 → 三组子菜单（笔刷 2 / 箭头 4 / 形状 10，共 16 行）：笔刷 = 拖拽自由笔迹
@@ -271,6 +271,47 @@ E2E（puppeteer 驱动 headless Chrome，未入库）  布局 13 + 指标 36 + �
 > 浏览器自检 draw 套件 86→93 条；真实鼠标 E2E 26 条全绿（三组结构逐行核对 + ⌥R 快捷键 +
 > 11 种新工具逐点/拖拽绘制 + undo/redo）。左栏接线：`toolKeyForLabel` 新增 12 条映射
 > （矩形/路径随子菜单从 toast 变真工具），13 个新图标入 `sidebar-icons.ts`。
+### 2.8.7 对齐本地 charting_library —— 音叉族 / 文本标注族 / 形状 17 种 ✅
+> **参考库来源**：本机 `/Users/kevin/Desktop/charting_library`（TradingView Charting Library，
+> `bundles/` 839 个 chunk）。先用 `grep -oE "['\"]LineTool[A-Za-z0-9]+['\"]" library.*.js drawing-toolbar.*.js`
+> 把工具清单抽成 **100 个 `LineTool*` id** 的权威清单（不靠记忆），再逐条比对已有 72 种，差集里挑本轮要补的。
+> 中文文案取不到官方值：`zh.8113` 只有指标名、没有工具名，`en.8113` 与它键集相同（各 1236 条），
+> 所以新工具的中文名沿用本项目既有命名风格自拟。
+>
+> **REA MCP 的边界（如实记录）**：`analyze-javascript-application` 对整目录跑会在第 194/839 个 chunk
+> 崩在 `AnalysisResourceConstraintError`（`cleanup_incomplete`，`process table could not be inspected: spawn EPERM`），
+> 它同时在解析几十个 locale bundle，18MB 单包超出了它的资源预算。降级为「REA 给结构线索 + grep 出清单」的组合，
+> 清单本身是完整的 100 条，不影响结论。
+>
+> **新增 17 种**（`DRAW_TOOLS` 72 → **89**，每种 60~110 行）：
+> - 音叉族 5 种（3 点）：安德鲁音叉 `pitchfork` / 希夫音叉 `schiff`（起点 = a·b 中点）/
+>   改良希夫音叉 `schiff2`（起点 = a 的 x 与 a·b 中点的 y）/ 内部分叉 `innerfork`（平行线取半距）/
+>   扇形分叉 `pitchfan`（5 条射线打 b→c 五等分）。
+>   渲染与命中共用同一个 `pitchforkRays(kind, a, b, c)`，射线延长到绘图区右缘 +40px，
+>   非扇形时在两条外侧线之间淡填充 `rgba(120,123,134,0.08)`。
+> - 文本标注族 7 种（1 点）：便签 `note` / 标注 `callout` / 评论 `comment` / 气泡 `balloon`（椭圆）/
+>   价格便签 `pricenote` / 价格标签 `pricelabel`（贴在锚点右侧的小标签）/ 路标 `signpost`。
+>   7 种共用一张 `cardBox` 偏移表（`[dx, dy, w, h]`）+ 一个 `renderCard`，渲染和命中**读同一张表**，
+>   所以「看得见的地方点得到」不会因为改一处漂掉；气泡走椭圆、路标加引线。
+> - 形状 4 种：圆加十字线 `circlelines`（2 点，圆 + 过圆心的水平/垂直延长线）/
+>   三次贝塞尔 `beziercubic`（4 点，p1p2 是控制点、曲线不过它们，`cubicBezierPts` 40 段采样）/
+>   平底 `flatbottom`（2 点，底边水平、顶点在底边中点上方 0.6×宽度）/
+>   左箭头 `arrowmarl`、右箭头 `arrowmarr`（1 点，`arrowSideGlyphPts` 把单位顶点表按 dir=±1 旋转）。
+>
+> **判据与数字**：vitest `tests/drawTools.test.ts` 249 → **342** 条（新增 `ALIGN_SPECS` 17 条 × 四判据 = 68，
+> 加 1 条几何）；全量 461 → **530 passed**；浏览器自检 draw 套件 105 → **113 PASS / 0 FAIL**；
+> 真实鼠标 E2E **143 PASS / 0 FAIL**（三菜单分组逐行核对 + 17 种工具各 4 条：起点干净 / 落墨 / 类型与成型 /
+> 撤销归零 + 重做）。
+>
+> **踩坑（值得记住）**：第一版 E2E 用「撤销后像素回到基线」当判据，12 种工具判失败、残差恒在 550~630 像素。
+> 把差异掩码导成 PNG 才看清——残差是**布林带/EMA 抗锯齿落点变了**和右侧最后价虚线，不是图形残留：
+> 画布每重绘一次，指标线的 AA 就不完全一致，「像素归零」这个判据在带指标的图上根本不成立。
+> 改为在 `src/dev/drawRegistry.ts` 里登记各格 `DrawLayer`（`import.meta.env.DEV` 才执行），
+> E2E 通过 `__app.drawingCount()` / `__app.drawings()` 读**真实图形数与类型**（并顺手加了
+> `DrawLayer.pendingCount()` 断言「N 点放满即成型、不留半成品」）；像素只保留「有没有墨水」这一条弱证据。
+> 左栏接线：斐波那契菜单新增第 4 组「音叉」，笔刷菜单箭头组 +2 / 形状组 +3，文字菜单由扁平 5 项
+> 重排为「文本 8 / 形状 2」；`toolKeyForLabel` 新增 17 条映射，`sidebar-icons.ts` 新增 14 个图标。
+
 | 2.9 | 布局存档（localStorage / 服务端） | ⬜ | 小 | 存/读往返一致，含视口、通道开关、绘图、联动开关 |
 | 2.10 | 手机端手势：双指缩放、惯性滑动 | ⬜ | 中 | 真机或 Chrome 设备模拟下截图 + 手势日志 |
 | 2.12 | **接入 DeepSeek harness** | ⬜ | 中 | 实现 `providers/deepseek.ts` 的 `send()`；用真实 harness 跑通「文本 → 工具调用 → 结果回灌 → 总结」；工具参数校验失败时模型能看到错误并自我修正；密钥由服务端持有，不进前端包 |

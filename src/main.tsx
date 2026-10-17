@@ -7,6 +7,7 @@ import { getGrid } from './workspace/gridRegistry';
 import { useChartStore } from './store/chartStore';
 import { useStudyStore } from './store/studyStore';
 import { runBrowserSelfTests } from './dev/browserSelfTest';
+import { drawLayerSnapshots, drawingCount } from './dev/drawRegistry';
 import { replayController } from './store/replayStore';
 import { LAYOUTS } from './engine/layouts';
 import { wireAlertEngine } from './store/alertStore';
@@ -17,7 +18,7 @@ wireTradeEngine();
 
 // 仅开发环境：给 E2E / 控制台调试留个口子（生产构建里会被摇掉）
 if (import.meta.env.DEV) {
-  (window as unknown as Record<string, unknown>).__app = { getGrid, chartStore: useChartStore, studyStore: useStudyStore, tradeStore: useTradeStore, replay: replayController, layouts: LAYOUTS, runBrowserSelfTests };
+  (window as unknown as Record<string, unknown>).__app = { getGrid, chartStore: useChartStore, studyStore: useStudyStore, tradeStore: useTradeStore, replay: replayController, layouts: LAYOUTS, runBrowserSelfTests, drawings: drawLayerSnapshots, drawingCount };
 }
 
 const root = document.getElementById('root');

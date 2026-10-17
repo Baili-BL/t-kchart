@@ -205,6 +205,40 @@ export function toolKeyForLabel(label: string): string | null {
       return 'curve';
     case '双曲线':
       return 'hyperbola';
+    case '安德鲁音叉':
+      return 'pitchfork';
+    case '希夫音叉':
+      return 'schiff';
+    case '改良希夫音叉':
+      return 'schiff2';
+    case '内部分叉':
+      return 'innerfork';
+    case '扇形分叉':
+      return 'pitchfan';
+    case '标注':
+      return 'callout';
+    case '评论':
+      return 'comment';
+    case '气泡':
+      return 'balloon';
+    case '便签':
+      return 'note';
+    case '价格便签':
+      return 'pricenote';
+    case '价格标签':
+      return 'pricelabel';
+    case '路标':
+      return 'signpost';
+    case '圆加十字线':
+      return 'circlelines';
+    case '三次贝塞尔':
+      return 'beziercubic';
+    case '平底':
+      return 'flatbottom';
+    case '左箭头':
+      return 'arrowmarl';
+    case '右箭头':
+      return 'arrowmarr';
     case '矩形':
       return 'rect';
     case '文字':

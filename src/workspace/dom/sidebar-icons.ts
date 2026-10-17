@@ -229,3 +229,36 @@ export const CURVE_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0
 
 // 双曲线：左右两支
 export const HYPERBOLA = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\"><path d=\"M7 4 C11 11 11 17 7 24 M21 4 C17 11 17 17 21 24\"></path></svg>";
+
+/* —— 对齐 charting_library：音叉 / 文本标注 / 形状补齐 —— */
+const SVG_HEAD = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="28" height="28"><g fill="currentColor">';
+const SVG_TAIL = '</g></svg>';
+const mk = (paths: string): string => SVG_HEAD + paths + SVG_TAIL;
+
+/** 音叉（三线同源） */
+export const FORK = mk('<path d="M5 6 L24 16 M5 6 L24 11 M5 6 L24 21" stroke="currentColor" stroke-width="1.4" fill="none"></path><path d="M4 5h2v2H4z"></path>');
+/** 扇形分叉（四线同源） */
+export const PITCHFAN = mk('<path d="M5 21 L24 6 M5 21 L24 11 M5 21 L24 16 M5 21 L24 21" stroke="currentColor" stroke-width="1.4" fill="none"></path><path d="M4 20h2v2H4z"></path>');
+/** 便签（折角卡片） */
+export const NOTE_ICON = mk('<path d="M5 4h13l5 5v15H5z" fill="none" stroke="currentColor" stroke-width="1.4"></path><path d="M18 4v5h5" fill="none" stroke="currentColor" stroke-width="1.4"></path><path d="M8 14h12v1H8zm0 4h8v1H8z"></path>');
+/** 标注（带引线的气泡） */
+export const CALLOUT_ICON = mk('<path d="M4 5h20v12H13l-5 5v-5H4z" fill="none" stroke="currentColor" stroke-width="1.4"></path><path d="M8 10h12v1H8zm0 3h8v1H8z"></path>');
+/** 评论（方角气泡） */
+export const COMMENT_ICON = mk('<path d="M4 6h20v13H4z" fill="none" stroke="currentColor" stroke-width="1.4"></path><path d="M8 19v6l7-6" fill="none" stroke="currentColor" stroke-width="1.4"></path>');
+/** 气泡（椭圆 + 尾巴） */
+export const BALLOON_ICON = mk('<ellipse cx="14" cy="12" rx="10" ry="7" fill="none" stroke="currentColor" stroke-width="1.4"></ellipse><path d="M11 18l-2 6 6-4" fill="none" stroke="currentColor" stroke-width="1.4"></path>');
+/** 价格便签 */
+export const PRICENOTE_ICON = mk('<path d="M4 4h13l7 7v13H4z" fill="none" stroke="currentColor" stroke-width="1.4"></path><path d="M13 11v11M10 14l3-3 3 3" fill="none" stroke="currentColor" stroke-width="1.4"></path>');
+/** 价格标签 */
+export const PRICELABEL_ICON = mk('<path d="M3 10h16l6 4-6 4H3z" fill="none" stroke="currentColor" stroke-width="1.4"></path>');
+/** 路标 */
+export const SIGNPOST_ICON = mk('<path d="M14 3v22" stroke="currentColor" stroke-width="1.4"></path><path d="M6 7h15l4 4-4 4H6z" fill="none" stroke="currentColor" stroke-width="1.4"></path>');
+/** 圆加十字线 */
+export const CIRCLELINES_ICON = mk('<circle cx="14" cy="14" r="8" fill="none" stroke="currentColor" stroke-width="1.4"></circle><path d="M1 14h26M14 1v26" stroke="currentColor" stroke-width="1.2"></path>');
+/** 三次贝塞尔 */
+export const BEZIERCUBIC_ICON = mk('<path d="M3 22C6 6 20 6 25 22" fill="none" stroke="currentColor" stroke-width="1.4"></path><path d="M3 22l5-6M25 22l-5-6" stroke="currentColor" stroke-width="1.2"></path>');
+/** 平底（底边水平的三角） */
+export const FLATBOTTOM_ICON = mk('<path d="M14 5l9 18H5z" fill="none" stroke="currentColor" stroke-width="1.4"></path><path d="M4 23h20v1.4H4z"></path>');
+/** 左箭头 / 右箭头 */
+export const ARROWL_ICON = mk('<path d="M8 14l7-6v4h9v4h-9v4z" fill="none" stroke="currentColor" stroke-width="1.4"></path>');
+export const ARROWR_ICON = mk('<path d="M20 14l-7-6v4H4v4h9v4z" fill="none" stroke="currentColor" stroke-width="1.4"></path>');

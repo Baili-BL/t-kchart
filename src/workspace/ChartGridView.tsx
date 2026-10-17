@@ -9,6 +9,7 @@ import { useAppStore } from '../store/appStore';
 import { registerGrid } from './gridRegistry';
 import { drawBus } from './drawBus';
 import { createDrawPropsBar } from './dom/DrawPropsBar';
+import { registerDrawLayer, unregisterDrawLayer } from '../dev/drawRegistry';
 import { replayController, useReplayStore } from '../store/replayStore';
 import type { ReplayState } from '../engine/replay';
 import { SYMBOL_BY_TICKER } from '../data/symbols';
@@ -73,6 +74,7 @@ export function ChartGridView(): JSX.Element {
       for (const [c, l] of layers) {
         if (!live.has(c)) {
           if (l === barLayer) { barLayer = null; propsBar.hide(); }
+          if (import.meta.env.DEV) unregisterDrawLayer(l);
           l.dispose();
           layers.delete(c);
         }
@@ -94,6 +96,7 @@ export function ChartGridView(): JSX.Element {
         layer.setMagnet(drawBus.magnet);
         layer.setHidden(drawBus.hidden);
         c.longPressTip = drawBus.longPressTip;
+        if (import.meta.env.DEV) registerDrawLayer(layer);
         layers.set(c, layer);
       }
       // 键盘只给活动格的绘图层，避免 Ctrl+Z 同时撤销好几张图

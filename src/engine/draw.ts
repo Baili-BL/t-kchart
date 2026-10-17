@@ -233,6 +233,41 @@ export const DRAW_TOOLS: DrawToolDef[] = [
     icon: 'M3 13 C5 4 9 14 15 4' },
   { key: 'hyperbola', label: '双曲线', points: 2,
     icon: 'M4 3 C6 8 6 10 4 14 M14 3 C12 8 12 10 14 14' },
+  // —— 对齐 TradingView charting_library（本地参考库 100 种线工具）：音叉/文本标注/形状补齐 17 种 ——
+  { key: 'pitchfork', label: '安德鲁音叉', points: 3,
+    icon: 'M2 4 L16 12 M2 4 L16 7 M2 4 L16 17' },
+  { key: 'schiff', label: '希夫音叉', points: 3,
+    icon: 'M5 9 L16 12 M5 9 L16 8 M5 9 L16 16' },
+  { key: 'schiff2', label: '改良希夫音叉', points: 3,
+    icon: 'M5 12 L16 12 M5 12 L16 8 M5 12 L16 16' },
+  { key: 'innerfork', label: '内部分叉', points: 3,
+    icon: 'M2 9 L16 9 M2 9 L16 6.5 M2 9 L16 11.5' },
+  { key: 'pitchfan', label: '扇形分叉', points: 3,
+    icon: 'M3 15 L16 4 M3 15 L16 7 M3 15 L16 11 M3 15 L16 15' },
+  { key: 'note', label: '便签', points: 1,
+    icon: 'M3 3 L12 3 L15 6 L15 15 L3 15 Z M12 3 L12 6 L15 6' },
+  { key: 'callout', label: '标注', points: 1,
+    icon: 'M3 4 L15 4 L15 11 L9 11 L6 14 L6 11 L3 11 Z' },
+  { key: 'comment', label: '评论', points: 1,
+    icon: 'M3 5 L15 5 L15 12 L3 12 Z M6 12 L6 15 L10 12' },
+  { key: 'balloon', label: '气泡', points: 1,
+    icon: 'M9 3 C13 3 15 5.5 15 8 C15 10.5 12.5 12 9 12 C5.5 12 3 10.5 3 8 C3 5.5 5 3 9 3 Z M8 12 L7 15 L10.5 12' },
+  { key: 'pricenote', label: '价格便签', points: 1,
+    icon: 'M3 3 L12 3 L15 6 L15 15 L3 15 Z M9 7 L9 13 M7 9 L9 7 L11 9' },
+  { key: 'pricelabel', label: '价格标签', points: 1,
+    icon: 'M3 7 L13 7 L16 9 L13 11 L3 11 Z' },
+  { key: 'signpost', label: '路标', points: 1,
+    icon: 'M9 2 L9 16 M4 5 L14 5 L16 7 L14 9 L4 9 Z' },
+  { key: 'circlelines', label: '圆加十字线', points: 2,
+    icon: 'M9 4 A5 5 0 1 0 9 14 A5 5 0 1 0 9 4 Z M1 9 L17 9 M9 1 L9 17' },
+  { key: 'beziercubic', label: '三次贝塞尔', points: 4,
+    icon: 'M2 14 C4 3 12 3 16 14 M2 14 L6 10 M16 14 L12 10' },
+  { key: 'flatbottom', label: '平底', points: 2,
+    icon: 'M9 3 L15 14 L3 14 Z M3 14 L15 14' },
+  { key: 'arrowmarl', label: '左箭头', points: 1,
+    icon: 'M5 9 L10 5 L10 7.5 L15 7.5 L15 10.5 L10 10.5 L10 13 Z' },
+  { key: 'arrowmarr', label: '右箭头', points: 1,
+    icon: 'M13 9 L8 5 L8 7.5 L3 7.5 L3 10.5 L8 10.5 L8 13 Z' },
 ];
 
 export const FIB_LEVELS: { l: number; c: string }[] = [
@@ -468,21 +503,89 @@ export function hyperbolaPts(ax: number, ay: number, bx: number, by: number, seg
   return branch(1).concat(branch(-1));
 }
 
+/** 空心箭头字形（↑ 朝向）的单位顶点，供上/下/左/右四个方向复用 */
+const ARROW_RAW: PxPt[] = [
+  { x: 0, y: -1 },                    // 头顶点
+  { x: 0.62, y: -0.18 },              // 头右翼
+  { x: 0.28, y: -0.18 },              // 杆右上
+  { x: 0.28, y: 0.82 },               // 杆右下
+  { x: -0.28, y: 0.82 },              // 杆左下
+  { x: -0.28, y: -0.18 },             // 杆左上
+  { x: -0.62, y: -0.18 },             // 头左翼
+];
+
 /**
  * 空心箭头字形（↑ 方向）的 7 个顶点，以 (cx,cy) 为中心；dir=-1 时旋转 180°（↓）。
  * 箭头头部宽 1.24s、高 0.82s，杆宽 0.56s、杆长 1.82s。
  */
 export function arrowGlyphPts(cx: number, cy: number, s = MARKER_SIZE, dir: 1 | -1 = 1): PxPt[] {
-  const raw: PxPt[] = [
-    { x: 0, y: -s },                    // 头顶点
-    { x: s * 0.62, y: -s * 0.18 },      // 头右翼
-    { x: s * 0.28, y: -s * 0.18 },      // 杆右上
-    { x: s * 0.28, y: s * 0.82 },       // 杆右下
-    { x: -s * 0.28, y: s * 0.82 },      // 杆左下
-    { x: -s * 0.28, y: -s * 0.18 },     // 杆左上
-    { x: -s * 0.62, y: -s * 0.18 },     // 头左翼
+  return ARROW_RAW.map((q) => ({ x: cx + q.x * s * dir, y: cy + q.y * s * dir }));
+}
+
+/**
+ * 左/右箭头字形：把 ↑ 字形顺时针转 90° 得到 →（dir=1），逆时针 90° 得到 ←（dir=-1）。
+ * 屏幕坐标下 (x,y) → (-y, x) 即顺时针 90°。
+ */
+export function arrowSideGlyphPts(cx: number, cy: number, s = MARKER_SIZE, dir: 1 | -1 = 1): PxPt[] {
+  return ARROW_RAW.map((q) => ({ x: cx + -q.y * s * dir, y: cy + q.x * s * dir }));
+}
+
+/** 三次贝塞尔采样：p0/p3 端点，p1/p2 控制点（与 quadBezierPts 同一采样密度风格） */
+export function cubicBezierPts(p0: PxPt, p1: PxPt, p2: PxPt, p3: PxPt, seg = 40): PxPt[] {
+  const out: PxPt[] = [];
+  for (let i = 0; i <= seg; i++) {
+    const t = i / seg;
+    const u = 1 - t;
+    const a = u * u * u;
+    const b = 3 * u * u * t;
+    const c = 3 * u * t * t;
+    const e = t * t * t;
+    out.push({
+      x: a * p0.x + b * p1.x + c * p2.x + e * p3.x,
+      y: a * p0.y + b * p1.y + c * p2.y + e * p3.y,
+    });
+  }
+  return out;
+}
+
+/**
+ * 音叉族（安德鲁音叉 / 希夫 / 改良希夫 / 内部分叉 / 扇形分叉）的射线组。
+ * 统一以「a = 起点锚、b/c = 两个外点」描述：
+ *   · 中线起点：pitchfork = a；schiff = a·b 中点；schiff2 = 只把价格轴取中点（时间轴留在 a）
+ *   · 三条平行线：中线（a → mid(b,c)），另两条过 b、c 且与中线同向
+ *   · innerfork：两条平行线取到中线的半距（TV 的「内部分叉」）
+ *   · pitchfan：从起点向 b→c 段上 5 等分点各引一条线
+ * 返回 { o: 射线起点, d: 方向参照点 }，渲染/命中共用，口径不会漂。
+ */
+export function pitchforkRays(kind: string, a: PxPt, b: PxPt, c: PxPt): { o: PxPt; d: PxPt }[] {
+  const mid = { x: (b.x + c.x) / 2, y: (b.y + c.y) / 2 };
+  let o: PxPt = a;
+  if (kind === 'schiff') o = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  else if (kind === 'schiff2') o = { x: a.x, y: (a.y + b.y) / 2 };
+  if (kind === 'pitchfan') {
+    const out: { o: PxPt; d: PxPt }[] = [];
+    for (let i = 0; i <= 4; i++) {
+      const t = i / 4;
+      out.push({ o, d: { x: b.x + (c.x - b.x) * t, y: b.y + (c.y - b.y) * t } });
+    }
+    return out;
+  }
+  const dir = { x: mid.x - o.x, y: mid.y - o.y };
+  if (kind === 'innerfork') {
+    const half = (p: PxPt): PxPt => ({ x: o.x + (p.x - o.x) / 2, y: o.y + (p.y - o.y) / 2 });
+    const hb = half(b);
+    const hc = half(c);
+    return [
+      { o, d: mid },
+      { o: hb, d: { x: hb.x + dir.x, y: hb.y + dir.y } },
+      { o: hc, d: { x: hc.x + dir.x, y: hc.y + dir.y } },
+    ];
+  }
+  return [
+    { o, d: mid },
+    { o: b, d: { x: b.x + dir.x, y: b.y + dir.y } },
+    { o: c, d: { x: c.x + dir.x, y: c.y + dir.y } },
   ];
-  return raw.map((q) => ({ x: cx + q.x * dir, y: cy + q.y * dir }));
 }
 
 export function drawStyle(color?: string): DrawStyle {
@@ -1039,6 +1142,44 @@ export class DrawLayer {
       } else if (d.type === 'curve') {
         // 曲线：二次贝塞尔（p1 为控制点）
         if (distToPolyline(px, py, quadBezierPts(a, b, c)) <= tol) return { d, part: 'body' };
+      } else if (d.type === 'pitchfork' || d.type === 'schiff' || d.type === 'schiff2'
+        || d.type === 'innerfork' || d.type === 'pitchfan') {
+        // 音叉族：任意一条射线带内（与渲染同一几何来源）
+        const rays = pitchforkRays(d.type, a, b, c);
+        for (const r of rays) {
+          const e = rayToX(r.o.x, r.o.y, r.d.x, r.d.y, ch.plot.r + 40);
+          if (distToSeg(px, py, r.o.x, r.o.y, e.x, e.y) <= tol) return { d, part: 'body' };
+        }
+      } else if (d.type === 'note' || d.type === 'callout' || d.type === 'comment'
+        || d.type === 'balloon' || d.type === 'pricenote' || d.type === 'pricelabel' || d.type === 'signpost') {
+        // 文本类标注：卡片矩形内或锚点附近
+        const bx = this.cardBox(d, a);
+        if (inRect(px, py, bx.x, bx.y, bx.x + bx.w, bx.y + bx.h)) return { d, part: 'body' };
+        if (Math.hypot(px - a.x, py - a.y) <= tol + 4) return { d, part: 'body' };
+      } else if (d.type === 'circlelines') {
+        // 圆环带内或十字线附近
+        const r = Math.hypot(b.x - a.x, b.y - a.y);
+        if (Math.abs(Math.hypot(px - a.x, py - a.y) - r) <= tol) return { d, part: 'body' };
+        if (Math.abs(py - a.y) <= tol || Math.abs(px - a.x) <= tol) return { d, part: 'body' };
+      } else if (d.type === 'beziercubic') {
+        // 三次贝塞尔采样折线
+        if (distToPolyline(px, py, cubicBezierPts(a, b, c, p[3] || c)) <= tol) return { d, part: 'body' };
+      } else if (d.type === 'flatbottom') {
+        // 平底三角形：三条边或内部
+        const x0 = Math.min(a.x, b.x);
+        const x1 = Math.max(a.x, b.x);
+        const yb = Math.max(a.y, b.y);
+        const apex = { x: (x0 + x1) / 2, y: yb - Math.abs(x1 - x0) * 0.6 };
+        const onEdge =
+          distToSeg(px, py, apex.x, apex.y, x1, yb) <= tol ||
+          distToSeg(px, py, x1, yb, x0, yb) <= tol ||
+          distToSeg(px, py, x0, yb, apex.x, apex.y) <= tol;
+        if (onEdge || inTriangle(px, py, apex.x, apex.y, x1, yb, x0, yb)) return { d, part: 'body' };
+      } else if (d.type === 'arrowmarl' || d.type === 'arrowmarr') {
+        // 左右箭头：横放的字形包围盒（宽 = s，高 = 0.75s）
+        if (Math.abs(px - a.x) <= MARKER_SIZE + tol && Math.abs(py - a.y) <= MARKER_SIZE * 0.75 + tol) {
+          return { d, part: 'body' };
+        }
       } else if (d.type === 'text') {
         const w = Math.max(24, d.style.text.length * 7);
         if (inRect(px, py, a.x - 2, a.y - 10, a.x + w, a.y + 6)) return { d, part: 'body' };
@@ -1220,6 +1361,11 @@ export class DrawLayer {
 
   canUndo(): boolean { return this.snapshots.length > 0; }
   canRedo(): boolean { return this.redoStack.length > 0; }
+  /**
+   * 待定图形已放置的锚点数（0 = 没有半成品）。
+   * 供自检 / E2E 确认「点数刚好放满」：三点工具放满 3 个点后不该留下半成品。
+   */
+  pendingCount(): number { return this.pending ? this.pendingPlaced : 0; }
 
   undo(): boolean {
     if (!this.snapshots.length) return false;
@@ -2151,6 +2297,73 @@ export class DrawLayer {
         }
       }
       ctx.stroke();
+    } else if (d.type === 'pitchfork' || d.type === 'schiff' || d.type === 'schiff2'
+      || d.type === 'innerfork' || d.type === 'pitchfan') {
+      // 音叉族：三条（扇形五条）射线延长到绘图区右缘；非扇形时在两条外侧线之间淡填充
+      const rays = pitchforkRays(d.type, a, b, c);
+      const ends = rays.map((r) => rayToX(r.o.x, r.o.y, r.d.x, r.d.y, ch.plot.r + 40));
+      if (rays.length === 3) {
+        ctx.beginPath();
+        ctx.moveTo(rays[0].o.x, rays[0].o.y);
+        ctx.lineTo(ends[0].x, ends[0].y);
+        ctx.lineTo(ends[2].x, ends[2].y);
+        ctx.lineTo(rays[2].o.x, rays[2].o.y);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(120,123,134,0.08)';
+        ctx.fill();
+      }
+      for (let i = 0; i < rays.length; i++) {
+        ctx.beginPath();
+        ctx.moveTo(rays[i].o.x, rays[i].o.y);
+        ctx.lineTo(ends[i].x, ends[i].y);
+        ctx.stroke();
+      }
+    } else if (d.type === 'note' || d.type === 'callout' || d.type === 'comment'
+      || d.type === 'balloon' || d.type === 'pricenote' || d.type === 'pricelabel' || d.type === 'signpost') {
+      // 文本类标注：白底卡片 + 引线/尾巴指向锚点
+      this.renderCard(ctx, d, a, col);
+    } else if (d.type === 'circlelines') {
+      // 圆加十字线：圆 + 过圆心的水平/垂直线（延伸到绘图区边界）
+      const r = Math.hypot(b.x - a.x, b.y - a.y);
+      ctx.beginPath();
+      ctx.arc(a.x, a.y, Math.max(r, 1), 0, Math.PI * 2);
+      ctx.moveTo(ch.plot.l, a.y);
+      ctx.lineTo(ch.plot.r, a.y);
+      ctx.moveTo(a.x, ch.plot.t);
+      ctx.lineTo(a.x, ch.plot.b);
+      ctx.stroke();
+    } else if (d.type === 'beziercubic') {
+      // 三次贝塞尔：p1/p2 是控制点，曲线不过它们（与二次曲线同一采样器风格）
+      const q = cubicBezierPts(a, b, c, p[3] || c);
+      ctx.beginPath();
+      ctx.moveTo(q[0].x, q[0].y);
+      for (let i = 1; i < q.length; i++) ctx.lineTo(q[i].x, q[i].y);
+      ctx.stroke();
+    } else if (d.type === 'flatbottom') {
+      // 平底：底线水平（取两锚点的较低边），顶点在底边中点上方 0.6×宽度
+      const x0 = Math.min(a.x, b.x);
+      const x1 = Math.max(a.x, b.x);
+      const yb = Math.max(a.y, b.y);
+      const apex = { x: (x0 + x1) / 2, y: yb - Math.abs(x1 - x0) * 0.6 };
+      ctx.beginPath();
+      ctx.moveTo(apex.x, apex.y);
+      ctx.lineTo(x1, yb);
+      ctx.lineTo(x0, yb);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(120,123,134,0.10)';
+      ctx.fill();
+      ctx.stroke();
+    } else if (d.type === 'arrowmarl' || d.type === 'arrowmarr') {
+      // 左/右箭头：与上/下箭头同款字形，旋转 90°，空心
+      const g = arrowSideGlyphPts(a.x, a.y, MARKER_SIZE, d.type === 'arrowmarr' ? 1 : -1);
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.moveTo(g[0].x, g[0].y);
+      for (let i = 1; i < g.length; i++) ctx.lineTo(g[i].x, g[i].y);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.fill();
+      ctx.stroke();
     } else if (d.type === 'text') {
       ctx.setLineDash([]);
       this.label(ctx, d.style.text || '文字', a.x, a.y, col, d.style.fontSize);
@@ -2204,6 +2417,110 @@ export class DrawLayer {
       }
       ctx.restore();
     }
+  }
+
+  /** 1 点文本类标注的卡片矩形（相对锚点的偏移 + 尺寸），渲染与命中共用 */
+  private cardBox(d: Drawing, a: PxPt): { x: number; y: number; w: number; h: number } {
+    const map: Record<string, [number, number, number, number]> = {
+      note: [10, -62, 112, 52],
+      callout: [12, -56, 108, 40],
+      comment: [10, -46, 96, 32],
+      balloon: [12, -62, 104, 44],
+      pricenote: [10, -54, 108, 42],
+      pricelabel: [8, -11, 78, 22],
+      signpost: [-6, -38, 104, 28],
+    };
+    const m = map[d.type] || [10, -50, 100, 36];
+    return { x: a.x + m[0], y: a.y + m[1], w: m[2], h: m[3] };
+  }
+
+  /** 文本类标注（便签/标注/评论/气泡/价格便签/价格标签/路标）的绘制 */
+  private renderCard(ctx: CanvasRenderingContext2D, d: Drawing, a: PxPt, col: string): void {
+    const b = this.cardBox(d, a);
+    const rr = (ctx as unknown as { roundRect?: (x: number, y: number, w: number, h: number, r: number) => void }).roundRect;
+    ctx.save();
+    ctx.setLineDash([]);
+    ctx.font = '11px -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    // 卡片底：气泡 = 椭圆，路标 = 右尖箭头牌，其余圆角矩形
+    ctx.beginPath();
+    if (d.type === 'balloon') {
+      ctx.ellipse(b.x + b.w / 2, b.y + b.h / 2, b.w / 2, b.h / 2, 0, 0, Math.PI * 2);
+    } else if (d.type === 'signpost') {
+      ctx.moveTo(b.x, b.y);
+      ctx.lineTo(b.x + b.w - 14, b.y);
+      ctx.lineTo(b.x + b.w, b.y + b.h / 2);
+      ctx.lineTo(b.x + b.w - 14, b.y + b.h);
+      ctx.lineTo(b.x, b.y + b.h);
+      ctx.closePath();
+    } else if (rr) {
+      rr.call(ctx, b.x, b.y, b.w, b.h, d.type === 'pricelabel' ? 4 : 6);
+    } else {
+      ctx.rect(b.x, b.y, b.w, b.h);
+    }
+    ctx.fillStyle = 'rgba(255,255,255,0.95)';
+    ctx.fill();
+    ctx.strokeStyle = col;
+    ctx.lineWidth = Math.max(1, d.style.width);
+    ctx.stroke();
+    // 引线 / 尾巴 / 立柱
+    ctx.beginPath();
+    if (d.type === 'callout' || d.type === 'comment') {
+      ctx.moveTo(b.x + 14, b.y + b.h);
+      ctx.lineTo(a.x, a.y);
+      ctx.stroke();
+    } else if (d.type === 'balloon') {
+      ctx.moveTo(b.x + 16, b.y + b.h - 6);
+      ctx.lineTo(a.x, a.y);
+      ctx.lineTo(b.x + 34, b.y + b.h - 10);
+      ctx.stroke();
+    } else if (d.type === 'note' || d.type === 'pricenote') {
+      ctx.moveTo(b.x + 6, b.y + b.h);
+      ctx.lineTo(a.x, a.y);
+      ctx.stroke();
+    } else if (d.type === 'signpost') {
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(a.x, b.y + b.h);
+      ctx.stroke();
+    } else if (d.type === 'pricelabel') {
+      ctx.moveTo(b.x, b.y + b.h / 2);
+      ctx.lineTo(a.x, a.y);
+      ctx.stroke();
+    }
+    // 便签折角
+    if (d.type === 'note') {
+      ctx.beginPath();
+      ctx.moveTo(b.x + b.w - 12, b.y);
+      ctx.lineTo(b.x + b.w - 12, b.y + 12);
+      ctx.lineTo(b.x + b.w, b.y + 12);
+      ctx.stroke();
+    }
+    // 文本
+    const price = d.pts[0].price.toFixed(2);
+    ctx.fillStyle = col;
+    if (d.type === 'pricelabel') {
+      ctx.fillText(price, b.x + 8, b.y + b.h / 2);
+    } else if (d.type === 'pricenote') {
+      ctx.fillText('价格便签', b.x + 10, b.y + 14);
+      ctx.font = 'bold 13px -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif';
+      ctx.fillText(price, b.x + 10, b.y + 31);
+    } else {
+      const def: Record<string, string> = { note: '便签', callout: '标注', comment: '评论', balloon: '气泡', signpost: '路标' };
+      ctx.fillText(d.style.text || def[d.type] || '文字', b.x + 10, b.y + b.h / 2);
+      if (d.type === 'note') {
+        // 内容两行示意（浅色横线），让便签看起来是「有字的卡片」
+        ctx.globalAlpha = 0.35;
+        ctx.beginPath();
+        ctx.moveTo(b.x + 10, b.y + 32);
+        ctx.lineTo(b.x + b.w - 14, b.y + 32);
+        ctx.moveTo(b.x + 10, b.y + 40);
+        ctx.lineTo(b.x + b.w - 28, b.y + 40);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+    }
+    ctx.restore();
   }
 
   private label(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, color: string, size?: number): void {
@@ -2589,7 +2906,7 @@ export function drawSelfTest(): DrawTestResult {
     const pd = Ld.pixelPts(dd)[0];
     t('圆点：圆心命中 / 40px 外不命中', !!Ld.hitTest(pd.x, pd.y) && Ld.hitTest(pd.x + 40, pd.y) === null);
     t('光标组：工具表 72 种且新三项就位',
-      DRAW_TOOLS.length === 72 &&
+      DRAW_TOOLS.length === 89 &&
       toolDef('dot').points === 1 && toolDef('highlight').points === 0 && toolDef('eraser').points === 0);
     t('线组：信息线/趋势角度/横线 就位',
       toolDef('infoline').points === 2 && toolDef('angle').points === 2 && toolDef('crossline').points === 1 &&
@@ -2871,7 +3188,7 @@ export function drawSelfTest(): DrawTestResult {
 
     // --- 设计稿「笔刷」子菜单：笔刷/箭头/形状三组 ---
     t('笔刷/箭头/形状组：11 种新工具就位（锚点数 + ⌥R）',
-      DRAW_TOOLS.length === 72 &&
+      DRAW_TOOLS.length === 89 &&
       toolDef('brush').points === 0 && toolDef('rect').key3 === '⌥R' &&
       ['arrowmark', 'uparrow', 'downarrow'].every((k) => toolDef(k).points === 1) &&
       toolDef('rotrect').points === 3 && toolDef('curve').points === 3 &&
@@ -3074,6 +3391,85 @@ export function drawSelfTest(): DrawTestResult {
         const gone = Lpb.find(cp.id) === null;
         return okGeom && okStyle && Lpb.activeId !== cp.id && gone;
       })());
+
+    // --- 对齐 charting_library（本地参考库）：音叉 / 文本标注 / 形状补齐 17 种 ---
+    t('音叉族 + 文本标注 + 形状补齐：17 种工具就位（锚点数）',
+      DRAW_TOOLS.length === 89 &&
+      ['pitchfork', 'schiff', 'schiff2', 'innerfork', 'pitchfan'].every((k) => toolDef(k).points === 3) &&
+      ['note', 'callout', 'comment', 'balloon', 'pricenote', 'pricelabel', 'signpost'].every((k) => toolDef(k).points === 1) &&
+      toolDef('circlelines').points === 2 && toolDef('beziercubic').points === 4 &&
+      toolDef('flatbottom').points === 2 && toolDef('arrowmarl').points === 1 && toolDef('arrowmarr').points === 1);
+    t('pitchforkRays：音叉 3 条 / 扇形 5 条；希夫起点在 a·b 中点；平行线与中线同向',
+      (() => {
+        const A = { x: 10, y: 100 };
+        const B = { x: 60, y: 80 };
+        const C = { x: 60, y: 120 };
+        const pf = pitchforkRays('pitchfork', A, B, C);
+        const sf = pitchforkRays('schiff', A, B, C);
+        const s2 = pitchforkRays('schiff2', A, B, C);
+        const fan = pitchforkRays('pitchfan', A, B, C);
+        const d0 = { x: pf[0].d.x - pf[0].o.x, y: pf[0].d.y - pf[0].o.y };
+        const d1 = { x: pf[1].d.x - pf[1].o.x, y: pf[1].d.y - pf[1].o.y };
+        const parallel = Math.abs(d0.x * d1.y - d0.y * d1.x) < 1e-9;
+        return pf.length === 3 && fan.length === 5 &&
+          Math.abs(sf[0].o.x - 35) < 1e-9 && Math.abs(sf[0].o.y - 90) < 1e-9 &&
+          Math.abs(s2[0].o.x - 10) < 1e-9 && Math.abs(s2[0].o.y - 90) < 1e-9 &&
+          parallel;
+      })());
+    t('cubicBezierPts：41 个采样点、首尾等于端点',
+      (() => {
+        const q = cubicBezierPts({ x: 0, y: 0 }, { x: 10, y: 30 }, { x: 30, y: -20 }, { x: 40, y: 10 });
+        return q.length === 41 && q[0].x === 0 && q[0].y === 0 &&
+          Math.abs(q[40].x - 40) < 1e-9 && Math.abs(q[40].y - 10) < 1e-9;
+      })());
+    t('arrowSideGlyphPts：右箭头头顶点在最右、左箭头在最左（同一字形旋转）',
+      (() => {
+        const r = arrowSideGlyphPts(100, 100, 13, 1);
+        const lf = arrowSideGlyphPts(100, 100, 13, -1);
+        return r[0].x > 100 && lf[0].x < 100 &&
+          Math.abs(r[0].y - 100) < 1e-9 && Math.abs(lf[0].y - 100) < 1e-9;
+      })());
+
+    const Lnote = new DrawLayer(host);
+    const dnote = Lnote.add('note', [{ time: host.bars[20].time, price: 105 }]);
+    const an = Lnote.pixelPts(dnote)[0];
+    t('便签：卡片区域内命中 / 卡外（锚点下方 70px）不命中',
+      !!Lnote.hitTest(an.x + 40, an.y - 40) && Lnote.hitTest(an.x + 40, an.y + 70) === null);
+
+    const Lcl = new DrawLayer(host);
+    const dcl = Lcl.add('circlelines', [
+      { time: host.bars[20].time, price: 105 },
+      { time: host.bars[28].time, price: 108 },
+    ]);
+    const pcl = Lcl.pixelPts(dcl);
+    const rcl = Math.hypot(pcl[1].x - pcl[0].x, pcl[1].y - pcl[0].y);
+    t('圆加十字线：圆周与过圆心的水平线都能命中 / 圆外角点不命中',
+      !!Lcl.hitTest(pcl[0].x + rcl, pcl[0].y) &&
+      !!Lcl.hitTest(pcl[0].x + 20, pcl[0].y) &&
+      Lcl.hitTest(pcl[0].x + rcl * 0.55, pcl[0].y - rcl * 0.55) === null);
+
+    const Lbc = new DrawLayer(host);
+    const dbc = Lbc.add('beziercubic', [
+      { time: host.bars[6].time, price: 100 },
+      { time: host.bars[14].time, price: 110 },
+      { time: host.bars[26].time, price: 96 },
+      { time: host.bars[36].time, price: 106 },
+    ]);
+    const pbc = Lbc.pixelPts(dbc);
+    const bcmid = cubicBezierPts(pbc[0], pbc[1], pbc[2], pbc[3])[20];
+    t('三次贝塞尔：曲线中点命中 / 曲线下 80px 不命中',
+      !!Lbc.hitTest(bcmid.x, bcmid.y) && Lbc.hitTest(bcmid.x, bcmid.y + 80) === null);
+
+    const Lfb = new DrawLayer(host);
+    const dfb = Lfb.add('flatbottom', [
+      { time: host.bars[10].time, price: 100 },
+      { time: host.bars[30].time, price: 100 },
+    ]);
+    const pfb = Lfb.pixelPts(dfb);
+    t('平底：底边中点与内部命中 / 底边下 60px 不命中',
+      !!Lfb.hitTest((pfb[0].x + pfb[1].x) / 2, pfb[0].y) &&
+      !!Lfb.hitTest((pfb[0].x + pfb[1].x) / 2, pfb[0].y - 8) &&
+      Lfb.hitTest((pfb[0].x + pfb[1].x) / 2, pfb[0].y + 60) === null);
   }
 
   log('绘图层自检：' + pass + ' PASS / ' + fail + ' FAIL');

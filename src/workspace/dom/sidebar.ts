@@ -24,6 +24,9 @@ import {
   ARROWMARK, UPARROW, DNARROW, RECT_ICON, ROTRECT, PATH_ICON,
   CIRCLE_ICON, ELLIPSE_ICON, POLYLINE_ICON, TRIANGLE_ICON, ARC_ICON,
   CURVE_ICON, HYPERBOLA,
+  FORK, PITCHFAN, NOTE_ICON, CALLOUT_ICON, COMMENT_ICON, BALLOON_ICON,
+  PRICENOTE_ICON, PRICELABEL_ICON, SIGNPOST_ICON,
+  CIRCLELINES_ICON, BEZIERCUBIC_ICON, FLATBOTTOM_ICON, ARROWL_ICON, ARROWR_ICON,
 } from './sidebar-icons';
 import {
   EMOJI_CATEGORIES, EMOJI_CLOCK_ICON, loadEmojiRecents, saveEmojiRecent,
@@ -232,6 +235,13 @@ const SECTIONS: Section[] = [
         ['固定江恩正方', GANNSQF_ICON],
         ['江恩正方', GANNSQ_ICON],
       ] },
+      { label: '音叉', items: [
+        ['安德鲁音叉', FORK],
+        ['希夫音叉', FORK],
+        ['改良希夫音叉', FORK],
+        ['内部分叉', FORK],
+        ['扇形分叉', PITCHFAN],
+      ] },
     ] },
   ]},
   { tools: [
@@ -287,6 +297,8 @@ const SECTIONS: Section[] = [
         ['箭头', ARROW_ICON],
         ['向上箭头', UPARROW],
         ['向下箭头', DNARROW],
+        ['左箭头', ARROWL_ICON],
+        ['右箭头', ARROWR_ICON],
       ] },
       { label: '形状', items: [
         ['矩形', RECT_ICON, '⌥R'],
@@ -299,9 +311,27 @@ const SECTIONS: Section[] = [
         ['弧形', ARC_ICON],
         ['曲线', CURVE_ICON],
         ['双曲线', HYPERBOLA],
+        ['圆加十字线', CIRCLELINES_ICON],
+        ['三次贝塞尔', BEZIERCUBIC_ICON],
+        ['平底', FLATBOTTOM_ICON],
       ] },
     ] },
-    { icon: TEXT, caret: CARET, label: '文字', items: [['文字', TEXT], ['椭圆', TEXT], ['便签', TEXT], ['价格标签', TEXT], ['日期范围', TEXT]] },
+    { icon: TEXT, caret: CARET, label: '文字', groups: [
+      { label: '文本', items: [
+        ['文字', TEXT],
+        ['标注', CALLOUT_ICON],
+        ['评论', COMMENT_ICON],
+        ['气泡', BALLOON_ICON],
+        ['便签', NOTE_ICON],
+        ['价格便签', PRICENOTE_ICON],
+        ['价格标签', PRICELABEL_ICON],
+        ['路标', SIGNPOST_ICON],
+      ] },
+      { label: '形状', items: [
+        ['椭圆', ELLIPSE_ICON],
+        ['日期范围', DRANGE_ICON],
+      ] },
+    ] },
   ]},
   { tools: [
     { icon: STICKER, label: '图标' },

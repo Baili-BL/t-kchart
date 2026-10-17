@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DRAW_TOOLS, DrawLayer, makeFakeHost, rayToX, inTriangle, inParallelogram,
   MARKER_SIZE, quadBezierPts, ellipseArcPts, hyperbolaPts, arrowGlyphPts,
+  cubicBezierPts, pitchforkRays, arrowSideGlyphPts,
 } from '../src/engine/draw';
 import type { DrawHost, Drawing } from '../src/engine/draw';
 
@@ -308,8 +309,8 @@ describe('2.8 几何纯函数与回归', () => {
     expect(L.drawings.length).toBe(1);
     expect(L.drawings[0].pts.length).toBe(2);
   });
-  it('工具表：9 → 72 种，新工具的锚点数与快捷键就位', () => {
-    expect(DRAW_TOOLS.length).toBe(72);
+  it('工具表：9 → 89 种，新工具的锚点数与快捷键就位', () => {
+    expect(DRAW_TOOLS.length).toBe(89);
     const want: Record<string, number> = {
       hray: 1, extline: 2, arrow: 2, ellipse: 2, triangle: 3, channel: 3,
       dot: 1, highlight: 0, eraser: 0, infoline: 2, angle: 2, crossline: 1,
@@ -321,6 +322,10 @@ describe('2.8 几何纯函数与回归', () => {
       brush: 0, arrowmark: 1, uparrow: 1, downarrow: 1,
       rotrect: 3, path: 4, circle: 2, polyline: 4, arc: 2, curve: 3, hyperbola: 2,
       emoji: 1,
+      // 对齐 charting_library 的 17 种
+      pitchfork: 3, schiff: 3, schiff2: 3, innerfork: 3, pitchfan: 3,
+      note: 1, callout: 1, comment: 1, balloon: 1, pricenote: 1, pricelabel: 1, signpost: 1,
+      circlelines: 2, beziercubic: 4, flatbottom: 2, arrowmarl: 1, arrowmarr: 1,
     };
     for (const [key, points] of Object.entries(want)) {
       expect(DRAW_TOOLS.find((t) => t.key === key)?.points === points).toBe(true);
@@ -1728,5 +1733,213 @@ describe('浮动属性工具条：selectionToolbarAnchor 定位', () => {
     expect(L.selectionToolbarAnchor()).toBeNull();
     L.setHidden(false);
     expect(L.selectionToolbarAnchor()).not.toBeNull();
+  });
+});
+
+/* ===========================================================================
+ * 对齐 charting_library（本地参考库 100 种线工具）：音叉 / 文本标注 / 形状补齐 17 种
+ *   —— 四判据数据驱动：画法 / 命中 on / 命中 off / 手柄 + undo·redo 往返
+ * ========================================================================= */
+
+interface AlignSpec {
+  key: string;
+  pts: { time: number; price: number }[];
+  inside: (L: DrawLayer, d: Drawing) => { x: number; y: number };
+  outside: (L: DrawLayer, d: Drawing) => { x: number; y: number };
+  minStrokes: number;
+}
+
+const midOf = (a: { x: number; y: number }, b: { x: number; y: number }) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+
+const ALIGN_SPECS: AlignSpec[] = [
+  // —— 音叉族（3 锚点）——
+  {
+    key: 'pitchfork',
+    pts: [anchor(8, 100), anchor(30, 110), anchor(30, 90)],
+    inside: (L, d) => L.pixelPts(d)[1],      // 过 b 的平行线
+    outside: (L, d) => { const p = L.pixelPts(d); return { x: p[1].x, y: Math.max(p[0].y, p[1].y, p[2].y) + 200 }; },
+    minStrokes: 3,
+  },
+  {
+    key: 'schiff',
+    pts: [anchor(8, 100), anchor(30, 110), anchor(30, 90)],
+    inside: (L, d) => L.pixelPts(d)[1],
+    outside: (L, d) => { const p = L.pixelPts(d); return { x: p[1].x, y: Math.max(p[0].y, p[1].y, p[2].y) + 200 }; },
+    minStrokes: 3,
+  },
+  {
+    key: 'schiff2',
+    pts: [anchor(8, 100), anchor(30, 110), anchor(30, 90)],
+    inside: (L, d) => L.pixelPts(d)[1],
+    outside: (L, d) => { const p = L.pixelPts(d); return { x: p[1].x, y: Math.max(p[0].y, p[1].y, p[2].y) + 200 }; },
+    minStrokes: 3,
+  },
+  {
+    key: 'innerfork',
+    pts: [anchor(8, 100), anchor(30, 110), anchor(30, 90)],
+    inside: (L, d) => { const p = L.pixelPts(d); return midOf(p[0], p[1]); }, // 半距平行线过 a·b 中点
+    outside: (L, d) => { const p = L.pixelPts(d); return { x: p[1].x, y: Math.max(p[0].y, p[1].y, p[2].y) + 200 }; },
+    minStrokes: 3,
+  },
+  {
+    key: 'pitchfan',
+    pts: [anchor(8, 100), anchor(30, 110), anchor(30, 90)],
+    inside: (L, d) => L.pixelPts(d)[1],      // 扇形第 1 条正过 b
+    outside: (L, d) => { const p = L.pixelPts(d); return { x: p[1].x, y: Math.max(p[0].y, p[1].y, p[2].y) + 200 }; },
+    minStrokes: 5,
+  },
+  // —— 文本类标注（1 锚点，卡片 + 引线）——
+  {
+    key: 'note',
+    pts: [anchor(20, 105)],
+    inside: (L, d) => { const p = L.pixelPts(d)[0]; return { x: p.x + 40, y: p.y - 40 }; },
+    outside: (L, d) => { const p = L.pixelPts(d)[0]; return { x: p.x + 40, y: p.y + 70 }; },
+    minStrokes: 2,
+  },
+  {
+    key: 'callout',
+    pts: [anchor(20, 105)],
+    inside: (L, d) => { const p = L.pixelPts(d)[0]; return { x: p.x + 40, y: p.y - 40 }; },
+    outside: (L, d) => { const p = L.pixelPts(d)[0]; return { x: p.x + 40, y: p.y + 70 }; },
+    minStrokes: 2,
+  },
+  {
+    key: 'comment',
+    pts: [anchor(20, 105)],
+    inside: (L, d) => { const p = L.pixelPts(d)[0]; return { x: p.x + 40, y: p.y - 36 }; },
+    outside: (L, d) => { const p = L.pixelPts(d)[0]; return { x: p.x + 40, y: p.y + 70 }; },
+    minStrokes: 2,
+  },
+  {
+    key: 'balloon',
+    pts: [anchor(20, 105)],
+    inside: (L, d) => { const p = L.pixelPts(d)[0]; return { x: p.x + 60, y: p.y - 40 }; },
+    outside: (L, d) => { const p = L.pixelPts(d)[0]; return { x: p.x + 40, y: p.y + 70 }; },
+    minStrokes: 2,
+  },
+  {
+    key: 'pricenote',
+    pts: [anchor(20, 105)],
+    inside: (L, d) => { const p = L.pixelPts(d)[0]; return { x: p.x + 40, y: p.y - 40 }; },
+    outside: (L, d) => { const p = L.pixelPts(d)[0]; return { x: p.x + 40, y: p.y + 70 }; },
+    minStrokes: 2,
+  },
+  {
+    key: 'pricelabel',
+    pts: [anchor(20, 105)],
+    inside: (L, d) => { const p = L.pixelPts(d)[0]; return { x: p.x + 40, y: p.y }; },
+    outside: (L, d) => { const p = L.pixelPts(d)[0]; return { x: p.x + 40, y: p.y - 60 }; },
+    minStrokes: 2,
+  },
+  {
+    key: 'signpost',
+    pts: [anchor(20, 105)],
+    inside: (L, d) => { const p = L.pixelPts(d)[0]; return { x: p.x + 40, y: p.y - 30 }; },
+    outside: (L, d) => { const p = L.pixelPts(d)[0]; return { x: p.x + 40, y: p.y + 70 }; },
+    minStrokes: 2,
+  },
+  // —— 形状补齐 ——
+  {
+    key: 'circlelines',
+    pts: [anchor(16, 105), anchor(26, 108)],
+    inside: (L, d) => { const p = L.pixelPts(d); const r = Math.hypot(p[1].x - p[0].x, p[1].y - p[0].y); return { x: p[0].x + r, y: p[0].y }; },
+    outside: (L, d) => { const p = L.pixelPts(d); const r = Math.hypot(p[1].x - p[0].x, p[1].y - p[0].y); return { x: p[0].x + r * 0.55, y: p[0].y - r * 0.55 }; },
+    minStrokes: 1,
+  },
+  {
+    key: 'beziercubic',
+    pts: [anchor(6, 100), anchor(14, 110), anchor(26, 96), anchor(36, 106)],
+    inside: (L, d) => { const p = L.pixelPts(d); return cubicBezierPts(p[0], p[1], p[2], p[3])[20]; },
+    outside: (L, d) => { const p = L.pixelPts(d); const q = cubicBezierPts(p[0], p[1], p[2], p[3])[20]; return { x: q.x, y: q.y + 90 }; },
+    minStrokes: 1,
+  },
+  {
+    key: 'flatbottom',
+    pts: [anchor(10, 100), anchor(30, 100)],
+    inside: (L, d) => { const p = L.pixelPts(d); return { x: (p[0].x + p[1].x) / 2, y: p[0].y }; },
+    outside: (L, d) => { const p = L.pixelPts(d); return { x: (p[0].x + p[1].x) / 2, y: p[0].y + 60 }; },
+    minStrokes: 1,
+  },
+  {
+    key: 'arrowmarl',
+    pts: [anchor(20, 105)],
+    inside: (L, d) => L.pixelPts(d)[0],
+    outside: (L, d) => { const p = L.pixelPts(d)[0]; return { x: p.x, y: p.y + 50 }; },
+    minStrokes: 1,
+  },
+  {
+    key: 'arrowmarr',
+    pts: [anchor(20, 105)],
+    inside: (L, d) => L.pixelPts(d)[0],
+    outside: (L, d) => { const p = L.pixelPts(d)[0]; return { x: p.x, y: p.y + 50 }; },
+    minStrokes: 1,
+  },
+];
+
+describe('对齐 charting_library：17 种新工具 × 四判据（数据驱动）', () => {
+  for (const spec of ALIGN_SPECS) {
+    describe(spec.key, () => {
+      const { L, d } = draw(spec.key, spec.pts);
+
+      it(`① 画法：render 不抛错且 stroke ≥ ${spec.minStrokes}`, () => {
+        const { ctx, ops } = makeCtx();
+        expect(() => L.render(ctx)).not.toThrow();
+        expect(ops.stroke).toBeGreaterThanOrEqual(spec.minStrokes);
+      });
+      it('② 命中：图形上的点能命中', () => {
+        const pt = spec.inside(L, d);
+        const hit = L.hitTest(pt.x, pt.y);
+        expect(hit && hit.d.id === d.id).toBe(true);
+      });
+      it('③ 命中外：图形外的点不命中', () => {
+        const pt = spec.outside(L, d);
+        expect(L.hitTest(pt.x, pt.y)).toBeNull();
+      });
+      it('④ 手柄+撤销：拖 0 号手柄只动 p0，其它锚点不动；undo×2 退回 / redo 复原', () => {
+        const p0px = L.pixelPts(d)[0];
+        L.select(d.id);
+        expect(L.hitTest(p0px.x, p0px.y)!.part).toBe(0);
+        const others = spec.pts.slice(1).map((q) => ({ ...q }));
+        L.onDown(p0px.x, p0px.y);
+        L.onMove(p0px.x + 40, p0px.y + 20);
+        L.onUp();
+        const cur = L.find(d.id)!;
+        others.forEach((q, i) => {
+          expect(cur.pts[i + 1].time).toBe(q.time);
+          expect(cur.pts[i + 1].price).toBeCloseTo(q.price, 9);
+        });
+        expect(cur.pts[0].time).not.toBe(spec.pts[0].time);
+        L.undo();
+        expect(L.find(d.id)!.pts[0].time).toBe(spec.pts[0].time);
+        L.undo();
+        expect(L.drawings.length).toBe(0);
+        L.redo();
+        expect(L.drawings.length).toBe(1);
+      });
+    });
+  }
+
+  it('几何纯函数：pitchforkRays 三变体起点 / 扇形 5 条；三次贝塞尔端点守恒；左右箭头镜像', () => {
+    const A = { x: 0, y: 0 };
+    const B = { x: 100, y: -20 };
+    const C = { x: 100, y: 20 };
+    expect(pitchforkRays('pitchfork', A, B, C)).toHaveLength(3);
+    expect(pitchforkRays('pitchfan', A, B, C)).toHaveLength(5);
+    expect(pitchforkRays('schiff', A, B, C)[0].o).toEqual({ x: 50, y: -10 }); // a·b 中点
+    expect(pitchforkRays('schiff2', A, B, C)[0].o).toEqual({ x: 0, y: -10 });  // 只移价格轴
+
+    const q = cubicBezierPts({ x: 0, y: 0 }, { x: 30, y: 60 }, { x: 60, y: -60 }, { x: 90, y: 0 });
+    expect(q).toHaveLength(41);
+    expect(q[0]).toEqual({ x: 0, y: 0 });
+    expect(q[40].x).toBeCloseTo(90, 9);
+    // t=0.5：x = (0 + 3*30 + 3*60 + 90)/8 = 45；y = 0
+    expect(q[20].x).toBeCloseTo(45, 9);
+    expect(q[20].y).toBeCloseTo(0, 9);
+
+    const r = arrowSideGlyphPts(10, 10, 10, 1);
+    const l = arrowSideGlyphPts(10, 10, 10, -1);
+    expect(r[0].x).toBeCloseTo(20, 9);  // 向右：头顶点在右侧
+    expect(l[0].x).toBeCloseTo(0, 9);   // 向左
+    expect(r[0].y).toBeCloseTo(10, 9);
   });
 });
