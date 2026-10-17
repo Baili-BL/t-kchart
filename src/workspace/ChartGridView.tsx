@@ -99,7 +99,10 @@ export function ChartGridView(): JSX.Element {
       if (ev.type === 'undo') return void keyed?.undo();
       if (ev.type === 'redo') return void keyed?.redo();
       for (const l of layers.values()) {
-        if (ev.type === 'tool') l.setTool(ev.tool);
+        if (ev.type === 'tool') {
+          l.setTool(ev.tool);
+          if (ev.char) l.emojiChar = ev.char;
+        }
         else if (ev.type === 'magnet') l.setMagnet(ev.on);
         else if (ev.type === 'hidden') l.setHidden(ev.on);
         else if (ev.type === 'clear') l.clear();

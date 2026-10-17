@@ -29,6 +29,10 @@ export function DrawToolbar(): JSX.Element {
           toast(`「${label}」暂未实现（见 TODO 2.8）`);
         }
       },
+      onEmoji: (char) => {
+        drawBus.setEmoji(char);
+        toast(`已选图标 ${char}：点击图表放置`);
+      },
       onToggle: (label, on) => {
         if (label === '隐藏所有图形') drawBus.setHidden(on);
         else if (label === '移除对象' && on) drawBus.clear();

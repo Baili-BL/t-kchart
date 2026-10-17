@@ -111,6 +111,8 @@ export const DRAW_TOOLS: DrawToolDef[] = [
     icon: 'M2 4 L16 4 M2 7.5 L16 7.5 M2 11 L16 11 M2 14.5 L16 14.5' },
   { key: 'text', label: '文字', points: 1, key2: 'x',
     icon: 'M4 4 L14 4 M9 4 L9 15' },
+  { key: 'emoji', label: '图标', points: 1,
+    icon: 'M9 2 A7 7 0 1 0 9 16 A7 7 0 1 0 9 2 Z M6.5 7 A1 1 0 1 0 6.5 7.01 Z M11.5 7 A1 1 0 1 0 11.5 7.01 Z M5.5 10.5 C6.5 12.5 11.5 12.5 12.5 10.5' },
   { key: 'measure', label: '测量', points: 2, key2: 'm',
     icon: 'M3 12 L14 5 M5 13 L6 11 M7 11 L8 9 M9 9 L10 7 M11 7 L12 5' },
   // —— 设计稿「十字线」子菜单新增的三种 ——
@@ -268,6 +270,9 @@ export const FIB_EXTENSIONS: number[] = [1, 1.618, 2.618, 4.236, 6.854];
 
 /** 江恩网格分割（1/8） */
 export const GANN_DIVS: number[] = [0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1];
+
+/** emoji 标注的显示字号（px），命中区域也以此为边长基准 */
+export const EMOJI_SIZE = 28;
 
 /** 循环线：绘制的周期数（每周期一对垂直线，副线在周期起点右侧 18% 处） */
 export const CYCLE_COUNT: number = 6;
@@ -594,6 +599,8 @@ export class DrawLayer {
   activeId: number | null;
   magnet: boolean;
   hidden: boolean;
+  /** emoji 工具待放置的字符（由左侧「图标」面板选中后经 drawBus 同步） */
+  emojiChar = '😀';
 
   private nextId: number;
   private pending: Drawing | null;
@@ -1032,6 +1039,10 @@ export class DrawLayer {
       } else if (d.type === 'text') {
         const w = Math.max(24, d.style.text.length * 7);
         if (inRect(px, py, a.x - 2, a.y - 10, a.x + w, a.y + 6)) return { d, part: 'body' };
+      } else if (d.type === 'emoji') {
+        // emoji 标注：以锚点为中心的方形热区
+        const h = EMOJI_SIZE / 2;
+        if (inRect(px, py, a.x - h, a.y - h, a.x + h, a.y + h)) return { d, part: 'body' };
       } else {
         if (distToSeg(px, py, a.x, a.y, b.x, b.y) <= tol) return { d, part: 'body' };
       }
@@ -1237,6 +1248,8 @@ export class DrawLayer {
           let t = '文字';
           try { t = (window.prompt('输入文字', '文字') || '文字'); } catch (_e) { /* headless 里没有 prompt */ }
           style = { text: t };
+        } else if (this.tool === 'emoji') {
+          style = { text: this.emojiChar, fontSize: EMOJI_SIZE };
         }
         this.add(this.tool, [a, a], style);
         this.setTool('cursor');
@@ -2058,6 +2071,16 @@ export class DrawLayer {
     } else if (d.type === 'text') {
       ctx.setLineDash([]);
       this.label(ctx, d.style.text || '文字', a.x, a.y, col, d.style.fontSize);
+    } else if (d.type === 'emoji') {
+      // emoji 标注：锚点为中心，原生彩色 emoji 字体渲染（无边框无背景）
+      const size = d.style.fontSize || EMOJI_SIZE;
+      ctx.setLineDash([]);
+      ctx.save();
+      ctx.font = size + 'px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(d.style.text || '😀', a.x, a.y);
+      ctx.restore();
     } else if (d.type === 'measure') {
       const l = Math.min(a.x, b.x);
       const t = Math.min(a.y, b.y);
@@ -2447,8 +2470,8 @@ export function drawSelfTest(): DrawTestResult {
     const dd = Ld.add('dot', [{ time: host.bars[20].time, price: 105 }]);
     const pd = Ld.pixelPts(dd)[0];
     t('圆点：圆心命中 / 40px 外不命中', !!Ld.hitTest(pd.x, pd.y) && Ld.hitTest(pd.x + 40, pd.y) === null);
-    t('光标组：工具表 71 种且新三项就位',
-      DRAW_TOOLS.length === 71 &&
+    t('光标组：工具表 72 种且新三项就位',
+      DRAW_TOOLS.length === 72 &&
       toolDef('dot').points === 1 && toolDef('highlight').points === 0 && toolDef('eraser').points === 0);
     t('线组：信息线/趋势角度/横线 就位',
       toolDef('infoline').points === 2 && toolDef('angle').points === 2 && toolDef('crossline').points === 1 &&
@@ -2730,12 +2753,37 @@ export function drawSelfTest(): DrawTestResult {
 
     // --- 设计稿「笔刷」子菜单：笔刷/箭头/形状三组 ---
     t('笔刷/箭头/形状组：11 种新工具就位（锚点数 + ⌥R）',
-      DRAW_TOOLS.length === 71 &&
+      DRAW_TOOLS.length === 72 &&
       toolDef('brush').points === 0 && toolDef('rect').key3 === '⌥R' &&
       ['arrowmark', 'uparrow', 'downarrow'].every((k) => toolDef(k).points === 1) &&
       toolDef('rotrect').points === 3 && toolDef('curve').points === 3 &&
       ['path', 'polyline'].every((k) => toolDef(k).points === 4) &&
       ['circle', 'arc', 'hyperbola'].every((k) => toolDef(k).points === 2));
+
+    // --- 设计稿 emoji 面板：「图标」按钮 → 分类面板 → 放置 emoji 标注 ---
+    const Lem = new DrawLayer(host);
+    Lem.emojiChar = '🚀';
+    Lem.setTool('emoji');
+    Lem.onDown(host.xCenter(18), host.yOf(104));
+    Lem.onUp();
+    t('emoji：放置后字符/字号入 style、工具回 cursor',
+      Lem.drawings.length === 1 && Lem.drawings[0].style.text === '🚀' &&
+      Lem.drawings[0].style.fontSize === EMOJI_SIZE && Lem.tool === 'cursor');
+    const pem = Lem.pixelPts(Lem.drawings[0])[0];
+    t('emoji：中心命中 / 字形外不命中；拖动换位 undo 复原',
+      !!Lem.hitTest(pem.x, pem.y) && Lem.hitTest(pem.x + 40, pem.y) === null &&
+      (() => {
+        Lem.select(Lem.drawings[0].id);
+        const d0 = Lem.drawings[0];
+        const before = { ...d0.pts[0] };
+        Lem.onDown(pem.x, pem.y);
+        Lem.onMove(pem.x + 30, pem.y - 20);
+        Lem.onUp();
+        const moved = d0.pts[0].time !== before.time;
+        Lem.undo();
+        const back = Lem.find(d0.id)!.pts[0].time === before.time;
+        return moved && back;
+      })());
 
     // 笔刷：自由笔迹（与荧光笔同机制，默认色细线）
     const Lb = new DrawLayer(host);

@@ -308,8 +308,8 @@ describe('2.8 几何纯函数与回归', () => {
     expect(L.drawings.length).toBe(1);
     expect(L.drawings[0].pts.length).toBe(2);
   });
-  it('工具表：9 → 71 种，新工具的锚点数与快捷键就位', () => {
-    expect(DRAW_TOOLS.length).toBe(71);
+  it('工具表：9 → 72 种，新工具的锚点数与快捷键就位', () => {
+    expect(DRAW_TOOLS.length).toBe(72);
     const want: Record<string, number> = {
       hray: 1, extline: 2, arrow: 2, ellipse: 2, triangle: 3, channel: 3,
       dot: 1, highlight: 0, eraser: 0, infoline: 2, angle: 2, crossline: 1,
@@ -320,6 +320,7 @@ describe('2.8 几何纯函数与回归', () => {
       avwap: 1, vprofile: 2, avprofile: 1, prange: 2, drange: 2, dprange: 2,
       brush: 0, arrowmark: 1, uparrow: 1, downarrow: 1,
       rotrect: 3, path: 4, circle: 2, polyline: 4, arc: 2, curve: 3, hyperbola: 2,
+      emoji: 1,
     };
     for (const [key, points] of Object.entries(want)) {
       expect(DRAW_TOOLS.find((t) => t.key === key)?.points === points).toBe(true);
@@ -1501,5 +1502,48 @@ describe('形状组：rotrect/path/circle/polyline/arc/curve/hyperbola × 四判
     const hb = hyperbolaPts(-40, 0, 40, 0);
     expect(hb.length).toBe(82); // 2 支 × 41 点
     expect(hb[0].x + hb[hb.length - 1].x).toBeCloseTo(0, 6); // 两支关于 x=0 对称（镜像点 x 和）
+  });
+});
+
+/* ===========================================================================
+ * 设计稿 emoji 面板（「图标」按钮）：emoji 标注工具
+ * ========================================================================= */
+
+import { EMOJI_SIZE } from '../src/engine/draw';
+
+describe('emoji 标注（图标按钮 → 分类面板 → 放置）', () => {
+  // 真实交互流：面板选中字符（emojiChar）→ setTool('emoji') → 图上单击放置
+  const L = new DrawLayer(HOST);
+  L.emojiChar = '😀';
+  L.setTool('emoji');
+  L.onDown(HOST.xCenter(20), HOST.yOf(105));
+  L.onUp();
+  const d = L.find(L.drawings[0].id)!;
+  const p = L.pixelPts(d)[0];
+
+  it('画法：render 不抛错且产生文本填充；字符与字号入 style', () => {
+    expect(d.style.text).toBe('😀');
+    expect(d.style.fontSize).toBe(EMOJI_SIZE);
+    const { ctx, ops } = makeCtx();
+    expect(() => L.render(ctx)).not.toThrow();
+    expect(ops.text).toBeGreaterThanOrEqual(1);
+  });
+  it('命中：以锚点为中心的方形热区，字形外不命中', () => {
+    expect(L.hitTest(p.x, p.y)!.d.id).toBe(d.id);
+    const h = EMOJI_SIZE / 2 - 1;
+    expect(L.hitTest(p.x - h, p.y - h)!.d.id).toBe(d.id);
+    expect(L.hitTest(p.x + 40, p.y)).toBeNull();
+  });
+  it('手柄 + 撤销：拖唯一锚点换位；undo 退回 / redo 复原', () => {
+    L.select(d.id);
+    expect(L.hitTest(p.x, p.y)!.part).toBe(0);
+    L.onDown(p.x, p.y);
+    L.onMove(p.x + 30, p.y - 25);
+    L.onUp();
+    expect(d.pts[0].price).not.toBe(105);
+    L.undo();
+    expect(L.find(d.id)!.pts[0].price).toBe(105);
+    L.redo();
+    expect(L.find(d.id)!.pts[0].price).not.toBe(105);
   });
 });

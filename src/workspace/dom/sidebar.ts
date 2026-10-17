@@ -25,6 +25,9 @@ import {
   CIRCLE_ICON, ELLIPSE_ICON, POLYLINE_ICON, TRIANGLE_ICON, ARC_ICON,
   CURVE_ICON, HYPERBOLA,
 } from './sidebar-icons';
+import {
+  EMOJI_CATEGORIES, EMOJI_CLOCK_ICON, loadEmojiRecents, saveEmojiRecent,
+} from './emoji-data';
 
 /* ------------------------------------------------------------------ 工具 */
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -84,6 +87,32 @@ const CSS = `
   font-size: 13px; z-index: 1200; display: none;
 }
 .kc-sb-menu.open { display: block; }
+/* —— emoji 面板（设计稿「图标」按钮）：顶部分类 tab + 滚动网格 —— */
+.kc-emoji-panel {
+  position: fixed; width: 434px; padding: 8px 10px 10px; background: #fff;
+  border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.04);
+  z-index: 1200; font-size: 13px; display: none; user-select: none;
+}
+.kc-emoji-panel.open { display: block; }
+.kc-emoji-tabs {
+  display: flex; align-items: center; gap: 2px; padding-bottom: 6px; margin-bottom: 4px;
+  border-bottom: 1px solid rgb(235,235,235);
+}
+.kc-emoji-tabs button {
+  width: 40px; height: 32px; border: 0; background: transparent; border-radius: 6px;
+  cursor: pointer; color: rgb(15,15,15); display: flex; align-items: center; justify-content: center;
+  transition: background-color .06s ease;
+}
+.kc-emoji-tabs button:hover { background: rgb(242,242,242); }
+.kc-emoji-body { max-height: 330px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.kc-emoji-group { margin: 8px 0 2px; color: rgb(130,130,130); font-size: 13px; }
+.kc-emoji-grid { display: grid; grid-template-columns: repeat(9, 44px); }
+.kc-emoji-grid button {
+  width: 44px; height: 42px; border: 0; background: transparent; border-radius: 6px; cursor: pointer;
+  font-size: 26px; line-height: 42px; padding: 0; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+  transition: background-color .06s ease;
+}
+.kc-emoji-grid button:hover { background: rgb(242,242,242); }
 .kc-sb-menu li {
   display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; cursor: pointer;
   transition: background-color .06s ease; white-space: nowrap;
@@ -275,7 +304,7 @@ const SECTIONS: Section[] = [
     { icon: TEXT, caret: CARET, label: '文字', items: [['文字', TEXT], ['椭圆', TEXT], ['便签', TEXT], ['价格标签', TEXT], ['日期范围', TEXT]] },
   ]},
   { tools: [
-    { icon: STICKER, caret: CARET, label: '图标', items: [['图标', STICKER], ['旗帜', STICKER], ['箭头标记', STICKER]] },
+    { icon: STICKER, label: '图标' },
   ]},
   { tools: [
     { icon: MEASURE, label: '测量' },
@@ -296,6 +325,8 @@ const SECTIONS: Section[] = [
 export interface SidebarCallbacks {
   onTool?: (label: string) => void;
   onToggle?: (label: string, on: boolean) => void;
+  /** emoji 面板选中一个字符（设计稿「图标」按钮） */
+  onEmoji?: (char: string) => void;
 }
 
 /* —— 收藏（设计稿悬停行右侧的星标），localStorage 持久化 —— */
@@ -363,6 +394,77 @@ function buildToolMenu(t: ToolDef, pick: (label: string) => void): HTMLUListElem
   return menu;
 }
 
+/**
+ * emoji 面板（设计稿「图标」按钮）：顶部 9 分类 tab + 滚动网格（最近使用 + 各分组）。
+ * 点选 emoji 后回调 onEmoji 并记录到 localStorage 最近使用。
+ */
+function buildEmojiPanel(onEmoji: (char: string) => void): HTMLDivElement {
+  const panel = el('div', 'kc-emoji-panel');
+  const tabs = el('div', 'kc-emoji-tabs');
+  const body = el('div', 'kc-emoji-body');
+
+  let recents = loadEmojiRecents();
+  const renderGroups = (): void => {
+    body.innerHTML = '';
+    recents = loadEmojiRecents();
+    const groups: { label: string; items: string[] }[] = [];
+    if (recents.length) groups.push({ label: '最近使用', items: recents });
+    for (const cat of EMOJI_CATEGORIES) groups.push({ label: cat.label, items: cat.items });
+    for (const g of groups) {
+      const title = el('div', 'kc-emoji-group');
+      title.textContent = g.label;
+      body.appendChild(title);
+      const grid = el('div', 'kc-emoji-grid');
+      for (const ch of g.items) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = ch;
+        b.addEventListener('click', (e) => {
+          e.stopPropagation();
+          saveEmojiRecent(ch);
+          renderGroups(); // 最近使用行即时刷新
+          onEmoji(ch);
+        });
+        grid.appendChild(b);
+      }
+      body.appendChild(grid);
+    }
+  };
+  renderGroups();
+
+  // tab：时钟 = 回顶部（最近使用）；其余点击滚动到对应分组
+  const topTab = document.createElement('button');
+  topTab.type = 'button';
+  topTab.title = '最近使用';
+  topTab.setAttribute('aria-label', '最近使用');
+  topTab.innerHTML = EMOJI_CLOCK_ICON;
+  topTab.addEventListener('click', (e) => {
+    e.stopPropagation();
+    body.scrollTop = 0;
+  });
+  tabs.appendChild(topTab);
+  for (const cat of EMOJI_CATEGORIES) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.title = cat.label;
+    b.setAttribute('aria-label', cat.label);
+    b.innerHTML = cat.icon;
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const idx = EMOJI_CATEGORIES.indexOf(cat);
+      // 分组顺序 = [最近使用] + 分类 → 目标分组偏移 idx+1
+      const titles = body.querySelectorAll('.kc-emoji-group');
+      const target = titles[recents.length ? idx + 1 : idx];
+      if (target) body.scrollTop = (target as HTMLElement).offsetTop - 4;
+    });
+    tabs.appendChild(b);
+  }
+
+  panel.appendChild(tabs);
+  panel.appendChild(body);
+  return panel;
+}
+
 // 开关行的回调由 createSidebar 注入（buildToolMenu 在模块层定义，避免每层传参）
 let cb_onToggle: (label: string, on: boolean) => void = () => { /* 由 createSidebar 赋值 */ };
 
@@ -370,7 +472,7 @@ export function createSidebar(mount: HTMLElement, cb: SidebarCallbacks = {}): HT
   injectStyle();
   cb_onToggle = (label, on) => cb.onToggle?.(label, on);
   // 组件单例：清理上次 mount 残留在 body 下的子菜单（React 严格模式 / 热重载会重复挂载）
-  document.body.querySelectorAll(':scope > .kc-sb-menu').forEach(m => m.remove());
+  document.body.querySelectorAll(':scope > .kc-sb-menu, :scope > .kc-emoji-panel').forEach(m => m.remove());
 
   const root = el('div', 'kc-sidebar');
   root.setAttribute('role', 'toolbar');
@@ -403,6 +505,14 @@ export function createSidebar(mount: HTMLElement, cb: SidebarCallbacks = {}): HT
     selected = btn;
     cb.onTool?.(label);
   };
+
+  // emoji 面板（设计稿「图标」按钮）：挂 body fixed 定位，选中字符回调 onEmoji
+  const emojiPanel = buildEmojiPanel((ch) => {
+    closeMenus();
+    cb.onEmoji?.(ch);
+  });
+  document.body.appendChild(emojiPanel);
+  menus.push(emojiPanel);
 
   for (const section of SECTIONS) {
     const sec = el('div', 'kc-sb-section');
@@ -445,10 +555,17 @@ export function createSidebar(mount: HTMLElement, cb: SidebarCallbacks = {}): HT
         // 菜单挂 body（fixed 定位），避免被 sidebar 的 overflow 裁剪；cell 只留引用关系
         document.body.appendChild(menu);
       } else {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', (e) => {
           if (t.label === '继续绘图') {
             const on = btn.classList.toggle('kc-on');
             cb.onToggle?.(t.label, on);
+          } else if (t.label === '图标') {
+            // 「图标」→ emoji 面板（设计稿直开面板，无子菜单箭头）；
+            // 阻止冒泡到 document 的 closeMenus，否则刚打开就被关掉
+            e.stopPropagation();
+            const was = emojiPanel.classList.contains('open');
+            closeMenus();
+            if (!was) { pick(btn, t.label); openMenuAt(emojiPanel, cell); }
           } else {
             pick(btn, t.label);
           }

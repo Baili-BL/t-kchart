@@ -3,7 +3,7 @@
  * 工具状态不进 zustand：它不影响任何 React 渲染，只需要把事件广播给图层。
  */
 export type DrawEvent =
-  | { type: 'tool'; tool: string }
+  | { type: 'tool'; tool: string; char?: string }
   | { type: 'magnet'; on: boolean }
   | { type: 'hidden'; on: boolean }
   | { type: 'longPressTip'; on: boolean }
@@ -31,6 +31,11 @@ class DrawBus {
   setTool(tool: string): void {
     this.tool = tool;
     this.emit({ type: 'tool', tool });
+  }
+  /** emoji 面板选中字符：切到 emoji 工具并广播字符给各图层 */
+  setEmoji(char: string): void {
+    this.tool = 'emoji';
+    this.emit({ type: 'tool', tool: 'emoji', char });
   }
   setMagnet(on: boolean): void {
     this.magnet = on;
@@ -204,6 +209,8 @@ export function toolKeyForLabel(label: string): string | null {
       return 'rect';
     case '文字':
       return 'text';
+    case '图标':
+      return 'emoji';
     case '测量':
       return 'measure';
     default:
