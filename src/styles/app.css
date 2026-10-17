@@ -246,8 +246,11 @@ input, textarea { font: inherit; color: inherit; }
 /* ------------------------------------------------------------ 图表区 */
 .workspace { flex: 1; min-width: 0; display: flex; background: var(--bg); }
 .ws-main { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
-.ws-middle { flex: 1; min-height: 0; display: flex; }
-.ws-grid { flex: 1; min-width: 0; position: relative; background: var(--bg-sunken); }
+/* 左栏 + 右列：左栏（绘图工具栏）占满顶栏以下的整个高度，一直穿到窗口底部 */
+.ws-body { flex: 1; min-height: 0; display: flex; }
+/* 右列：图表 + 范围条上下叠，范围条只在左栏右边 */
+.ws-stack { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.ws-grid { flex: 1; min-width: 0; min-height: 0; position: relative; background: var(--bg-sunken); }
 
 .draw-toolbar { flex: 0 0 52px; min-height: 0; display: flex; border-right: 1px solid var(--border); }
 .draw-toolbar .kc-sidebar { width: 52px; height: 100%; }
@@ -422,7 +425,8 @@ input, textarea { font: inherit; color: inherit; }
 .range-sep { width: 1px; height: 14px; margin: 0 6px; background: var(--border-strong); }
 .range-btn {
   height: 24px; padding: 0 8px; border: 0; border-radius: var(--radius-s); background: transparent;
-  color: var(--text-2); font-size: 12px;
+  /* 中文比同字号英文更「满」，12px 的汉字偏小；13px 与本应用顶栏一致（官方那一行是 14px） */
+  color: var(--text-2); font-size: 13px;
 }
 .range-btn:hover:not(:disabled) { background: var(--bg-hover); color: var(--text); }
 .range-btn.on { background: var(--bg-active); color: var(--text); font-weight: 600; }

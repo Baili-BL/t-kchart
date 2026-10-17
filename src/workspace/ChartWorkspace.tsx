@@ -19,15 +19,18 @@ export function ChartWorkspace(): JSX.Element {
     <div className="workspace">
       <div className="ws-main">
         <TopBar />
-        <div className="ws-middle">
+        {/* 左栏（绘图工具栏）穿到底：底部范围条只占它右边那一块，不再从它下面横过去 */}
+        <div className="ws-body">
           <DrawToolbar />
-          <div className="ws-grid">
-            <ChartGridView />
-            {buySell && <TradePanel />}
-            <ReplayBar />
+          <div className="ws-stack">
+            <div className="ws-grid">
+              <ChartGridView />
+              {buySell && <TradePanel />}
+              <ReplayBar />
+            </div>
+            <RangeBar />
           </div>
         </div>
-        <RangeBar />
       </div>
       <RightPanel />
       <RightRail />

@@ -597,16 +597,22 @@ export interface RangeDef {
   ms: number | null;
 }
 
+/**
+ * 显示范围按钮。`label` 是**界面文案**（跟官方中文版一致：1天 / 1个月 / 1年 / 全部…），
+ * `key` 是**内部标识**（`setRange` / 布局存档 / Agent 工具参数都用 key，保持英文不变，
+ * 否则老存档与工具调用全失效）。
+ * 官方的第二项是「5天」；本项目的跨度就是 7 天，文案如实写「7天」，不为了长得像而撒谎。
+ */
 export const RANGES: RangeDef[] = [
-  { key: '1D', label: '1D', ms: 86400000 },
-  { key: '7D', label: '7D', ms: 7 * 86400000 },
-  { key: '1M', label: '1M', ms: 30 * 86400000 },
-  { key: '3M', label: '3M', ms: 91 * 86400000 },
-  { key: '6M', label: '6M', ms: 182 * 86400000 },
+  { key: '1D', label: '1天', ms: 86400000 },
+  { key: '7D', label: '7天', ms: 7 * 86400000 },
+  { key: '1M', label: '1个月', ms: 30 * 86400000 },
+  { key: '3M', label: '3个月', ms: 91 * 86400000 },
+  { key: '6M', label: '6个月', ms: 182 * 86400000 },
   { key: 'YTD', label: 'YTD', ms: null },
-  { key: '1Y', label: '1Y', ms: 365 * 86400000 },
-  { key: '5Y', label: '5Y', ms: 1825 * 86400000 },
-  { key: 'ALL', label: 'ALL', ms: null },
+  { key: '1Y', label: '1年', ms: 365 * 86400000 },
+  { key: '5Y', label: '5年', ms: 1825 * 86400000 },
+  { key: 'ALL', label: '全部', ms: null },
 ];
 
 /** 范围至少露出这么多根 —— 否则「1D」在日线图上只剩一根，图会难看 */

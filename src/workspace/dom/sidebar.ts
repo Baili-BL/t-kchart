@@ -92,14 +92,17 @@ export const SIDEBAR_CSS = `
 }
 .kc-sidebar {
   display: flex; flex-direction: column; flex: 0 0 auto; width: 52px;
-  background: var(--kcs-base); color: var(--kcs-ink); user-select: none; position: relative; z-index: 100;
+  /* 轨道底色 = 卡片色：官方左栏整列是一块白（深色下是页面底色），
+     只有分隔线是灰的；以前这里用 --kcs-base（浅色 #ebebeb），
+     工具排完之后的空段就会露出一条灰带（穿到底之后尤其明显）。 */
+  background: var(--kcs-card); color: var(--kcs-ink); user-select: none; position: relative; z-index: 100;
   font: 400 14px/normal -apple-system, "system-ui", "Trebuchet MS", Roboto, Ubuntu, sans-serif;
   font-feature-settings: "lnum","tnum";
   overflow-y: auto; overflow-x: hidden; scrollbar-width: none;
 }
 .kc-sidebar::-webkit-scrollbar { display: none; }
 .kc-sb-section { background: var(--kcs-card); padding: 6px 0; position: relative; }
-.kc-sb-div { height: 1px; background: var(--kcs-base); margin: 0 8px; }
+.kc-sb-div { height: 1px; background: var(--kcs-rule); margin: 0 8px; }
 .kc-sb-section + .kc-sb-div + .kc-sb-section { padding-bottom: 6px; }
 /* —— 工具行：52×38，主按钮 + 悬停浮现的箭头区 —— */
 .kc-sb-tool { position: relative; width: 52px; }
@@ -755,7 +758,7 @@ export function createSidebar(mount: HTMLElement, cb: SidebarCallbacks = {}): HT
   document.body.appendChild(emojiPanel);
   menus.push(emojiPanel);
 
-  for (const section of SECTIONS) {
+  SECTIONS.forEach((section, si) => {
     const sec = el('div', 'kc-sb-section');
     if (section.pad) sec.style.padding = section.pad;
     for (const t of section.tools) {
@@ -821,8 +824,10 @@ export function createSidebar(mount: HTMLElement, cb: SidebarCallbacks = {}): HT
       sec.appendChild(cell);
     }
     root.appendChild(sec);
-    root.appendChild(el('div', 'kc-sb-div'));
-  }
+    // 分隔线只画在两段之间：最后一段后面不再补一条（那条线下面什么都没有，
+    // 穿到底之后就是一条悬空的灰线）
+    if (si < SECTIONS.length - 1) root.appendChild(el('div', 'kc-sb-div'));
+  });
 
   document.addEventListener('click', () => closeMenus());
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenus(); });
