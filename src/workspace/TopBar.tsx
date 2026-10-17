@@ -11,6 +11,7 @@ import type { SyncState } from '../store/chartStore';
 import { drawBus } from './drawBus';
 import { replayController } from '../store/replayStore';
 import { useSymbolSearchStore } from '../store/symbolSearchStore';
+import { useCompareDialogStore } from '../store/compareDialogStore';
 import { useAlertDialogStore } from '../store/alertDialogStore';
 import { useSettingsDialogStore } from '../store/settingsDialogStore';
 import { useStudyStore } from '../store/studyStore';
@@ -152,7 +153,7 @@ export function TopBar(): JSX.Element {
     const tb = createToolbarHandle(host, {
       onSymbol: () => useSymbolSearchStore.getState().openSearch(),
       onQuickSearch: () => useSymbolSearchStore.getState().openSearch(),
-      onCompare: () => toast('比较商品尚未实现'),
+      onCompare: () => useCompareDialogStore.getState().openDialog(),
       onDataType: () => toast('数据类型切换尚未实现（当前为演示数据）'),
       onInterval: (_label, code) => st().setTimeframe(code),
       onStyle: (label, unavailable) => {

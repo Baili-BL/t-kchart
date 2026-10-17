@@ -4,6 +4,7 @@ import type { KChart } from '../engine/chart';
 import { DrawLayer } from '../engine/draw';
 import { mockDataSource } from '../data/mockBars';
 import { useChartStore } from '../store/chartStore';
+import { useCompareStore } from '../store/compareStore';
 import { useStudyStore } from '../store/studyStore';
 import { useAppStore } from '../store/appStore';
 import { registerGrid } from './gridRegistry';
@@ -43,6 +44,7 @@ export function ChartGridView(): JSX.Element {
       chartOptions: CHART_COLORS,
       legendInset: 8,
       symbolNameFor: (t) => SYMBOL_BY_TICKER.get(t)?.name ?? '',
+      exchangeFor: (t) => SYMBOL_BY_TICKER.get(t)?.exchange ?? '',
     });
     registerGrid(grid);
 
@@ -59,6 +61,17 @@ export function ChartGridView(): JSX.Element {
     grid.setStudies(useStudyStore.getState().studies);
     const unStudies = useStudyStore.subscribe((s, prev) => {
       if (s.studies !== prev.studies) grid.setStudies(s.studies);
+    });
+
+    /* ---------- 比较商品：store 只存代码/颜色/显隐，价格由网格按每格自己的周期对齐 ---------- */
+    grid.setCompareHandler((ticker, action) => {
+      const cs = useCompareStore.getState();
+      if (action === 'toggle') cs.toggle(ticker);
+      else cs.remove(ticker);
+    });
+    grid.setCompares(useCompareStore.getState().items);
+    const unCompare = useCompareStore.subscribe((s, prev) => {
+      if (s.items !== prev.items) grid.setCompares(s.items);
     });
 
     /* ---------- 绘图层：每格一个，按需创建 ---------- */
@@ -255,6 +268,7 @@ export function ChartGridView(): JSX.Element {
       unReplay();
       unsub();
       unStudies();
+      unCompare();
       unTheme();
       unSettings();
       unbindDraw();

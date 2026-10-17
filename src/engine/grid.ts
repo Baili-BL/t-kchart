@@ -23,6 +23,8 @@ import { DEFAULT_LAYOUT_ID, LayoutDef, gridTemplate, layoutById, uniformLayoutId
 import type { StudyDef } from './studies';
 import { AppearancePatch, Bar, ChartOptions, ChartStyle, RANGES, KChart, clamp, log, makeBars, resample } from './chart';
 import type { StudyAction } from './chart';
+import { alignCloses } from './compare';
+import type { CompareSeries } from './compare';
 
 export interface SymbolDef {
   ticker: string;
@@ -64,6 +66,8 @@ export interface GridOptions {
   sync?: SyncFlags;
   /** 每格图例的左缩进，给左上角编号徽章让位 */
   legendInset?: number;
+  /** 比较商品的交易所简称（比较图例行显示）。不传则只显示代码与周期。 */
+  exchangeFor?: (ticker: string) => string;
 }
 
 export interface Tile {
@@ -135,6 +139,13 @@ export class ChartGrid {
   /** 图上的指标定义：所有格共用，新建的格子也要补上 */
   private studyDefs: StudyDef[] = [];
   private studyHandler: ((uid: string, action: StudyAction) => void) | null = null;
+  /**
+   * 比较商品（顶栏「比较」）：全格共用同一组代码 / 颜色 / 显隐。
+   * 数据不缓存 —— 每格按**自己的周期**现场对齐，30m 格和 1D 格看到的比较线才都对。
+   */
+  private compareDefs: { ticker: string; color: string; visible: boolean }[] = [];
+  private compareHandler: ((ticker: string, action: 'toggle' | 'remove') => void) | null = null;
+  private exchangeFor: ((ticker: string) => string) | null = null;
 
   constructor(target: HTMLElement | string, options?: GridOptions) {
     const el = typeof target === 'string' ? document.querySelector(target) : target;
@@ -144,6 +155,7 @@ export class ChartGrid {
     if (o.dataSource) this.source = o.dataSource;
     if (o.chartOptions) this.chartOptions = o.chartOptions;
     if (o.symbolNameFor) this.symbolNameFor = o.symbolNameFor;
+    if (o.exchangeFor) this.exchangeFor = o.exchangeFor;
     this.styleName = this.chartOptions.style ?? 'candles';
     if (o.symbols && o.symbols.length) this.initialSymbols = o.symbols.slice();
     const byId = o.layoutId ? layoutById(o.layoutId) : null;
@@ -231,12 +243,14 @@ export class ChartGrid {
       chart.setStyle(this.styleName);
       chart.setStudyHandler(this.studyHandler);
       if (this.studyDefs.length) chart.setStudies(this.studyDefs);
+      chart.setCompareHandler(this.compareHandler);
 
       const tile: Tile = { el, canvas, badge, chart, symbol: ticker, timeframe: this.timeframe };
       el.addEventListener('pointerdown', () => this.setActive(i), { passive: true });
       this.tiles.push(tile);
     }
     for (let i = 0; i < this.tiles.length; i++) this.tiles[i].badge.textContent = String(i + 1);
+    if (this.compareDefs.length) this.applyCompares();
   }
 
   /** 均匀 rows × cols 入口（兼容旧调用）；没有这种均匀布局时返回 false、不动 */
@@ -377,6 +391,8 @@ export class ChartGrid {
     t.symbol = ticker;
     t.timeframe = tf;
     t.chart.setBars(this.source(ticker, tf), { symbol: ticker, timeframe: tf });
+    // 换周期后时间轴变了，比较线必须重新对齐（否则画在旧的时间点上）
+    this.applyCompares(t);
   }
 
   /** 标的。sync.symbol 开 → 全部格子；关 → 只改当前活动格。 */
@@ -498,6 +514,41 @@ export class ChartGrid {
   setStudyHandler(fn: ((uid: string, action: StudyAction) => void) | null): void {
     this.studyHandler = fn;
     for (const t of this.tiles) t.chart.setStudyHandler(fn);
+  }
+
+  /* ------------------------------------------------------------- 比较商品 */
+
+  /**
+   * 整体换一组比较商品。只保存「代码 / 颜色 / 显隐」，价格数据按每格周期现场生成 ——
+   * 这样多周期布局里，30m 格的比较线用 30m 数据，1D 格用日线，两边都说得通。
+   */
+  setCompares(defs: { ticker: string; color: string; visible: boolean }[]): void {
+    this.compareDefs = defs.map((d) => ({ ...d }));
+    this.applyCompares();
+  }
+
+  /** 比较图例上的「显隐 / 删除」被点击（动作由宿主写回 store，网格不持有业务状态） */
+  setCompareHandler(fn: ((ticker: string, action: 'toggle' | 'remove') => void) | null): void {
+    this.compareHandler = fn;
+    for (const t of this.tiles) t.chart.setCompareHandler(fn);
+  }
+
+  private applyCompares(only?: Tile): void {
+    const targets = only ? [only] : this.tiles;
+    if (!this.compareDefs.length) {
+      for (const t of targets) t.chart.setCompares([]);
+      return;
+    }
+    for (const t of targets) {
+      const list: CompareSeries[] = this.compareDefs.map((d) => ({
+        ticker: d.ticker,
+        exchange: this.exchangeFor ? this.exchangeFor(d.ticker) : '',
+        color: d.color,
+        visible: d.visible,
+        values: alignCloses(t.chart.bars, this.source(d.ticker, t.timeframe)),
+      }));
+      t.chart.setCompares(list);
+    }
   }
 
   chartStyleNow(): ChartStyle {

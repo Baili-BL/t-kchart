@@ -28,6 +28,8 @@ import {
   PANE_COLLAPSED_H, PANE_MAIN_MIN_H, PANE_MIN_WEIGHT, PANE_SEPARATOR_HIT,
 } from './paneLayout';
 import type { PaneLayoutState } from './paneLayout';
+import { equivPrices, lastValueIndex, percentAt } from './compare';
+import type { CompareSeries, EquivLine } from './compare';
 
 /* ===========================================================================
  * 1. 类型（编译时整体擦除）
@@ -802,6 +804,16 @@ export class KChart {
   private extraMarks: { index: number; price: number; color: string; text: string; above: boolean }[] = [];
   channels: Channel[] = [];
 
+  /**
+   * 比较商品（顶栏「比较」按钮加进来的那些线）。
+   * 它们**不是价格**：先按可见左端归一成百分比，再折回主图价格坐标系的等价价格，
+   * 所以绘制、自动缩放、右轴标签全都复用主图这套 yOf()。算法见 compare.ts。
+   */
+  compares: CompareSeries[] = [];
+  /** 比较图例上的按钮（显隐 / 删除）：每次重绘重建，点击时据此命中 */
+  private compareHits: { ticker: string; action: 'toggle' | 'remove'; x: number; y: number; w: number; h: number }[] = [];
+  private compareHandler: ((ticker: string, action: 'toggle' | 'remove') => void) | null = null;
+
   /** 通过 setStudies() 加进来的指标（Pine v6 脚本的运行结果）：overlay 画主图，其余各占一个副图 */
   studies: Study[] = [];
   /** 指标图例上的按钮（设置 / 删除 / 最大化 / 折叠）：每次重绘重建，鼠标点击时据此命中 */
@@ -1127,6 +1139,34 @@ export class KChart {
   setAppearance(patch: AppearancePatch): void {
     Object.assign(this.o, patch);
     this.invalidate();
+  }
+
+  /* ------------------------------------------------------------ 比较商品 */
+
+  /**
+   * 换一组比较商品。`values` 必须已经按**本图的时间轴**对齐（由 grid 负责）——
+   * 这里只关心画，不关心数据从哪来。
+   */
+  setCompares(list: CompareSeries[]): void {
+    this.compares = list;
+    this.invalidate();
+  }
+
+  /** 比较图例上的按钮被点击（显隐 / 删除）。图例本身不持有状态，动作交还宿主（store）。 */
+  setCompareHandler(fn: ((ticker: string, action: 'toggle' | 'remove') => void) | null): void {
+    this.compareHandler = fn;
+  }
+
+  /** 自检 / 外部读取：每条比较线在可见末端的百分比（相对可见左端基准）。 */
+  compareEndPercents(): { ticker: string; pct: number | null }[] {
+    const [i0, i1] = this.visible();
+    const lo = Math.max(0, i0);
+    const hi = Math.min(this.bars.length - 1, i1);
+    const mainBase = this.bars[lo] ? this.bars[lo].close : 0;
+    return this.compares.map((c) => {
+      const eq = equivPrices(c.values, mainBase, lo, hi);
+      return { ticker: c.ticker, pct: eq ? percentAt(c.values, eq.baseIndex, hi) : null };
+    });
   }
 
   style(): ChartStyle {
@@ -1538,6 +1578,13 @@ export class KChart {
       const py = e.offsetY;
       try { c.setPointerCapture(e.pointerId); } catch (_e) { /* 忽略 */ }
       this.pointer = { x: px, y: py };
+      // 比较图例上的按钮（显隐 / 删除）
+      const cmpBtn = this.hitCompareButton(px, py);
+      if (cmpBtn) {
+        if (this.compareHandler) this.compareHandler(cmpBtn.ticker, cmpBtn.action);
+        this.invalidate();
+        return;
+      }
       // 指标图例上的按钮先挑
       const btn = this.hitStudyButton(px, py);
       if (btn) {
@@ -1593,7 +1640,7 @@ export class KChart {
       // 外部图层的光标优先（橡皮擦的 url(...) 必须由绘图层给，否则这里会把它盖回 crosshair）
       const custom = py < this.plot.b && this.hooks && this.hooks.cursorFor
         ? this.hooks.cursorFor(px, py) : '';
-      c.style.cursor = custom || (this.hitStudyButton(px, py) ? 'pointer'
+      c.style.cursor = custom || (this.hitStudyButton(px, py) || this.hitCompareButton(px, py) ? 'pointer'
         : this.hoverSep >= 0 ? 'ns-resize' : 'crosshair');
       if (this.dragging) {
         const dx = e.clientX - this.dragX;
@@ -1778,6 +1825,21 @@ export class KChart {
         }
       }
     }
+    // 比较商品：按「可见左端 = 0%」折成等价价格后一起参与缩放，否则比较线会被切掉
+    if (this.compares.length && this.bars.length) {
+      const mainBase = this.bars[lo].close;
+      for (const c of this.compares) {
+        if (!c.visible) continue;
+        const eq = equivPrices(c.values, mainBase, lo, hi);
+        if (!eq) continue;
+        for (let i = lo; i <= hi; i++) {
+          const v = eq.prices[i];
+          if (v == null) continue;
+          if (v < min) min = v;
+          if (v > max) max = v;
+        }
+      }
+    }
     if (!isFinite(min) || !isFinite(max)) return { min: 0, max: 1 };
     if (max - min < 1e-9) { max = min + 1; }
     const pad = (max - min) * this.o.padding;
@@ -1807,6 +1869,7 @@ export class KChart {
     this.drawLines(i0, i1);          // MA
     this.drawChannelLines(i0, i1);   // 通道线在 K 线上面
     this.drawOverlayStudies(i0, i1); // Pine v6 指标（overlay=true）
+    this.drawCompares(i0, i1);       // 比较商品：压在所有线之上，别被 K 线盖住
     this.drawMarks();                // Pine plotshape 打点
     if (this.hooks && this.hooks.onDraw) this.hooks.onDraw(ctx);   // 外部图层（绘图工具）
     this.drawCrosshairV();
@@ -1816,10 +1879,12 @@ export class KChart {
     ctx.restore();
 
     this.studyHits = [];
+    this.compareHits = [];
     this.drawPriceAxis();
     this.drawStudyPanes(i0, i1);
     this.drawTimeAxis(i0, i1);
     this.drawLastPrice();
+    this.drawCompareAxisTags(i0, i1);
     this.drawCrosshairLabels(i0, i1);
     this.drawLongPressTip();
     this.drawLegend(i0, i1);
@@ -2061,6 +2126,14 @@ export class KChart {
   private hitStudyButton(px: number, py: number): { uid: string; action: StudyAction } | null {
     for (const h of this.studyHits) {
       if (px >= h.x && px <= h.x + h.w && py >= h.y && py <= h.y + h.h) return { uid: h.uid, action: h.action };
+    }
+    return null;
+  }
+
+  /** 点中了比较图例上的哪个按钮（显隐 / 删除） */
+  private hitCompareButton(px: number, py: number): { ticker: string; action: 'toggle' | 'remove' } | null {
+    for (const h of this.compareHits) {
+      if (px >= h.x && px <= h.x + h.w && py >= h.y && py <= h.y + h.h) return { ticker: h.ticker, action: h.action };
     }
     return null;
   }
@@ -2726,6 +2799,142 @@ export class KChart {
     ctx.fillText(label, p.r + 8, y);
   }
 
+  /* --------------------------------------------------------- 比较商品绘制 */
+
+  /** 一条比较线的等价价格（按可见左端归一）。数据不足 / 全空返回 null。 */
+  private compareLine(c: CompareSeries, i0: number, i1: number): EquivLine | null {
+    if (!this.bars.length) return null;
+    const lo = Math.max(0, i0);
+    const hi = Math.min(this.bars.length - 1, i1);
+    if (hi < lo) return null;
+    return equivPrices(c.values, this.bars[lo].close, lo, hi);
+  }
+
+  /** 比较线：逐根折线，缺数据的根断开（不连前值，避免画出一段不存在的横线） */
+  private drawCompares(i0: number, i1: number): void {
+    if (!this.compares.length) return;
+    const ctx = this.ctx;
+    const lo = Math.max(0, i0);
+    const hi = Math.min(this.bars.length - 1, i1);
+    if (hi < lo) return;
+    for (const c of this.compares) {
+      if (!c.visible) continue;
+      const eq = this.compareLine(c, i0, i1);
+      if (!eq) continue;
+      const path = new Path2D();
+      let open = false;
+      for (let i = lo; i <= hi; i++) {
+        const v = eq.prices[i];
+        if (v == null) { open = false; continue; }
+        const x = this.xCenter(i);
+        const y = this.yOf(v);
+        if (open) path.lineTo(x, y);
+        else { path.moveTo(x, y); open = true; }
+      }
+      ctx.save();
+      ctx.strokeStyle = c.color;
+      ctx.lineWidth = 1.5;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.stroke(path);
+      ctx.restore();
+    }
+  }
+
+  /**
+   * 右轴上的比较线标签：彩色小块 + 「+1.23%」（相对可见左端）。
+   * 与最新价标签 / 彼此至少隔 20px，先向上让、顶到头再向下找 —— 宁可挪位置，也不叠字。
+   */
+  private drawCompareAxisTags(i0: number, i1: number): void {
+    if (!this.compares.length || !this.bars.length) return;
+    const ctx = this.ctx;
+    const p = this.plot;
+    const lo = Math.max(0, i0);
+    const hi = Math.min(this.bars.length - 1, i1);
+    if (hi < lo) return;
+    const tags: { text: string; color: string; y: number }[] = [];
+    for (const c of this.compares) {
+      if (!c.visible) continue;
+      const eq = this.compareLine(c, i0, i1);
+      if (!eq) continue;
+      const at = lastValueIndex(c.values, lo, hi);
+      if (at < 0) continue;
+      const price = eq.prices[at];
+      const pct = percentAt(c.values, eq.baseIndex, hi);
+      if (price == null || pct == null) continue;
+      tags.push({
+        color: c.color,
+        text: (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%',
+        y: this.yOf(price),
+      });
+    }
+    if (!tags.length) return;
+    const lastB = this.bars[this.bars.length - 1];
+    const used: number[] = [Math.round(this.yOf(lastB.close))];
+    const top = p.t + 9;
+    const bottom = p.b - 9;
+    ctx.font = this.o.font;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    for (const tg of tags) {
+      let y = clamp(Math.round(tg.y), top, bottom);
+      let n = 0;
+      while (used.some((u) => Math.abs(u - y) < 20) && n++ < 60) y -= 20;
+      if (y < top) {
+        y = clamp(Math.round(tg.y), top, bottom);
+        n = 0;
+        while (used.some((u) => Math.abs(u - y) < 20) && n++ < 60) y += 20;
+      }
+      used.push(y);
+      const tw = ctx.measureText(tg.text).width;
+      const bw = Math.max(this.o.axisWidth - 4, tw + 12);
+      ctx.fillStyle = tg.color;
+      ctx.fillRect(p.r + 2, y - 9, bw, 18);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(tg.text, p.r + 8, y);
+    }
+  }
+
+  /** 图例上 16×16 的「眼睛 / 眼睛带斜杠」图标（canvas 画，不依赖字体里的 emoji） */
+  private drawEyeIcon(x: number, y: number, color: string, open: boolean): void {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.2;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.bezierCurveTo(x + 3.5, y - 4.2, x + 10.5, y - 4.2, x + 14, y);
+    ctx.bezierCurveTo(x + 10.5, y + 4.2, x + 3.5, y + 4.2, x, y);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x + 7, y, 2, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    if (!open) {
+      ctx.beginPath();
+      ctx.moveTo(x - 1, y + 5.5);
+      ctx.lineTo(x + 15, y - 5.5);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  private drawXIcon(cx: number, cy: number, color: string): void {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.3;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(cx - 3.5, cy - 3.5);
+    ctx.lineTo(cx + 3.5, cy + 3.5);
+    ctx.moveTo(cx + 3.5, cy - 3.5);
+    ctx.lineTo(cx - 3.5, cy + 3.5);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   /** 取消长按提示（计时器 + 已显示的框）。redraw=true 时顺带重绘 */
   private clearLongPress(redraw = false): void {
     if (this.lpTimer != null) { clearTimeout(this.lpTimer); this.lpTimer = null; }
@@ -2862,6 +3071,7 @@ export class KChart {
 
     const rowH = 17;
     const x0 = p.l + this.o.legendInset;
+    const ptr = this.pointer;
     let y = p.t + 12;
 
     // 行 ① —— 主图（各元素可由设置对话框的「商品代码」页开关）
@@ -2906,6 +3116,37 @@ export class KChart {
     }
     if (idx != null) put('· ' + fmtTime(b.time, 30), this.o.axisTextColor, 10);
 
+    // 行 ①.5 —— 比较商品：色块 + 代码 + 周期 + 交易所 + 相对可见左端的涨跌幅。
+    //           悬停才出「眼睛 / ✕」：这行是叠加物的控制条，按钮不该常驻抢注意力。
+    for (const c of this.compares) {
+      y += rowH;
+      x = x0;
+      const eq = this.compareLine(c, i0, i1);
+      const pct = eq ? percentAt(c.values, eq.baseIndex, i) : null;
+      const hover = !!ptr && Math.abs(ptr.y - y) <= rowH / 2 && ptr.x >= x0 - 4 && ptr.x <= p.r - 6;
+      ctx.globalAlpha = c.visible ? 1 : 0.45;
+      fillRoundRect(ctx, x, y - 4, 8, 8, 2, c.color);
+      x += 14;
+      put(c.ticker, this.o.titleColor, 8);
+      put(this.o.timeframe, this.o.axisTextColor, 8);
+      if (c.exchange) put(c.exchange, this.o.axisTextColor, 10);
+      if (pct != null) {
+        put((pct >= 0 ? '+' : '') + pct.toFixed(2) + '%', pct >= 0 ? this.o.upColor : this.o.downColor, 10);
+      }
+      ctx.globalAlpha = 1;
+      if (hover) {
+        const bx = Math.round(x + 6);
+        const by = Math.round(y - 9);
+        // 18×18 的淡底：没有它，两个细线图标在 K 线上几乎看不见（指标行也是这么做的）
+        fillRoundRect(ctx, bx, by, 18, 18, 4, 'rgba(120,123,134,0.22)');
+        fillRoundRect(ctx, bx + 22, by, 18, 18, 4, 'rgba(120,123,134,0.22)');
+        this.drawEyeIcon(bx + 2, y, this.o.axisTextColor, c.visible);
+        this.compareHits.push({ ticker: c.ticker, action: 'toggle', x: bx, y: by, w: 18, h: 18 });
+        this.drawXIcon(bx + 31, y, this.o.axisTextColor);
+        this.compareHits.push({ ticker: c.ticker, action: 'remove', x: bx + 22, y: by, w: 18, h: 18 });
+      }
+    }
+
     // 行 ② —— MA
     y += rowH;
     x = x0;
@@ -2936,7 +3177,6 @@ export class KChart {
     }
 
     // Pine v6 指标：overlay 的和运行失败的各占一行（副图指标的图例在各自的副图里）
-    const ptr = this.pointer;
     for (const st of this.studies) {
       if (st.output && !st.output.overlay) continue;
       y += rowH;
@@ -3437,6 +3677,51 @@ export function selfTest(chart: KChart): TestResult {
     chart.setBars(fullCopy);
     t('回放中换数据（setBars）= 回放作废、显示新数据全部', chart.replayCount() === null && chart.bars.length === fullN);
     t('centerIndex 落在数据范围内', chart.centerIndex() >= 0 && chart.centerIndex() <= chart.bars.length - 1);
+  }
+
+  // --- 比较商品（2.10）：归一 / 折回 / 自动缩放 / 清空恢复 ---
+  {
+    chart.showLast(DEFAULT_VISIBLE_BARS);
+    chart.drawNow();
+    const [ci0, ci1] = chart.visible();
+    const clo = Math.max(0, ci0);
+    const chi = Math.min(chart.bars.length - 1, ci1);
+    const baseClose = chart.bars[clo].close;
+    const sBefore = { min: chart.scale.min, max: chart.scale.max };
+    const cmpBase = { ticker: 'CMP', exchange: 'SP', color: '#2962ff', visible: true };
+
+    // ① 整条序列等比放大：百分比与主图完全一致，等价价格也就处处等于收盘价
+    chart.setCompares([{ ...cmpBase, values: chart.bars.map((b) => b.close * 2) }]);
+    chart.drawNow();
+    const pctCmp = chart.compareEndPercents()[0].pct;
+    const pctMain = ((chart.bars[chi].close - baseClose) / baseClose) * 100;
+    t('比较商品：等比序列的涨跌幅与主图一致', pctCmp != null && near(pctCmp, pctMain, 1e-6),
+      pctCmp == null ? 'null' : pctCmp.toFixed(4) + ' vs ' + pctMain.toFixed(4));
+    t('比较商品：与主图重合时不改变价格轴范围',
+      near(chart.scale.min, sBefore.min, 1e-9) && near(chart.scale.max, sBefore.max, 1e-9),
+      '[' + chart.scale.min.toFixed(2) + ',' + chart.scale.max.toFixed(2) + ']');
+
+    // ② 一路涨到 1.5 倍：价格轴必须把它包进来，否则线会被切掉
+    const wideVals = chart.bars.map((b, i) => b.close * (i <= chi ? 1 + (0.5 * Math.max(0, i - clo)) / Math.max(1, chi - clo) : 1));
+    chart.setCompares([{ ...cmpBase, values: wideVals }]);
+    chart.drawNow();
+    t('比较商品：极端走势会被算进价格轴（不被切掉）', chart.scale.max > sBefore.max + 1e-6,
+      chart.scale.max.toFixed(2) + ' > ' + sBefore.max.toFixed(2));
+
+    // ③ 全空 / 隐藏：不画假线，百分比为 null
+    chart.setCompares([{ ...cmpBase, values: chart.bars.map(() => null) }]);
+    chart.drawNow();
+    t('比较商品：全空数据时百分比为 null（不画假线）', chart.compareEndPercents()[0].pct === null);
+    chart.setCompares([{ ...cmpBase, visible: false, values: wideVals }]);
+    chart.drawNow();
+    t('比较商品：隐藏后不参与价格轴', near(chart.scale.max, sBefore.max, 1e-9),
+      chart.scale.max.toFixed(2) + ' vs ' + sBefore.max.toFixed(2));
+
+    // ④ 清空后一切复原（自检必须幂等）
+    chart.setCompares([]);
+    chart.drawNow();
+    t('比较商品：清空后价格轴恢复',
+      near(chart.scale.min, sBefore.min, 1e-9) && near(chart.scale.max, sBefore.max, 1e-9));
   }
 
   // 收尾：恢复成初始视图（即默认缩放的 200 根）

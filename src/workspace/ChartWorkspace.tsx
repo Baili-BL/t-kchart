@@ -9,6 +9,7 @@ import { RangeBar } from './RangeBar';
 import { RightPanel } from './RightPanel';
 import { RightRail } from './RightRail';
 import { SymbolSearchDialog } from './SymbolSearchDialog';
+import { CompareDialog } from './CompareDialog';
 import { TopBar } from './TopBar';
 import { useChartSettingsStore } from '../store/chartSettingsStore';
 
@@ -35,6 +36,7 @@ export function ChartWorkspace(): JSX.Element {
       <RightPanel />
       <RightRail />
       <SymbolSearchDialog />
+      <CompareDialog />
       <AlertDialog />
       <SettingsDialog />
       <IndicatorDialog />
