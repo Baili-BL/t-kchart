@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from '../ui/icons';
+import { Select } from '../ui/Select';
 import { useChartStore } from '../store/chartStore';
 import { useSymbolSearchStore } from '../store/symbolSearchStore';
 import { CATEGORY_LABELS, CATEGORY_TAG, distinctValues, searchSymbols } from '../data/symbols';
@@ -37,40 +38,20 @@ function ExchangeBadge({ name }: { name: string }): JSX.Element {
   );
 }
 
-/** 下拉：和设计稿一样是「文字 + 小箭头」的纯文字按钮，展开后是一列可选项 */
+/** 下拉：统一走 ui/Select（ghost 形态：文字 + 小箭头）。空值 = 显示「所有…」占位 */
 function Dropdown({
   label, value, options, onChange, disabled,
 }: { label: string; value: string; options: string[]; onChange: (v: string) => void; disabled?: boolean }): JSX.Element {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent): void => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
-  }, [open]);
   return (
-    <div className="sym-dd" ref={ref} data-open={open}>
-      <button type="button" className="sym-dd-btn" disabled={disabled} aria-haspopup="listbox" aria-expanded={open}
-        onClick={() => setOpen((o) => !o)} data-active={value !== ''}>
-        <span>{value || label}</span>
-        <Icon name="chevronDown" size={12} />
-      </button>
-      {open && (
-        <ul className="sym-dd-menu" role="listbox">
-          {[''].concat(options).map((o) => (
-            <li key={o || '__all'}>
-              <button type="button" role="option" aria-selected={o === value} className={o === value ? 'sel' : ''}
-                onClick={() => { onChange(o); setOpen(false); }}>
-                {o || label}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+    <Select
+      variant="ghost"
+      label={label}
+      placeholder={label}
+      value={value}
+      disabled={disabled}
+      options={[{ value: '', label }, ...options.map((o) => ({ value: o, label: o }))]}
+      onChange={(v) => onChange(String(v))}
+    />
   );
 }
 

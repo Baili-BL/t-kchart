@@ -21,7 +21,8 @@
 
 import { DEFAULT_LAYOUT_ID, LayoutDef, gridTemplate, layoutById, uniformLayoutId } from './layouts';
 import type { StudyDef } from './studies';
-import { Bar, ChartOptions, ChartStyle, RANGES, KChart, clamp, log, makeBars, resample } from './chart';
+import { AppearancePatch, Bar, ChartOptions, ChartStyle, RANGES, KChart, clamp, log, makeBars, resample } from './chart';
+import type { StudyAction } from './chart';
 
 export interface SymbolDef {
   ticker: string;
@@ -48,6 +49,8 @@ export interface GridOptions {
   dataSource?: DataSource;
   /** 透传给每格 KChart 的选项（如美股习惯的涨绿跌红） */
   chartOptions?: Partial<ChartOptions>;
+  /** 图例「名称」：标的代码 → 展示名。不传则图例不显示名称。 */
+  symbolNameFor?: (ticker: string) => string;
   /** 每格的初始标的（按格序号轮流取）；不传则用内置演示标的 */
   symbols?: string[];
   /** 均匀网格的行列数（兼容旧入口）；同时给了 layoutId 时以 layoutId 为准 */
@@ -126,11 +129,12 @@ export class ChartGrid {
   private ready = false;
   private source: DataSource = barsFor;
   private chartOptions: Partial<ChartOptions> = {};
+  private symbolNameFor: ((ticker: string) => string) | null = null;
   private initialSymbols: string[] = [];
   private styleName: ChartStyle = 'candles';
   /** 图上的指标定义：所有格共用，新建的格子也要补上 */
   private studyDefs: StudyDef[] = [];
-  private studyHandler: ((uid: string, action: 'settings' | 'remove') => void) | null = null;
+  private studyHandler: ((uid: string, action: StudyAction) => void) | null = null;
 
   constructor(target: HTMLElement | string, options?: GridOptions) {
     const el = typeof target === 'string' ? document.querySelector(target) : target;
@@ -139,6 +143,7 @@ export class ChartGrid {
     const o: GridOptions = options || {};
     if (o.dataSource) this.source = o.dataSource;
     if (o.chartOptions) this.chartOptions = o.chartOptions;
+    if (o.symbolNameFor) this.symbolNameFor = o.symbolNameFor;
     this.styleName = this.chartOptions.style ?? 'candles';
     if (o.symbols && o.symbols.length) this.initialSymbols = o.symbols.slice();
     const byId = o.layoutId ? layoutById(o.layoutId) : null;
@@ -216,6 +221,7 @@ export class ChartGrid {
       const chart = new KChart(canvas, this.source(ticker, this.timeframe), {
         ...this.chartOptions,
         symbol: ticker,
+        symbolName: this.symbolNameFor?.(ticker) ?? '',
         timeframe: this.timeframe,
         legendInset: this.legendInset,
         onCrosshair: (idx: number | null) => this.onCross(i, idx),
@@ -488,8 +494,8 @@ export class ChartGrid {
     return this.studyDefs;
   }
 
-  /** 指标图例上的「设置 / 删除」按钮被点击 */
-  setStudyHandler(fn: ((uid: string, action: 'settings' | 'remove') => void) | null): void {
+  /** 指标图例上的「设置 / 删除」按钮被点击（max / collapse 由 KChart 内部消化，不会到这里） */
+  setStudyHandler(fn: ((uid: string, action: StudyAction) => void) | null): void {
     this.studyHandler = fn;
     for (const t of this.tiles) t.chart.setStudyHandler(fn);
   }
@@ -507,6 +513,14 @@ export class ChartGrid {
   /** 对每一格执行（比如切换 BB 通道、圆圈规则） */
   eachTile(fn: (chart: KChart, i: number) => void): void {
     for (let i = 0; i < this.tiles.length; i++) fn(this.tiles[i].chart, i);
+  }
+
+  /**
+   * 设置对话框的外观广播：每格拿到「按它自己的标的算好」的外观补丁。
+   * symbolName 由这里注入 —— KChart 不认识标的目录，只有格子知道自己是哪个 ticker。
+   */
+  applyAppearance(patchFor: (ticker: string) => AppearancePatch): void {
+    this.eachTile((c, i) => c.setAppearance(patchFor(this.tiles[i].symbol)));
   }
 
   /** 全部格子重新显示最近 k 根并互相对齐 */

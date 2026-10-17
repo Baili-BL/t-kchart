@@ -13,7 +13,6 @@ export interface UserInfo {
 
 interface AppState {
   nav: NavKey;
-  sidebarCollapsed: boolean;
   /** Agent 面板宽度（px） */
   agentWidth: number;
   agentCollapsed: boolean;
@@ -22,7 +21,6 @@ interface AppState {
   user: UserInfo;
 
   setNav: (n: NavKey) => void;
-  toggleSidebar: () => void;
   setAgentWidth: (w: number) => void;
   toggleAgent: () => void;
   setRightPanel: (k: RightPanelKind | null) => void;
@@ -36,7 +34,6 @@ export const AGENT_MAX = 560;
 
 export const useAppStore = create<AppState>((set) => ({
   nav: 'quant',
-  sidebarCollapsed: false,
   agentWidth: 310,
   agentCollapsed: false,
   rightPanel: null,
@@ -44,7 +41,6 @@ export const useAppStore = create<AppState>((set) => ({
   user: { name: 'kevin', email: 'kevin@example.com', credits: 295 },
 
   setNav: (nav) => set({ nav }),
-  toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
   setAgentWidth: (w) => set({ agentWidth: Math.min(AGENT_MAX, Math.max(AGENT_MIN, Math.round(w))) }),
   toggleAgent: () => set((s) => ({ agentCollapsed: !s.agentCollapsed })),
   setRightPanel: (rightPanel) => set({ rightPanel }),

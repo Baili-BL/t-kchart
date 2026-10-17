@@ -5,6 +5,7 @@
 import type { KChart } from '../engine/chart';
 import { log } from '../engine/chart';
 import type { StudyDef } from '../engine/studies';
+import { paneScale, paneTicks } from '../engine/studies';
 import { indicatorById, makeStudyDef } from './index';
 
 export interface StudyTestResult {
@@ -97,11 +98,87 @@ export function studySelfTest(chart: KChart): StudyTestResult {
   fire('pointermove', 120, pr.t + pr.h / 2);
   chart.drawNow();
   const hits = (chart as unknown as { studyHits: { uid: string; action: string; x: number; y: number; w: number; h: number }[] }).studyHits;
-  t('悬停副图 → 出现 ⚙ ✕ 两个按钮', hits.length === 2 && hits.map((h) => h.action).join() === 'settings,remove', JSON.stringify(hits.map((h) => h.action)));
+  t('悬停副图 → ⚙ ✕ □ ▼ 四个按钮（2.6 窗格控制）',
+    hits.length === 4 && hits.map((h) => h.action).join() === 'settings,remove,max,collapse', JSON.stringify(hits.map((h) => h.action)));
   const rm = hits.find((h) => h.action === 'remove');
   if (rm) { fire('pointerdown', rm.x + 8, rm.y + 8); fire('pointerup', rm.x + 8, rm.y + 8); }
   t('点 ✕ → 回调 (uid, "remove")，且不会被当成拖拽', actions.join() === 'x#hist:remove', actions.join());
   chart.setStudyHandler(null);
+
+  // ---- 2.6 副图窗格：拖分隔条改高 / 最大化 / 折叠 / 各自坐标轴
+  chart.setStudies([def('rsi'), def('macd')]);
+  chart.drawNow();
+  const avail26 = chart.H - chart.opts().axisHeight - 6;
+  let prs = chart.paneRects();
+  const mainH0 = chart.plot.h;
+  const p0h0 = prs[0].rect.h;
+  const p1h0 = prs[1].rect.h;
+  // 拖主图↔副图分隔条：向下 60px
+  fire('pointerdown', 100, prs[0].rect.t);
+  fire('pointermove', 100, prs[0].rect.t + 60);
+  fire('pointerup', 100, prs[0].rect.t + 60);
+  chart.drawNow();
+  prs = chart.paneRects();
+  t('拖主图↔副图分隔条：副图变高 60、主图等量变矮',
+    Math.abs(prs[0].rect.h - (p0h0 + 60)) < 2 && Math.abs(chart.plot.h - (mainH0 - 60)) < 2,
+    `pane=${prs[0].rect.h} (was ${p0h0}) main=${chart.plot.h} (was ${mainH0})`);
+  t('拖主图边界不影响其它副图高度', Math.abs(prs[1].rect.h - p1h0) < 0.5, `p1=${prs[1].rect.h} vs ${p1h0}`);
+  // 拖副图↔副图分隔条：向下 40px → 上面变矮、下面变高、总量不变
+  const b1 = prs[1].rect.t;
+  const tot0 = prs[0].rect.h + prs[1].rect.h;
+  fire('pointerdown', 100, b1);
+  fire('pointermove', 100, b1 + 40);
+  fire('pointerup', 100, b1 + 40);
+  chart.drawNow();
+  prs = chart.paneRects();
+  t('拖副图间分隔条：下面的变高、上面的变矮、总量不变',
+    prs[1].rect.h > p1h0 && Math.abs(prs[0].rect.h + prs[1].rect.h - tot0) < 1.5,
+    `h0=${prs[0].rect.h} h1=${prs[1].rect.h} tot0=${tot0}`);
+  // 最大化
+  const macdUid = prs[1].study.def.uid;
+  const preMax = { h0: prs[0].rect.h, h1: prs[1].rect.h, main: chart.plot.h };
+  chart.togglePaneMode(macdUid, 'max');
+  chart.drawNow();
+  prs = chart.paneRects();
+  t('最大化：主图压成细条', chart.plot.h <= 64 + 1, `main=${chart.plot.h}`);
+  t('最大化：该副图占满其余空间', prs[1].rect.h > avail26 * 0.5, `h=${prs[1].rect.h}`);
+  t('最大化：其它副图收窄到最小高度', Math.abs(prs[0].rect.h - 40) < 1, `h0=${prs[0].rect.h}`);
+  // 各自坐标轴：刻度密度目标 = h/38（paneTicks 的输入），随自身高度变化；
+  // 实际 tick 数还会被量程步长截断（小窗口下可能相等），所以目标值必须增长、实际值不回退
+  const densBig = Math.round(prs[1].rect.h / 38);
+  const ticksBig = paneTicks(paneScale(prs[1].study.output!, 0, chart.bars.length - 1).min,
+    paneScale(prs[1].study.output!, 0, chart.bars.length - 1).max, prs[1].rect.h).ticks.length;
+  chart.togglePaneMode(macdUid, 'max');
+  chart.drawNow();
+  prs = chart.paneRects();
+  const densSmall = Math.round(prs[1].rect.h / 38);
+  const ticksSmall = paneTicks(paneScale(prs[1].study.output!, 0, chart.bars.length - 1).min,
+    paneScale(prs[1].study.output!, 0, chart.bars.length - 1).max, prs[1].rect.h).ticks.length;
+  t('还原后布局回到拖拽后的状态', Math.abs(prs[0].rect.h - preMax.h0) < 1 && Math.abs(prs[1].rect.h - preMax.h1) < 1 && Math.abs(chart.plot.h - preMax.main) < 1,
+    `h0=${prs[0].rect.h} h1=${prs[1].rect.h} main=${chart.plot.h}`);
+  t('每个副图有自己的坐标轴：刻度密度随自身高度自适应', densBig > densSmall && ticksBig >= ticksSmall,
+    `target ${densBig}→${densSmall} ticks ${ticksBig}→${ticksSmall}`);
+  // 折叠
+  const mainBeforeCollapse = chart.plot.h;
+  chart.togglePaneMode(prs[0].study.def.uid, 'collapse');
+  chart.drawNow();
+  prs = chart.paneRects();
+  t('折叠：副图收成 22px 细条', prs[0].collapsed && Math.abs(prs[0].rect.h - 22) < 0.5, `h=${prs[0].rect.h}`);
+  t('折叠不动主图高度', Math.abs(chart.plot.h - mainBeforeCollapse) < 0.5, `main=${chart.plot.h}`);
+  chart.togglePaneMode(prs[0].study.def.uid, 'collapse');
+  chart.resetPaneLayout();
+  chart.drawNow();
+  prs = chart.paneRects();
+  t('重置布局：回到默认等高、主图恢复',
+    Math.abs(prs[0].rect.h - prs[1].rect.h) < 1 && Math.abs(chart.plot.h - mainH0) < 1,
+    `h0=${prs[0].rect.h} h1=${prs[1].rect.h} main=${chart.plot.h}`);
+  // 分隔条按下不交给绘图层
+  let sepDowns = 0;
+  chart.setHooks({ onDown: () => { sepDowns++; return false; }, onMove: () => undefined, onUp: () => undefined, onDraw: () => undefined });
+  fire('pointerdown', 100, chart.plot.b);
+  fire('pointerup', 100, chart.plot.b);
+  t('分隔条按下不交给绘图层、不平移', sepDowns === 0, `downs=${sepDowns}`);
+  chart.setHooks(null);
 
   // ---- 回放 / 实时 tick：指标始终按当前 bars 重算
   chart.setStudies([def('sma')]);

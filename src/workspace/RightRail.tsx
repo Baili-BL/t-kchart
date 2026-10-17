@@ -21,13 +21,16 @@ export function RightRail(): JSX.Element {
     const rb = createRightbarHandle(host, {
       onSelect: (label, on) => {
         if (label === 'AI Copilot') {
-          // Copilot 就是左边的 Agent：展开它，而不是再开一个右侧面板
+          // Copilot 就是右侧的 Agent 面板：展开它，而不是再开一个右侧面板
           if (app().agentCollapsed) app().toggleAgent();
-          toast('AI Copilot 即左侧 Agent 面板');
+          app().setNav('quant');
+          toast('AI Copilot 即右侧 Agent 面板');
           rb.select(app().rightPanel);
           return;
         }
         if (label === '筛选器') {
+          // 筛选器在右侧 Agent 面板的「筛选」tab 里
+          if (app().agentCollapsed) app().toggleAgent();
           app().setNav('screener');
           rb.select(app().rightPanel);
           return;

@@ -273,8 +273,8 @@ export function simulateMaCross(bars: Bar[], fastLen: number, slowLen: number, s
 export class EquityChart {
   canvas: HTMLCanvasElement;
   points: EquityPoint[];
-  /** 持仓区间（可选）—— 画在底部的一条细色带 */
-  positions: { from: number; to: number; long: boolean }[];
+  /** 持仓区间（可选）—— 画在底部的一条细色带（语义定稿见 README §14：TradingView 策略测试器口径） */
+  positions: { from: number; to: number; long: boolean; open?: boolean }[];
   upColor: string;
   downColor: string;
   lineColor: string;
@@ -337,7 +337,7 @@ export class EquityChart {
     this.showLast(180);
   }
 
-  setPositions(list: { from: number; to: number; long: boolean }[]): void {
+  setPositions(list: { from: number; to: number; long: boolean; open?: boolean }[]): void {
     this.positions = list ? list.slice() : [];
     this.invalidate();
   }
@@ -810,7 +810,11 @@ export class EquityChart {
     ctx.restore();
   }
 
-  /** 底部持仓色带（可选）。语义见 README，是我对截图里那条底栏的**猜测**。 */
+  /**
+   * 底部持仓色带（语义已定稿，不再是猜测）：TradingView 策略测试器口径——
+   * 色带 = 策略**持仓区间**：多头段 = 上涨色，空头段 = 下跌色，
+   * 未平仓段（open，走到数据末尾还没平的）同方向色但弱化（更透明）。
+   */
   private drawPositions(): void {
     if (!this.positions.length) return;
     const ctx = this.ctx;
@@ -822,7 +826,7 @@ export class EquityChart {
       const x1 = this.timeToX(seg.to);
       if (x1 < p.l || x0 > p.r) continue;
       ctx.fillStyle = seg.long ? this.upColor : this.downColor;
-      ctx.globalAlpha = 0.85;
+      ctx.globalAlpha = seg.open ? 0.35 : 0.85;
       ctx.fillRect(Math.max(p.l, x0), y - 2, Math.max(1, Math.min(p.r, x1) - Math.max(p.l, x0)), 2);
     }
     ctx.restore();
@@ -1088,7 +1092,7 @@ export function equitySelfTest(bars?: Bar[]): EquityTestResult {
   // ====================================================================
   let canvasSkipped = 0;
   if (typeof document === 'undefined') {
-    canvasSkipped = 11;
+    canvasSkipped = 13;
     log('（跳过 ' + canvasSkipped + ' 条需要 canvas 的断言：当前不在浏览器环境）');
   } else {
     const canvas = document.createElement('canvas');
@@ -1160,6 +1164,51 @@ export function equitySelfTest(bars?: Bar[]): EquityTestResult {
     t('setPositions 会被记录', (() => {
       ec.setPositions([{ from: data[10].time, to: data[40].time, long: true }]);
       return ec.positions.length === 1;
+    })());
+
+    // --- 2.4 底部持仓色带：语义定稿后的像素断言 ---
+    // 色带画在绘图区最底 2px：多头段 = 上涨色（绿主导），空头段 = 下跌色（红主导），
+    // 无持仓段 = 非红非绿（网格/背景灰）。段取在视口中部，避开最深处权益线。
+    t('持仓色带像素：多头段绿主导、空头段红主导、空档非红非绿', (() => {
+      ec.setPositions([
+        { from: data[30].time, to: data[60].time, long: true },
+        { from: data[100].time, to: data[130].time, long: false },
+      ]);
+      ec.drawNow();
+      const dpr = ec.dpr || 1;
+      // fillRect(y - 2, h=2)，y = plot.b - 1 → 色带实际落在物理行 (b-3, b-2]，取 b-2.5 行采样
+      const bandY = Math.min(canvas.height - 1, Math.round((ec.plot.b - 2.5) * dpr));
+      const sample = (tMid: number): [number, number, number] => {
+        const x = Math.min(canvas.width - 1, Math.max(0, Math.round(ec.timeToX(tMid) * dpr)));
+        const d = ec.ctx.getImageData(x, bandY, 1, 1).data;
+        return [d[0], d[1], d[2]];
+      };
+      const [lr, lg] = sample(data[45].time);
+      const [sr, sg] = sample(data[115].time);
+      const [gr, gg] = sample(data[75].time);
+      const okLong = lg > lr + 30;                     // #26a69a 混背景后仍绿 >> 红
+      const okShort = sr > sg + 30;                    // #f23645 混背景后仍红 >> 绿
+      const okGap = Math.abs(gr - gg) <= 30;           // 灰系（背景/网格），不带方向色
+      ec.setPositions([]);
+      ec.drawNow();
+      return okLong && okShort && okGap;
+    })(), '采样 data[45]/data[115]/data[75] 三点，读绘图区最底 2px');
+    t('未平仓段（open）色带更弱：同位置透明度低于已平仓段', (() => {
+      // open 段 alpha 0.35 vs 0.85：绿通道占比随 alpha 降低向背景收敛，
+      // 直接断言两层混出的绿通道差值 > 0（弱段更接近背景灰）。
+      const probe = (open: boolean): number => {
+        ec.setPositions([{ from: data[30].time, to: data[60].time, long: true, open }]);
+        ec.drawNow();
+        const dpr = ec.dpr || 1;
+        const y = Math.min(canvas.height - 1, Math.round((ec.plot.b - 2.5) * dpr));
+        const x = Math.min(canvas.width - 1, Math.round(ec.timeToX(data[45].time) * dpr));
+        return ec.ctx.getImageData(x, y, 1, 1).data[1];   // 绿通道
+      };
+      const closedG = probe(false);
+      const openG = probe(true);
+      ec.setPositions([]);
+      ec.drawNow();
+      return Math.abs(closedG - openG) >= 20 && Math.abs(openG - 17) < Math.abs(closedG - 17);
     })());
 
     ec.dispose();

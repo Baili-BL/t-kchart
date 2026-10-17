@@ -11,7 +11,10 @@ import type { SyncState } from '../store/chartStore';
 import { drawBus } from './drawBus';
 import { replayController } from '../store/replayStore';
 import { useSymbolSearchStore } from '../store/symbolSearchStore';
+import { useAlertDialogStore } from '../store/alertDialogStore';
+import { useSettingsDialogStore } from '../store/settingsDialogStore';
 import { useStudyStore } from '../store/studyStore';
+import { useChartSettingsStore } from '../store/chartSettingsStore';
 import { toggleReplay } from './replayActions';
 
 const SYNC_LABELS: { key: keyof SyncState; label: string }[] = [
@@ -161,10 +164,7 @@ export function TopBar(): JSX.Element {
         if (style) st().setChartStyle(style);
       },
       onIndicators: () => useStudyStore.getState().openDialog(),
-      onAlert: () => {
-        toast('警报尚未实现');
-        tbRef.current?.setAlertOn(false);
-      },
+      onAlert: () => useAlertDialogStore.getState().openDialog(),
       onReplay: () => {
         const r = toggleReplay();
         if (!r.ok) toast(r.message);
@@ -175,11 +175,30 @@ export function TopBar(): JSX.Element {
       onLayout: () => setFloat('layout'),
       onSave: () => toast('布局存档尚未实现（TODO 2.9）'),
       onManageLayouts: () => setFloat('rename'),
-      onSettings: () => toast('设置尚未实现'),
+      onSettings: () => useSettingsDialogStore.getState().openDialog(),
       onSnapshot: () => toast('快照尚未实现'),
     });
     tbRef.current = tb;
     tb.setUndoRedo(true, true);
+    // 顶栏「交易」开关：交易面板默认隐藏，点这里才出现（dom/toolbar.ts 是设计稿原 DOM 不动，
+    // 按钮由接线层在运行时挂到其根节点，复用 kc-tb-btn 的视觉与深色反相）
+    const tradeBtn = document.createElement('button');
+    tradeBtn.type = 'button';
+    tradeBtn.id = 'header-toolbar-trading';
+    tradeBtn.className = 'kc-tb-btn kc-tb-trade';
+    tradeBtn.title = '交易面板';
+    tradeBtn.innerHTML = '<span>交易</span>';
+    tradeBtn.addEventListener('click', () => {
+      const s = useChartSettingsStore.getState();
+      s.set({ buySell: !s.settings.buySell });
+    });
+    const syncTrade = (s: { settings: { buySell: boolean } }): void => {
+      tradeBtn.classList.toggle('kc-on', s.settings.buySell);
+      tradeBtn.setAttribute('aria-pressed', String(s.settings.buySell));
+    };
+    syncTrade(useChartSettingsStore.getState());
+    const unTrade = useChartSettingsStore.subscribe(syncTrade);
+    tb.root.appendChild(tradeBtn);
     const push = (s: ReturnType<typeof useChartStore.getState>): void => {
       tb.setSymbol(s.symbol);
       tb.setInterval(s.timeframe);
@@ -197,6 +216,7 @@ export function TopBar(): JSX.Element {
       unReplay();
       unsub();
       unStudy();
+      unTrade();
       tbRef.current = null;
       tb.root.remove();
     };

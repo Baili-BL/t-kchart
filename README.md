@@ -52,7 +52,7 @@ src/
     chartControls     Agent 工具的真实实现（ChartControls 接口）
     TopBar / RightRail  包装 dom/toolbar.ts / dom/rightbar.ts：store ⇄ 组件句柄（createToolbarHandle / createRightbarHandle）
     dom/              设计稿原生 DOM 组件（顶栏、绘图栏、右侧栏、策略报告面板）与图标
-  engine/       chart grid draw pine equity analytics studies layouts replay（ESM，零依赖）
+  engine/       chart grid paneLayout draw pine equity analytics studies layouts replay（ESM，零依赖）
   engine/styleTest.ts   图表样式的浏览器自检（像素）
   indicators/   内置指标库：catalog（全部是 Pine v6 脚本）/ runner（脚本 → 画得出的输出）/ studyTest（浏览器自检）
   data/         symbols（商品代码目录：9 类共 97 个演示标的 + 搜索 / 过滤）/ mockBars（按 seed 生成的演示行情，分钟/小时/日/周/月）
@@ -95,7 +95,7 @@ VITE_DEEPSEEK_MODEL=deepseek-chat
 | 图表样式（Node） | `npm test` | 平均K线手算对数、成交量蜡烛宽度、关键词 → 样式、不可用样式的原因、带标记线渐变色（8 条） |
 | 指标库（Node） | `npm test` | 36 个 v6 脚本全部跑通；约 30 个指标的数值与**独立 TS 参考实现**逐根对数；搜索 / 清单 / store / Agent 控制 |
 | Agent / 工作区 / 数据 | `npm test` | 意图解析、工具校验、runner 循环（含报错/中断/死循环兜底）、模拟账户不变式、范围高亮、mock 数据不变式 |
-| 引擎（浏览器，需 canvas） | 开发模式下控制台 `await __app.runBrowserSelfTests()` | 图表 76 + 网格 20 + 权益 37 + 统计 50 + 指标 19（副图布局 / 像素 / 指针分流 / 回放 / 实时 tick）+ 样式 52（13 种样式的价格轴口径 + 像素） |
+| 引擎（浏览器，需 canvas） | 开发模式下控制台 `await __app.runBrowserSelfTests()` | 图表 76 + 网格 20 + 权益 37 + 统计 50 + 指标 31（副图布局 / 窗格拖拽·最大化·折叠 / 像素 / 指针分流 / 回放 / 实时 tick）+ 样式 52（13 种样式的价格轴口径 + 像素） |
 
 `__app` 只在 `npm run dev` 下挂到 `window`，生产包里没有。
 
@@ -159,7 +159,11 @@ VITE_DEEPSEEK_MODEL=deepseek-chat
 
 ## 引擎 §4 刻意没做（T2 / T3 的边界）
 
-- **同一张图里的多副图（pane）** —— 上下叠在一个画布里、拖分隔条改高度。
+- ~~同一张图里的多副图（pane）—— 上下叠在一个画布里、拖分隔条改高度~~ → **已做（2.6）**：
+  布局纯函数在 `engine/paneLayout.ts`（vitest 直测），交互在 `chart.ts`（命中 + 拖拽 + 绘制）。
+  默认等高（与旧公式一致，主图至少留 40%）；拖主图↔副图分隔条改总面积、拖副图间分隔条权重此消彼长；
+  图例按钮 □ 最大化（主图压成细条、其余副图收窄，再点还原）、▼ 折叠成 22px 细条；
+  双击分隔条重置布局；每个副图有自己的量程与刻度（密度随自身高度自适应）。
   这和 §10 的多图网格不是一回事：网格是 N 个独立实例，副图是 1 个实例切 N 块。
 - 绘图工具（趋势线/射线/矩形/斐波那契 + 命中检测 + 手柄 + 磁吸 + undo/redo）→ T2
 - 数据源协议（反向分页、订阅、交易日历）、布局存档（localStorage）→ T2
@@ -453,7 +457,7 @@ Pine 的语法很浅，真正决定数值对不对的是执行模型。这三条
 - 清单：36 个可用 + 12 个**明确标为「不可用」并写了原因**的（涨跌线 / 涨跌比 / Correlation / Cumulative volume index 需要全市场数据或第二个标的、CVD 需要更小周期数据、
   Auto fib ×2 / pitchfork / trendlines / key levels 需要 `line.*`、`label.*` 与枢轴检测、Chop zone 的官方配色依赖 `math.acos`），点了只提示原因，不会给一个近似值糊弄。
 - 运行：`chart.setStudies(defs)`；每一格图在**自己的数据**上各自运行同一份定义；`overlay=true` 画在主图并参与自动量程，其余各占一个副图
-  （副图总高度封顶在可用高度的 60%，主图至少留 40%；时间轴始终贴最底部）。回放时 `bars` 是截断的前缀，所以指标天然只看得到过去，实时 tick 也会重算。
+  （默认等高、总高封顶 60% 主图至少留 40%；拖分隔条改高、□ 最大化、▼ 折叠，见 §4；时间轴始终贴最底部）。回放时 `bars` 是截断的前缀，所以指标天然只看得到过去，实时 tick 也会重算。
 - 输出：`plot`（line / histogram / columns / area / stepline / cross / circles，逐根颜色）、`hline`、`fill`（plot 或 hline 两端）。
 - 出错隔离：某个指标脚本出错（语法 / 未实现的写法 / 运行时），只在它自己的图例行显示 ⚠ 与原因，其它指标与图表照常。
 - 参数：脚本里的 `input.*` 被引擎登记（标题 / 类型 / 默认值 / 范围），图例上点 ⚙ 即可改（`input.source` 可在 open/high/low/close/hl2/hlc3/ohlc4/hlcc4 间切换）。
@@ -582,9 +586,10 @@ KChart 是「蜡烛 + 多通道」的骨架，这张图有三处根本不同：
 
 ### 关于参考图底部那条色带
 
-我按**持仓区间**实现了（`setPositions()`，长仓 = 盈利色，画在绘图区最底一条 2px 色带）。
-**这是我的猜测，不确定和原图一致。** 如果你知道它到底是什么（买持基准？多空状态？），
-告诉我，接口已经在了，改语义是几行的事。
+**语义已定稿（2.4）**：按 TradingView 策略测试器的口径实现——色带 = 策略**持仓区间**
+（`setPositions()`，画在绘图区最底一条 2px 色带）：多头段 = 上涨色、空头段 = 下跌色、
+未平仓段（`open` 标记）同方向色但更透明。有像素断言盯着（浏览器自检「权益图自检」组）。
+如果你的参考图语义不是这个（比如时间轴 scrubber），改 `drawPositions()` 一处即可，接口不变。
 
 ---
 

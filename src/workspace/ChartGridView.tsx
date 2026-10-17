@@ -10,6 +10,8 @@ import { registerGrid } from './gridRegistry';
 import { drawBus } from './drawBus';
 import { replayController, useReplayStore } from '../store/replayStore';
 import type { ReplayState } from '../engine/replay';
+import { SYMBOL_BY_TICKER } from '../data/symbols';
+import { applyTo, useChartSettingsStore } from '../store/chartSettingsStore';
 
 /** 美股习惯：涨绿跌红（引擎默认是 A 股的涨红跌绿） */
 const CHART_COLORS = { upColor: '#089981', downColor: '#f23645' };
@@ -37,8 +39,13 @@ export function ChartGridView(): JSX.Element {
       sync: st0.sync,
       chartOptions: CHART_COLORS,
       legendInset: 8,
+      symbolNameFor: (t) => SYMBOL_BY_TICKER.get(t)?.name ?? '',
     });
     registerGrid(grid);
+
+    /* ---------- 设置：建格后立即应用一次；之后每次变更都广播到所有格 ---------- */
+    applyTo(grid);
+    const unSettings = useChartSettingsStore.subscribe(() => applyTo(grid));
 
     /* ---------- 指标：store 里是定义，每一格自己运行 ---------- */
     grid.setStudyHandler((uid, action) => {
@@ -164,10 +171,12 @@ export function ChartGridView(): JSX.Element {
         if (!s.sync.interval) for (let i = oldTotal; i < total; i++) grid.setTileTimeframe(i, SECONDARY_TF);
         applyBb();
         ensureLayers();
+        applyTo(grid); // 新格子的外观也要跟上（布局变化会新建 tile）
         refreshLast();
       }
       if (s.symbol !== prev.symbol) {
         grid.setSymbol(s.symbol);
+        applyTo(grid); // 图例「名称」跟着标的换
         refreshLast();
       }
       if (s.timeframe !== prev.timeframe && s.timeframe !== grid.activeTimeframe()) {
@@ -182,12 +191,32 @@ export function ChartGridView(): JSX.Element {
       if (s.theme !== prev.theme) grid.setTheme(s.theme);
     });
 
+    /* ---------- 模拟实时报价：轻推活动格最后一根 bar（chart.update 是引擎的实时入口）。
+       演示数据没有真实行情源，警报触发 / PaperTrade / 图例最新价靠它活起来。 ---------- */
+    const tickTimer = window.setInterval(() => {
+      if (document.hidden) return;
+      const c = grid.charts()[grid.activeIndex()];
+      const last = c && c.bars.length ? c.bars[c.bars.length - 1] : null;
+      if (!last) return;
+      const close = last.close * (1 + (Math.random() - 0.5) * 0.0012);
+      c.update({
+        ...last,
+        close,
+        high: Math.max(last.high, close),
+        low: Math.min(last.low, close),
+        volume: last.volume + Math.round(Math.random() * last.volume * 0.002),
+      });
+      refreshLast();
+    }, 2000);
+
     return () => {
+      window.clearInterval(tickTimer);
       replayController.stop();
       unReplay();
       unsub();
       unStudies();
       unTheme();
+      unSettings();
       unbindDraw();
       grid.el.removeEventListener('activechange', onActive);
       for (const l of layers.values()) l.dispose();

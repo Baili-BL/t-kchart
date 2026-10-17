@@ -1,14 +1,11 @@
 import { useCallback, useRef } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
-import { Sidebar } from '../sidebar/Sidebar';
 import { AgentPanel } from '../agent/AgentPanel';
 import { ChartWorkspace } from '../workspace/ChartWorkspace';
-import { Icon, BrandMark } from '../ui/icons';
 import { Toaster } from '../ui/toast';
 import { AGENT_MAX, AGENT_MIN, useAppStore } from '../store/appStore';
-import { AlertsPage, ScreenerPage, StrategiesPage } from './pages';
 
-/** Agent 与图表区之间的拖拽分隔条 */
+/** 图表区与右侧 Agent 面板之间的拖拽分隔条（面板在右，往左拖 = 变宽） */
 function Resizer(): JSX.Element {
   const setW = useAppStore((s) => s.setAgentWidth);
   const startX = useRef(0);
@@ -25,7 +22,7 @@ function Resizer(): JSX.Element {
   const onMove = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
       if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
-      setW(startW.current + (e.clientX - startX.current));
+      setW(startW.current - (e.clientX - startX.current));
     },
     [setW],
   );
@@ -42,83 +39,38 @@ function Resizer(): JSX.Element {
       onPointerMove={onMove}
       onKeyDown={(e) => {
         const w = useAppStore.getState().agentWidth;
-        if (e.key === 'ArrowLeft') setW(w - 16);
-        if (e.key === 'ArrowRight') setW(w + 16);
+        if (e.key === 'ArrowLeft') setW(w + 16);
+        if (e.key === 'ArrowRight') setW(w - 16);
       }}
     />
   );
 }
 
-function TabBar(): JSX.Element {
-  const theme = useAppStore((s) => s.theme);
-  const toggleTheme = useAppStore((s) => s.toggleTheme);
-  const toggleAgent = useAppStore((s) => s.toggleAgent);
-  const user = useAppStore((s) => s.user);
-  return (
-    <div className="tabbar">
-      <div className="tab active">
-        <BrandMark size={13} />
-        <span>Quant</span>
-      </div>
-      <span className="tabbar-spacer" />
-      <button type="button" className="icon-btn" title="显示 / 隐藏 Agent" aria-label="切换 Agent 面板" onClick={toggleAgent}>
-        <Icon name="chat" size={15} />
-      </button>
-      <button
-        type="button"
-        className="icon-btn"
-        title={theme === 'light' ? '切到深色' : '切到浅色'}
-        aria-label="切换主题"
-        onClick={toggleTheme}
-      >
-        <Icon name="moon" size={15} />
-      </button>
-      <button type="button" className="feedback-btn">
-        <Icon name="feedback" size={13} />
-        Feedback
-      </button>
-      <span className="avatar sm" title={user.name}>
-        {user.name.slice(0, 1).toUpperCase()}
-      </span>
-    </div>
-  );
-}
-
+/**
+ * 应用外壳：图表区 + 右侧 Agent 面板（无顶栏、无左侧导航栏）。
+ * 原顶栏（Quant 品牌 / 主题切换 / Feedback / 头像）与原侧栏入口全部并入右侧 Agent 面板；
+ * 面板收起时可通过图表区右缘的 AI Copilot 按钮重新展开。
+ */
 export function AppShell(): JSX.Element {
-  const nav = useAppStore((s) => s.nav);
   const agentWidth = useAppStore((s) => s.agentWidth);
   const agentCollapsed = useAppStore((s) => s.agentCollapsed);
-  const collapsed = useAppStore((s) => s.sidebarCollapsed);
 
   return (
-    <div
-      className="shell"
-      style={{ gridTemplateColumns: `${collapsed ? 'var(--sidebar-w-collapsed)' : 'var(--sidebar-w)'} minmax(0, 1fr)` }}
-    >
-      <Sidebar />
+    <div className="shell">
       <main className="main">
-        <TabBar />
-        {nav === 'quant' ? (
-          <div className="main-body">
-            {!agentCollapsed && (
-              <>
-                <div className="agent-col" style={{ width: agentWidth }}>
-                  <AgentPanel />
-                </div>
-                <Resizer />
-              </>
-            )}
-            <div className="ws-col">
-              <ChartWorkspace />
-            </div>
+        <div className="main-body">
+          <div className="ws-col">
+            <ChartWorkspace />
           </div>
-        ) : (
-          <div className="main-body page-body">
-            {nav === 'strategies' && <StrategiesPage />}
-            {nav === 'alerts' && <AlertsPage />}
-            {nav === 'screener' && <ScreenerPage />}
-          </div>
-        )}
+          {!agentCollapsed && (
+            <>
+              <Resizer />
+              <div className="agent-col" style={{ width: agentWidth }}>
+                <AgentPanel />
+              </div>
+            </>
+          )}
+        </div>
       </main>
       <Toaster />
     </div>

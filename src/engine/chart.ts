@@ -23,6 +23,11 @@ import {
   drawStudyOutput, fmtStudyValue, getStudyRunner, paneScale, paneStudies, paneTicks, studyParamsText,
 } from './studies';
 import type { Study, StudyDef, StudyGeom } from './studies';
+import {
+  computePaneLayout, defaultPaneState, defaultPaneTotal, paneTotalRange,
+  PANE_COLLAPSED_H, PANE_MAIN_MIN_H, PANE_MIN_WEIGHT, PANE_SEPARATOR_HIT,
+} from './paneLayout';
+import type { PaneLayoutState } from './paneLayout';
 
 /* ===========================================================================
  * 1. 类型（编译时整体擦除）
@@ -132,11 +137,48 @@ export interface ChartOptions {
   titleColor?: string;
   /** 图例左边距。多图网格里要给左上角的编号徽章让位，所以做成可配的。 */
   legendInset?: number;
-  /** 十字光标变化回调，参数是 bar 索引（移出画布为 null）。多图联动用。 */
+  /** 图例元素开关（设置对话框「商品代码」页） */
+  legend?: LegendOptions;
+  /** 指标图例开关（设置对话框「商品代码」页 → 指标组） */
+  indLegend?: IndLegendOptions;
+  /** 成交量副条显隐 */
+  showVolume?: boolean;
+  /** 价格小数位（0 = 按最小变动价位自动） */
+  precision?: number;
+  /** 显示用的标的名称（图例「名称」） */
+  symbolName?: string;
   onCrosshair?: (index: number | null) => void;
   /** 视口变化回调，参数是当前可见的时间区间。多图联动用。 */
   onView?: (t0: number, t1: number) => void;
 }
+
+/** 图例（第 ① 行）各元素的显隐。缺省 = 显示。 */
+export interface LegendOptions {
+  /** 标的 Logo（名称首字符的圆形徽标） */
+  logo?: boolean;
+  /** 标的代码 */
+  ticker?: boolean;
+  /** 标的名称 */
+  name?: boolean;
+  /** 开高低收当前值 */
+  values?: boolean;
+  /** 本根相对前一根的变化百分比 */
+  barChange?: boolean;
+  /** 相对昨收（前一日收盘）的变化百分比 */
+  lastChange?: boolean;
+}
+
+/** 指标图例：输入=参数串，数值=各线当前值，背景=悬停高亮底色 */
+export interface IndLegendOptions {
+  inputs?: boolean;
+  values?: boolean;
+  bg?: boolean;
+}
+
+/** 设置对话框可运行时修改的外观子集（见 KChart.setAppearance） */
+export type AppearancePatch = Partial<
+  Pick<ChartOptions, 'upColor' | 'downColor' | 'lineColor' | 'legend' | 'indLegend' | 'showVolume' | 'precision' | 'symbolName'>
+>;
 
 export interface Rect {
   l: number;
@@ -266,6 +308,11 @@ export const DEFAULTS: Required<ChartOptions> = {
   padding: 0.08,
   titleColor: '#e6edf3',
   legendInset: 12,
+  legend: {},
+  indLegend: {},
+  showVolume: true,
+  precision: 0,
+  symbolName: '',
   onCrosshair: function (_i: number | null): void { /* 默认不做事 */ },
   onView: function (_t0: number, _t1: number): void { /* 默认不做事 */ },
 };
@@ -277,6 +324,9 @@ export function withAlpha(hex: string, a: number): string {
   const n = parseInt(m[1], 16);
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 }
+
+/** 指标图例按钮的动作。max / collapse 由 KChart 内部消化，不进 studyHandler 回调 */
+export type StudyAction = 'settings' | 'remove' | 'max' | 'collapse';
 
 export function clamp(v: number, lo: number, hi: number): number {
   return v < lo ? lo : v > hi ? hi : v;
@@ -480,12 +530,40 @@ export function log(msg: string): void {
   }
 }
 
+/** 显示时区偏移（分钟，相对系统本地）。0 = 跟系统走；设置对话框「时区」写入。 */
+let tzShiftMin = 0;
+export function setTimezoneShift(min: number): void {
+  tzShiftMin = min;
+}
+export function timezoneShift(): number {
+  return tzShiftMin;
+}
+
 export function fmtTime(t: number, spanDays: number): string {
-  const d = new Date(t);
+  // tzShiftMin 是「目标时区 − 系统时区」的分钟差：先加上差值，再用本地 getter 读就是目标时区的钟面
+  const d = new Date(t + tzShiftMin * 60000);
   const p = (n: number) => (n < 10 ? '0' : '') + n;
   if (spanDays > 400) return d.getFullYear() + '/' + p(d.getMonth() + 1);
   if (spanDays > 75) return p(d.getMonth() + 1) + '/' + p(d.getDate());
   return p(d.getMonth() + 1) + '/' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
+const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+
+/**
+ * 十字光标底部时间胶囊：在 fmtTime 基础上带星期几。
+ *   短跨度（悬浮时）→「周五 2021-09-10 09:30」
+ *   日线以上跨度   →「周五 09/10」
+ *   年级跨度       →「2021/09」（月线一根约 30 天，星期几没有意义）
+ * 坐标轴刻度标签仍用 fmtTime（空间小，不带星期）。
+ */
+export function fmtCrossTime(t: number, spanDays: number): string {
+  const d = new Date(t + tzShiftMin * 60000);
+  const week = WEEKDAYS[d.getDay()];
+  if (spanDays > 400) return d.getFullYear() + '/' + String(d.getMonth() + 1).padStart(2, '0');
+  if (spanDays > 75) return week + ' ' + String(d.getMonth() + 1).padStart(2, '0') + '/' + String(d.getDate()).padStart(2, '0');
+  const p = (n: number) => (n < 10 ? '0' : '') + n;
+  return week + ' ' + d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
 }
 
 export function decimalsFor(step: number): number {
@@ -539,9 +617,9 @@ export class KChart {
 
   /** 通过 setStudies() 加进来的指标（Pine v6 脚本的运行结果）：overlay 画主图，其余各占一个副图 */
   studies: Study[] = [];
-  /** 指标图例上的按钮（设置 / 删除）：每次重绘重建，鼠标点击时据此命中 */
-  private studyHits: { uid: string; action: 'settings' | 'remove'; x: number; y: number; w: number; h: number }[] = [];
-  private studyHandler: ((uid: string, action: 'settings' | 'remove') => void) | null = null;
+  /** 指标图例上的按钮（设置 / 删除 / 最大化 / 折叠）：每次重绘重建，鼠标点击时据此命中 */
+  private studyHits: { uid: string; action: StudyAction; x: number; y: number; w: number; h: number }[] = [];
+  private studyHandler: ((uid: string, action: StudyAction) => void) | null = null;
 
   private rafId = 0;
   private ac: AbortController;
@@ -636,8 +714,8 @@ export class KChart {
     return this.studies;
   }
 
-  /** 指标图例上的按钮被点击时回调（设置 / 删除） */
-  setStudyHandler(fn: ((uid: string, action: 'settings' | 'remove') => void) | null): void {
+  /** 指标图例上的按钮被点击时回调（设置 / 删除；最大化 / 折叠在内部消化） */
+  setStudyHandler(fn: ((uid: string, action: StudyAction) => void) | null): void {
     this.studyHandler = fn;
   }
 
@@ -659,24 +737,90 @@ export class KChart {
     }
   }
 
-  /** 单个副图的高度（0 = 没有副图）。主图至少留 40%：副图总高度封顶在 60% */
-  private paneHeight(): number {
-    const k = paneStudies(this.studies).length;
-    if (!k) return 0;
+  /* ------------------------------------------------- 副图（pane）布局 2.6 */
+
+  /** 副图窗格状态（指标 uid → 权重/折叠/最大化）。随指标增删自动清理 */
+  private paneStates = new Map<string, PaneLayoutState>();
+  /** 用户拖主图↔副图分隔条后的副图总面积（px）；null = 没拖过（用默认等高） */
+  private paneTotalPx: number | null = null;
+  /** 悬停的分隔条（paneRects 序号，-1 = 无）；正在拖时记录起始位置 */
+  private hoverSep = -1;
+  private paneResize: { boundary: number; lastY: number } | null = null;
+
+  /** 与 paneStudies() 顺序对齐的状态数组；顺带清理已删除指标的残留状态 */
+  private ensurePaneStates(): PaneLayoutState[] {
+    const list = paneStudies(this.studies);
+    if (!list.length) {
+      this.paneStates.clear();
+      this.paneTotalPx = null;
+      this.hoverSep = -1;
+      this.paneResize = null;
+      return [];
+    }
+    for (const uid of [...this.paneStates.keys()]) {
+      if (!list.some((s) => s.def.uid === uid)) this.paneStates.delete(uid);
+    }
+    return list.map((s) => {
+      let st = this.paneStates.get(s.def.uid);
+      if (!st) {
+        st = defaultPaneState();
+        this.paneStates.set(s.def.uid, st);
+      }
+      return st;
+    });
+  }
+
+  /** 一次算出主图高度 + 每个副图的矩形（computePlot / paneRects / 命中共用它） */
+  private layoutPanes(): { mainH: number; entries: { study: Study; rect: Rect; collapsed: boolean; maximized: boolean }[] } {
+    const states = this.ensurePaneStates();
     const avail = Math.max(1, this.H - this.o.axisHeight - 6);
-    const each = clamp(Math.round(avail * 0.22), 60, 200);
-    return Math.max(24, Math.floor(Math.min(each * k, avail * 0.6) / k));
+    const L = computePaneLayout(avail, states, this.paneTotalPx);
+    const r = Math.max(1, this.W - this.o.axisWidth);
+    let t = 6 + L.mainH;
+    const list = paneStudies(this.studies);
+    const entries = list.map((study, i) => {
+      const h = L.heights[i] || 0;
+      const rect: Rect = { l: 0, t, r, b: t + h, w: r, h };
+      t += h;
+      return { study, rect, collapsed: states[i].collapsed, maximized: states[i].maximized };
+    });
+    return { mainH: L.mainH, entries };
+  }
+
+  /** 重置副图布局（权重 / 折叠 / 最大化 / 拖拽面积全部回默认） */
+  resetPaneLayout(): void {
+    this.paneStates.clear();
+    this.paneTotalPx = null;
+    this.hoverSep = -1;
+    this.paneResize = null;
+    this.invalidate();
+  }
+
+  /** 最大化 / 折叠某个副图（图例按钮走这里；同一时刻最多一个最大化） */
+  togglePaneMode(uid: string, which: 'max' | 'collapse'): void {
+    const list = paneStudies(this.studies);
+    if (!list.some((s) => s.def.uid === uid)) return;
+    let st = this.paneStates.get(uid);
+    if (!st) {
+      st = defaultPaneState();
+      this.paneStates.set(uid, st);
+    }
+    if (which === 'max') {
+      const next = !st.maximized;
+      for (const s of this.paneStates.values()) s.maximized = false;
+      st.maximized = next;
+      if (next) st.collapsed = false;
+    } else {
+      st.collapsed = !st.collapsed;
+      if (st.collapsed) st.maximized = false;
+    }
+    this.hoverSep = -1;
+    this.invalidate();
   }
 
   /** 每个副图占的矩形（从主图下沿往下依次排；最下面一个贴着时间轴） */
-  paneRects(): { study: Study; rect: Rect }[] {
-    const list = paneStudies(this.studies);
-    const h = this.paneHeight();
-    const p = this.plot;
-    return list.map((study, j) => {
-      const t = p.b + j * h;
-      return { study, rect: { l: p.l, t, r: p.r, b: t + h, w: p.w, h } };
-    });
+  paneRects(): { study: Study; rect: Rect; collapsed: boolean; maximized: boolean }[] {
+    return this.layoutPanes().entries;
   }
 
   /** 时间轴文字所在的纵坐标（时间轴永远贴着画布最底部，副图夹在主图与它之间） */
@@ -776,6 +920,20 @@ export class KChart {
   setStyle(style: ChartStyle): void {
     if (!CHART_STYLES.includes(style) || style === this.o.style) return;
     this.o.style = style;
+    this.invalidate();
+  }
+
+  /** 价格小数位：设置里指定了 precision 就用它，否则按最小变动价位自动 */
+  private dec(): number {
+    return this.o.precision > 0 ? Math.min(6, Math.round(this.o.precision)) : decimalsFor(this.priceStep);
+  }
+
+  /**
+   * 运行时外观更新（设置对话框 → 所有格）。
+   * 只改纯显示层：颜色 / 图例开关 / 成交量显隐 / 精确度，数据与指标重算不受影响。
+   */
+  setAppearance(patch: AppearancePatch): void {
+    Object.assign(this.o, patch);
     this.invalidate();
   }
 
@@ -1084,8 +1242,7 @@ export class KChart {
     const l = 0;
     const t = 6;
     const r = Math.max(1, this.W - this.o.axisWidth);
-    const panes = paneStudies(this.studies).length * this.paneHeight();
-    const b = Math.max(t + 1, this.H - this.o.axisHeight - panes);
+    const b = Math.max(t + 1, t + this.layoutPanes().mainH);
     return { l, t, r, b, w: Math.max(1, r - l), h: Math.max(1, b - t) };
   }
 
@@ -1161,7 +1318,15 @@ export class KChart {
       // 指标图例上的按钮先挑
       const btn = this.hitStudyButton(px, py);
       if (btn) {
-        if (this.studyHandler) this.studyHandler(btn.uid, btn.action);
+        if (btn.action === 'max' || btn.action === 'collapse') this.togglePaneMode(btn.uid, btn.action);
+        else if (this.studyHandler) this.studyHandler(btn.uid, btn.action);
+        this.invalidate();
+        return;
+      }
+      // 分隔条：开始拖拽改高（不交给绘图层，也不平移）
+      const sep = this.hitSeparator(px, py);
+      if (sep >= 0) {
+        this.paneResize = { boundary: sep, lastY: e.clientY };
         this.invalidate();
         return;
       }
@@ -1177,8 +1342,17 @@ export class KChart {
     c.addEventListener('pointermove', (e: PointerEvent) => {
       const px = e.offsetX;
       const py = e.offsetY;
+      // 正在拖分隔条：改高，别的都不做（不平移、不进绘图层、不出十字线）
+      if (this.paneResize) {
+        const dy = e.clientY - this.paneResize.lastY;
+        this.paneResize.lastY = e.clientY;
+        this.dragSeparator(this.paneResize.boundary, dy);
+        return;
+      }
       if (py < this.plot.b && this.hooks && this.hooks.onMove) this.hooks.onMove(px, py, e);
-      c.style.cursor = this.hitStudyButton(px, py) ? 'pointer' : 'crosshair';
+      this.hoverSep = this.hitSeparator(px, py);
+      c.style.cursor = this.hitStudyButton(px, py) ? 'pointer'
+        : this.hoverSep >= 0 ? 'ns-resize' : 'crosshair';
       if (this.dragging) {
         const dx = e.clientX - this.dragX;
         this.dragX = e.clientX;
@@ -1192,6 +1366,11 @@ export class KChart {
     }, sig);
 
     const endDrag = (e: PointerEvent) => {
+      if (this.paneResize) {
+        this.paneResize = null;
+        this.invalidate();
+        return;
+      }
       if (this.hooks && this.hooks.onUp) this.hooks.onUp(e.offsetX, e.offsetY, e);
       if (!this.dragging) return;
       this.dragging = false;
@@ -1202,11 +1381,16 @@ export class KChart {
 
     c.addEventListener('pointerleave', () => {
       this.pointer = null;
+      this.hoverSep = -1;
       this.notifyCrosshair();
       this.invalidate();
     }, sig);
 
-    c.addEventListener('dblclick', () => this.fitContent(), sig);
+    c.addEventListener('dblclick', (e: MouseEvent) => {
+      // 双击分隔条 = 重置副图布局；双击图上其它地方 = 全量塞进视口
+      if (this.hitSeparator(e.offsetX, e.offsetY) >= 0) this.resetPaneLayout();
+      else this.fitContent();
+    }, sig);
 
     if (typeof ResizeObserver !== 'undefined') {
       this.ro = new ResizeObserver(() => this.resize());
@@ -1413,23 +1597,32 @@ export class KChart {
     const hi = Math.min(this.bars.length - 1, i1);
     if (hi < lo) return;
     const idx = this.snapIndex();
-    for (const { study, rect } of this.paneRects()) {
+    const entries = this.paneRects();
+    for (let pi = 0; pi < entries.length; pi++) {
+      const { study, rect, collapsed } = entries[pi];
       const out = study.output;
-      if (!out) continue;
-      const sc = paneScale(out, lo, hi);
-      const span = sc.max - sc.min || 1;
-      const yOf = (v: number): number => rect.t + ((sc.max - v) / span) * rect.h;
-      const { ticks, step } = paneTicks(sc.min, sc.max, rect.h);
 
-      // 分隔线（压在主图 / 上一个副图的下沿）
+      // 分隔线（压在主图 / 上一个副图的下沿）；悬停 / 正在拖时加亮
       ctx.strokeStyle = this.o.axisTextColor;
-      ctx.globalAlpha = 0.35;
+      ctx.globalAlpha = pi === this.hoverSep || (this.paneResize && this.paneResize.boundary === pi) ? 0.9 : 0.35;
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(0, Math.round(rect.t) + 0.5);
       ctx.lineTo(this.W, Math.round(rect.t) + 0.5);
       ctx.stroke();
       ctx.globalAlpha = 1;
+
+      // 折叠条：一条淡淡的底色 + 图例（在 drawPaneLegends 里画），不画网格与图形
+      if (collapsed) {
+        ctx.fillStyle = 'rgba(120,123,134,0.10)';
+        ctx.fillRect(rect.l, rect.t + 1, rect.w, rect.h - 1);
+        continue;
+      }
+      if (!out) continue;
+      const sc = paneScale(out, lo, hi);
+      const span = sc.max - sc.min || 1;
+      const yOf = (v: number): number => rect.t + ((sc.max - v) / span) * rect.h;
+      const { ticks, step } = paneTicks(sc.min, sc.max, rect.h);
 
       // 网格
       ctx.strokeStyle = this.o.gridColor;
@@ -1513,8 +1706,11 @@ export class KChart {
     }
   }
 
-  /** 一个指标的图例行：名称 (参数) 各条线当前值 [设置][删除]。`hover` 为真才画按钮 */
-  private drawStudyRow(st: Study, x0: number, y: number, i: number, hover: boolean): void {
+  /** 一个指标的图例行：名称 (参数) 各条线当前值 [设置][删除][最大化][折叠]。`hover` 为真才画按钮；副图行多两个窗格按钮 */
+  private drawStudyRow(
+    st: Study, x0: number, y: number, i: number, hover: boolean,
+    pane?: { collapsed: boolean; maximized: boolean },
+  ): void {
     const ctx = this.ctx;
     let x = x0;
     const put = (text: string, fill: string, gap: number): void => {
@@ -1525,21 +1721,33 @@ export class KChart {
     ctx.font = this.o.font;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
+    const ind = this.o.indLegend;
+    // 「背景」：悬停时整行的高亮底色（按钮画在文字后面，先铺底色再画字）
+    if (hover && ind.bg !== false) {
+      const w = Math.min(480, ctx.measureText(st.def.short || st.def.name).width + 340);
+      ctx.fillStyle = 'rgba(120,123,134,0.14)';
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(x0 - 4, y - 9, w, 18, 3);
+      else ctx.rect(x0 - 4, y - 9, w, 18);
+      ctx.fill();
+    }
     put(st.def.short || st.def.name, this.o.titleColor, 6);
     if (st.output) {
       const params = studyParamsText(st.output);
-      if (params) put('(' + params + ')', this.o.axisTextColor, 10);
-      for (const pl of st.output.plots) {
-        if (pl.hidden) continue;
-        const v = pl.values[i];
-        put(fmtStudyValue(v), pl.colors[i] || pl.color, 10);
+      if (params && ind.inputs !== false) put('(' + params + ')', this.o.axisTextColor, 10);
+      if (ind.values !== false) {
+        for (const pl of st.output.plots) {
+          if (pl.hidden) continue;
+          const v = pl.values[i];
+          put(fmtStudyValue(v), pl.colors[i] || pl.color, 10);
+        }
       }
     } else if (st.error) {
       put('⚠ ' + (st.error.length > 46 ? st.error.slice(0, 46) + '…' : st.error), '#f23645', 10);
     }
     if (!hover) return;
-    // 按钮：设置（⚙）/ 删除（✕）。16×16 的小圆角块，放在文字后面
-    const btn = (label: string, action: 'settings' | 'remove'): void => {
+    // 按钮：设置（⚙）/ 删除（✕）/ 最大化（□·▣）/ 折叠（▼·▲）。16×16 的小圆角块，放在文字后面
+    const btn = (label: string, action: StudyAction): void => {
       const bx = Math.round(x);
       const by = Math.round(y - 8);
       ctx.fillStyle = 'rgba(120,123,134,0.28)';
@@ -1555,27 +1763,75 @@ export class KChart {
     };
     btn('⚙', 'settings');
     btn('✕', 'remove');
+    if (pane) {
+      if (!pane.collapsed) btn(pane.maximized ? '▣' : '□', 'max');
+      btn(pane.collapsed ? '▲' : '▼', 'collapse');
+    }
   }
 
-  /** 副图图例：每个副图左上角一行 */
+  /** 副图图例：每个副图左上角一行（折叠条也画，作为展开入口） */
   private drawPaneLegends(i1: number): void {
     const n = this.bars.length;
     if (!n) return;
     const idx = this.snapIndex();
     const i = idx == null ? Math.min(n - 1, i1) : idx;
     const ptr = this.pointer;
-    for (const { study, rect } of this.paneRects()) {
+    for (const { study, rect, collapsed, maximized } of this.paneRects()) {
       const hover = !!ptr && ptr.y > rect.t && ptr.y < rect.b;
-      this.drawStudyRow(study, rect.l + this.o.legendInset, rect.t + 12, i, hover);
+      this.drawStudyRow(study, rect.l + this.o.legendInset, rect.t + (collapsed ? 11 : 12), i, hover, { collapsed, maximized });
     }
   }
 
   /** 点中了指标图例上的哪个按钮（没点中返回 null） */
-  private hitStudyButton(px: number, py: number): { uid: string; action: 'settings' | 'remove' } | null {
+  private hitStudyButton(px: number, py: number): { uid: string; action: StudyAction } | null {
     for (const h of this.studyHits) {
       if (px >= h.x && px <= h.x + h.w && py >= h.y && py <= h.y + h.h) return { uid: h.uid, action: h.action };
     }
     return null;
+  }
+
+  /**
+   * 命中了主图/副图、副图/副图之间的分隔条（返回 paneRects 序号，-1 = 没有）。
+   * 最大化时布局锁定，没有可拖的分隔条；折叠副图的上沿不可拖（它自己高度固定）。
+   */
+  private hitSeparator(px: number, py: number): number {
+    const entries = this.paneRects();
+    if (entries.some((e) => e.maximized)) return -1;
+    for (let i = 0; i < entries.length; i++) {
+      const e = entries[i];
+      if (e.collapsed || e.maximized) continue;
+      if (Math.abs(py - e.rect.t) <= PANE_SEPARATOR_HIT && px <= this.plot.r + 6) return i;
+    }
+    return -1;
+  }
+
+  /**
+   * 拖分隔条改高。dy > 0 = 向下拖 = 下面的副图变高。
+   *   - 上邻是主图或折叠条：副图总面积 +dy（增量全给本副图，其它副图像素不变）
+   *   - 上邻是普通副图：权重此消彼长，总面积不变
+   */
+  private dragSeparator(i: number, dy: number): void {
+    if (!dy) return;
+    const states = this.ensurePaneStates();
+    const s = states[i];
+    if (!s || s.collapsed || s.maximized || states.some((x) => x.maximized)) return;
+    const avail = Math.max(1, this.H - this.o.axisHeight - 6);
+    const range = paneTotalRange(avail, states);
+    const cur = clamp(this.paneTotalPx == null ? defaultPaneTotal(avail, states.length) : this.paneTotalPx, range.min, range.max);
+    const strips = states.filter((x) => x.collapsed).length * PANE_COLLAPSED_H;
+    const wsum = states.reduce((sum, x) => sum + (x.collapsed ? 0 : Math.max(PANE_MIN_WEIGHT, x.weight)), 0) || 1;
+    const unit = Math.max(0.01, (cur - strips) / wsum); // px / 权重
+    const prev = i > 0 && !states[i - 1].collapsed ? states[i - 1] : null;
+    if (!prev) {
+      const next = clamp(cur + dy, range.min, range.max);
+      this.paneTotalPx = next;
+      s.weight = clamp(s.weight + (next - cur) / unit, PANE_MIN_WEIGHT, 1e6);
+    } else {
+      const d = clamp(dy, (PANE_MIN_WEIGHT - s.weight) * unit, (prev.weight - PANE_MIN_WEIGHT) * unit);
+      s.weight = clamp(s.weight + d / unit, PANE_MIN_WEIGHT, 1e6);
+      prev.weight = clamp(prev.weight - d / unit, PANE_MIN_WEIGHT, 1e6);
+    }
+    this.invalidate();
   }
 
   private drawGrid(i0: number, i1: number): void {
@@ -1606,6 +1862,7 @@ export class KChart {
   }
 
   private drawVolume(i0: number, i1: number): void {
+    if (this.o.showVolume === false) return;
     const ctx = this.ctx;
     const v = this.volRect();
     const lo = Math.max(0, i0);
@@ -2108,7 +2365,7 @@ export class KChart {
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = this.o.axisTextColor;
-    const dec = decimalsFor(this.priceStep);
+    const dec = this.dec();
     for (const v of this.priceTicks()) {
       const y = this.yOf(v);
       if (y < p.t - 6 || y > p.b + 6) continue;
@@ -2158,7 +2415,7 @@ export class KChart {
     ctx.stroke();
     ctx.restore();
 
-    const dec = decimalsFor(this.priceStep);
+    const dec = this.dec();
     const label = b.close.toFixed(dec);
     ctx.font = this.o.font;
     const tw = ctx.measureText(label).width;
@@ -2184,7 +2441,7 @@ export class KChart {
     // 联动的其它图没有「鼠标的纵坐标」这回事，硬画一个价格标签是瞎编。
     if (ptr && ptr.y >= p.t && ptr.y <= p.b) {
       const price = this.pOf(ptr.y);
-      const dec = decimalsFor(this.priceStep);
+      const dec = this.dec();
       const label = price.toFixed(dec);
       const tw = ctx.measureText(label).width;
       const bw = Math.max(this.o.axisWidth - 4, tw + 12);
@@ -2201,7 +2458,7 @@ export class KChart {
       const lo = Math.max(0, i0);
       const hi = Math.min(this.bars.length - 1, i1);
       const spanDays = hi >= lo ? (this.bars[hi].time - this.bars[lo].time) / 86400000 : 30;
-      const label = fmtTime(this.bars[i].time, spanDays);
+      const label = fmtCrossTime(this.bars[i].time, spanDays);
       const tw = ctx.measureText(label).width;
       const bw = tw + 14;
       const x = clamp(this.xCenter(i), p.l + bw / 2, p.r - bw / 2);
@@ -2233,7 +2490,7 @@ export class KChart {
     const up = b.close >= b.open;
     const color = up ? this.o.upColor : this.o.downColor;
     const chg = prev.close ? ((b.close - prev.close) / prev.close) * 100 : 0;
-    const dec = decimalsFor(this.priceStep);
+    const dec = this.dec();
     const fmt = (v: number | null | undefined) => (v == null ? '--' : v.toFixed(dec));
 
     ctx.font = this.o.font;
@@ -2244,27 +2501,54 @@ export class KChart {
     const x0 = p.l + this.o.legendInset;
     let y = p.t + 12;
 
-    // 行 ① —— 主图
+    // 行 ① —— 主图（各元素可由设置对话框的「商品代码」页开关）
+    const lg = this.o.legend;
+    const ind = this.o.indLegend;
     let x = x0;
     const put = (text: string, fill: string, gap: number) => {
       ctx.fillStyle = fill;
       ctx.fillText(text, x, y);
       x += ctx.measureText(text).width + gap;
     };
-    put(this.o.symbol, this.o.titleColor, 10);
+    if (lg.logo !== false) {
+      // 名称首字符的圆形小徽标（没有真实 logo 资源，用首字母顶替）
+      const label = (this.o.symbolName || this.o.symbol || '?').trim().charAt(0).toUpperCase();
+      const r = 7;
+      ctx.beginPath();
+      ctx.arc(x + r, y, r, 0, Math.PI * 2);
+      ctx.fillStyle = this.o.upColor;
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'center';
+      ctx.fillText(label, x + r, y + 0.5);
+      ctx.textAlign = 'left';
+      x += r * 2 + 8;
+    }
+    if (lg.ticker !== false) put(this.o.symbol, this.o.titleColor, 10);
+    if (lg.name !== false && this.o.symbolName) put(this.o.symbolName, this.o.axisTextColor, 10);
     put(this.o.timeframe, this.o.axisTextColor, 10);
-    put('开 ' + b.open.toFixed(dec), color, 10);
-    put('高 ' + b.high.toFixed(dec), color, 10);
-    put('低 ' + b.low.toFixed(dec), color, 10);
-    put('收 ' + b.close.toFixed(dec), color, 10);
-    put((chg >= 0 ? '+' : '') + chg.toFixed(2) + '%', chg >= 0 ? this.o.upColor : this.o.downColor, 10);
+    if (lg.values !== false) {
+      put('开 ' + b.open.toFixed(dec), color, 10);
+      put('高 ' + b.high.toFixed(dec), color, 10);
+      put('低 ' + b.low.toFixed(dec), color, 10);
+      put('收 ' + b.close.toFixed(dec), color, 10);
+    }
+    if (lg.barChange !== false) {
+      put((chg >= 0 ? '+' : '') + chg.toFixed(2) + '%', chg >= 0 ? this.o.upColor : this.o.downColor, 10);
+    }
+    if (lg.lastChange) {
+      // 「最后一天变化值」：相对昨收（前一日收盘）的涨跌
+      const lchg = prev.close ? ((b.close - prev.close) / prev.close) * 100 : 0;
+      put('昨收 ' + (lchg >= 0 ? '+' : '') + lchg.toFixed(2) + '%', lchg >= 0 ? this.o.upColor : this.o.downColor, 10);
+    }
     if (idx != null) put('· ' + fmtTime(b.time, 30), this.o.axisTextColor, 10);
 
     // 行 ② —— MA
     y += rowH;
     x = x0;
     for (const ln of this.ma) {
-      put(ln.name + ' ' + fmt(ln.values[i]), ln.color, 12);
+      put(ln.name, ln.color, 4);
+      if (ind.values !== false) put(fmt(ln.values[i]), ln.color, 12);
     }
 
     // 行 ③.. —— 每条通道一行
@@ -2273,16 +2557,18 @@ export class KChart {
       y += rowH;
       x = x0;
       put(ch.name, this.o.titleColor, 6);
-      if (ch.params) put(ch.params, this.o.axisTextColor, 12);
-      put('上 ' + fmt(ch.upper.values[i]), ch.upper.color, 12);
-      put('中 ' + fmt(ch.basis.values[i]), ch.basis.color, 12);
-      put('下 ' + fmt(ch.lower.values[i]), ch.lower.color, 12);
-      // 带宽 —— 通道类指标最常看的一个数
-      const u = ch.upper.values[i];
-      const l = ch.lower.values[i];
-      if (u != null && l != null) {
-        const bw = ((u - l) / ((u + l) / 2)) * 100;
-        put('带 ' + bw.toFixed(2) + '%', this.o.axisTextColor, 12);
+      if (ind.inputs !== false && ch.params) put(ch.params, this.o.axisTextColor, 12);
+      if (ind.values !== false) {
+        put('上 ' + fmt(ch.upper.values[i]), ch.upper.color, 12);
+        put('中 ' + fmt(ch.basis.values[i]), ch.basis.color, 12);
+        put('下 ' + fmt(ch.lower.values[i]), ch.lower.color, 12);
+        // 带宽 —— 通道类指标最常看的一个数
+        const u = ch.upper.values[i];
+        const l = ch.lower.values[i];
+        if (u != null && l != null) {
+          const bw = ((u - l) / ((u + l) / 2)) * 100;
+          put('带 ' + bw.toFixed(2) + '%', this.o.axisTextColor, 12);
+        }
       }
     }
 
