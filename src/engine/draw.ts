@@ -2383,10 +2383,14 @@ export class DrawLayer {
       ctx.setLineDash([]);
       this.label(ctx, d.style.text || '文字', a.x, a.y, col, d.style.fontSize);
     } else if (d.type === 'emoji') {
-      // emoji 标注：锚点为中心，原生彩色 emoji 字体渲染（无边框无背景）
+      // emoji 标注：锚点为中心，原生彩色 emoji 字体渲染（无边框无背景）。
+      // fillStyle 必须是不透明白 —— 默认样式里的填充是 rgba(…,0.14)，
+      // 而彩色字形会把 fillStyle 的 alpha 一起吃掉，落笔就是一个「幽灵表情」。
       const size = d.style.fontSize || EMOJI_SIZE;
       ctx.setLineDash([]);
       ctx.save();
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#000';
       ctx.font = size + 'px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';

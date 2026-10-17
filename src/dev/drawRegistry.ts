@@ -28,6 +28,8 @@ export interface DrawLayerSnapshot {
   pending: number;
   /** 已锁定的图形数（左栏「锁定所有绘图」） */
   locked: number;
+  /** emoji / 文字图元落笔的字符（顺序同 types 过滤后），用于断言「选的是哪个就落的哪个」 */
+  texts: string[];
 }
 
 /** 所有活着的绘图层的快照 */
@@ -38,6 +40,7 @@ export function drawLayerSnapshots(): DrawLayerSnapshot[] {
     types: l.drawings.map((d) => d.type),
     pending: l.pendingCount(),
     locked: l.drawings.filter((d) => d.locked).length,
+    texts: l.drawings.filter((d) => d.type === 'emoji' || d.type === 'text').map((d) => d.style.text || ''),
   }));
 }
 

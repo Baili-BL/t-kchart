@@ -108,6 +108,7 @@ const CSS = `
 }
 .kc-emoji-tabs button:hover { background: rgb(242,242,242); }
 .kc-emoji-body { max-height: 330px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.kc-emoji-section.empty { display: none; }
 .kc-emoji-group { margin: 8px 0 2px; color: rgb(130,130,130); font-size: 13px; }
 .kc-emoji-grid { display: grid; grid-template-columns: repeat(9, 44px); }
 .kc-emoji-grid button {
@@ -433,34 +434,50 @@ function buildEmojiPanel(onEmoji: (char: string) => void): HTMLDivElement {
   const tabs = el('div', 'kc-emoji-tabs');
   const body = el('div', 'kc-emoji-body');
 
-  let recents = loadEmojiRecents();
-  const renderGroups = (): void => {
-    body.innerHTML = '';
-    recents = loadEmojiRecents();
-    const groups: { label: string; items: string[] }[] = [];
-    if (recents.length) groups.push({ label: '最近使用', items: recents });
-    for (const cat of EMOJI_CATEGORIES) groups.push({ label: cat.label, items: cat.items });
-    for (const g of groups) {
-      const title = el('div', 'kc-emoji-group');
-      title.textContent = g.label;
-      body.appendChild(title);
-      const grid = el('div', 'kc-emoji-grid');
-      for (const ch of g.items) {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.textContent = ch;
-        b.addEventListener('click', (e) => {
-          e.stopPropagation();
-          saveEmojiRecent(ch);
-          renderGroups(); // 最近使用行即时刷新
-          onEmoji(ch);
-        });
-        grid.appendChild(b);
-      }
-      body.appendChild(grid);
+  /** 造一格：点击后记最近使用（只刷新区块，不重建整块面板） */
+  const makeButtons = (grid: HTMLElement, items: readonly string[]): void => {
+    for (const ch of items) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = ch;
+      b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        saveEmojiRecent(ch);
+        renderRecents();
+        onEmoji(ch);
+      });
+      grid.appendChild(b);
     }
   };
-  renderGroups();
+  const makeSection = (label: string, items: readonly string[]): HTMLDivElement => {
+    const sec = el('div', 'kc-emoji-section');
+    const title = el('div', 'kc-emoji-group');
+    title.textContent = label;
+    const grid = el('div', 'kc-emoji-grid');
+    makeButtons(grid, items);
+    sec.appendChild(title);
+    sec.appendChild(grid);
+    return sec;
+  };
+
+  // 最近使用（官方第一组，无记录时整块隐藏）
+  const recentSec = makeSection('最近使用', []);
+  const renderRecents = (): void => {
+    const list = loadEmojiRecents();
+    recentSec.classList.toggle('empty', list.length === 0);
+    const grid = recentSec.querySelector('.kc-emoji-grid') as HTMLElement;
+    grid.innerHTML = '';
+    makeButtons(grid, list);
+  };
+  renderRecents();
+  body.appendChild(recentSec);
+
+  // 官方 8 组：静态渲染一次（共 1720 项，重绘面板的代价太高）
+  for (const cat of EMOJI_CATEGORIES) body.appendChild(makeSection(cat.label, cat.items));
+
+  /** 当前可见的分组标题（最近使用为空时不算） */
+  const sectionTitles = (): HTMLElement[] =>
+    [...body.querySelectorAll('.kc-emoji-group')] as HTMLElement[];
 
   // tab：时钟 = 回顶部（最近使用）；其余点击滚动到对应分组
   const topTab = document.createElement('button');
@@ -481,11 +498,10 @@ function buildEmojiPanel(onEmoji: (char: string) => void): HTMLDivElement {
     b.innerHTML = cat.icon;
     b.addEventListener('click', (e) => {
       e.stopPropagation();
-      const idx = EMOJI_CATEGORIES.indexOf(cat);
-      // 分组顺序 = [最近使用] + 分类 → 目标分组偏移 idx+1
-      const titles = body.querySelectorAll('.kc-emoji-group');
-      const target = titles[recents.length ? idx + 1 : idx];
-      if (target) body.scrollTop = (target as HTMLElement).offsetTop - 4;
+      // 分组顺序 = [最近使用?] + 8 个分类；最近使用为空时它不在 sectionTitles 里
+      const hasRecents = sectionTitles().length > EMOJI_CATEGORIES.length;
+      const target = sectionTitles()[EMOJI_CATEGORIES.indexOf(cat) + (hasRecents ? 1 : 0)];
+      if (target) body.scrollTop = target.offsetTop - 4;
     });
     tabs.appendChild(b);
   }

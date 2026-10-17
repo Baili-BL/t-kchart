@@ -21,6 +21,8 @@ const HOST: DrawHost = makeFakeHost(CLOSES, 10);
 /** 计数 stub：renderOne 只依赖这十几个方法 */
 function makeCtx() {
   const ops = { stroke: 0, fill: 0, text: 0, ellipse: 0, path: 0, arc: 0 };
+  /** 每次 fillText 时的 fillStyle —— 用来钉住「彩色 emoji 不透光」这类渲染口径 */
+  const textFills: string[] = [];
   const ctx: any = {
     save() { /* no-op */ },
     restore() { /* no-op */ },
@@ -35,15 +37,17 @@ function makeCtx() {
     stroke() { ops.stroke++; },
     fill() { ops.fill++; },
     fillRect() { /* no-op */ },
-    fillText() { ops.text++; },
+    fillText() { ops.text++; textFills.push(String(ctx.fillStyle)); },
     measureText: (s: string) => ({ width: s.length * 7 }),
     setLineDash() { /* no-op */ },
     quadraticCurveTo() { /* no-op */ },
     globalAlpha: 1,
+    fillStyle: '#000',
+    strokeStyle: '#000',
     lineCap: 'butt',
     lineJoin: 'miter',
   };
-  return { ctx, ops };
+  return { ctx, ops, textFills };
 }
 
 /** 画一个图形（走 add 的完整链路） */
@@ -1532,6 +1536,14 @@ describe('emoji 标注（图标按钮 → 分类面板 → 放置）', () => {
     const { ctx, ops } = makeCtx();
     expect(() => L.render(ctx)).not.toThrow();
     expect(ops.text).toBeGreaterThanOrEqual(1);
+  });
+  it('画法：落笔用不透明白填充（彩色字形会连 fillStyle 的 alpha 一起吃掉）', () => {
+    // 回归：默认样式 fill 是 rgba(41,98,255,0.14)，直接用它填 emoji 会得到一枚「幽灵表情」——
+    // 浏览器里 15 个色阶、几乎看不见；改成 #000 后同点位的色阶从 15 涨到 141。
+    const { ctx, textFills } = makeCtx();
+    L.render(ctx);
+    expect(textFills.length).toBeGreaterThanOrEqual(1);
+    for (const f of textFills) expect(f).toBe('#000');
   });
   it('命中：以锚点为中心的方形热区，字形外不命中', () => {
     expect(L.hitTest(p.x, p.y)!.d.id).toBe(d.id);
