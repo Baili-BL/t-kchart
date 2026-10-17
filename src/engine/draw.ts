@@ -885,6 +885,108 @@ export function measureGuides(
 }
 
 /* ===========================================================================
+ * 2.6 自由笔迹：笔刷 / 荧光笔（对齐 charting_library）
+ *
+ * 参考库事实（bundles/library.*.js 默认属性表 + lt-pane-views 的 BrushBasePaneView）：
+ *   · linetoolbrush:       linecolor = color-sky-blue-500 #00bcd4、linewidth 1、
+ *                          linestyle 实线、smooth 5、fillBackground false
+ *   · linetoolhighlighter: linecolor = generateColor(color-ripe-red-500 #F23645, 80)
+ *                          → rgba(242,54,69,0.2)，smooth 5
+ *   · HighlighterPaneView 把 linewidth 写死 20、linecap / linejoin 都是 round；
+ *     笔刷只用 linecap round（linejoin 走默认 miter）。两者都**不额外套 globalAlpha** ——
+ *     半透明来自颜色本身，再乘一层就会比官方淡一半。
+ *   · 采样：LineToolBrushBase.addPoint 里「与上一点的屏幕距离 < 2px 就丢弃这个点」。
+ *   · 平滑：每段先按 ≤ smooth 像素重采样（每段最多插 5 个点），
+ *     再做半径 = smooth 的箱式模糊（越界邻居夹到端点），最后补一个原始末点收尾。
+ *   · 选中态：只在首/末点各画一个「白底 + tv-blue-600 环」的圆点
+ *     （SelectionRenderer 在 DPR1 下外径 5.5、内环 3.5），没有包围盒；
+ *     也没有可拖手柄 —— LineToolBrushBase.hasEditableCoordinates() === false。
+ * ========================================================================= */
+
+/** 笔刷默认色 = color-sky-blue-500 */
+export const BRUSH_COLOR = '#00bcd4';
+/** 笔刷默认线宽 = linetoolbrush.linewidth */
+export const BRUSH_WIDTH = 1;
+/** 荧光笔默认色 = generateColor(ripe-red-500, 80) → alpha 0.2 */
+export const HIGHLIGHT_COLOR = 'rgba(242,54,69,0.2)';
+/** 荧光笔线宽：官方 HighlighterPaneView 里写死的 20 */
+export const HIGHLIGHT_WIDTH = 20;
+/** 平滑度（官方 smooth 默认 5，同时也是箱式模糊的半径） */
+export const STROKE_SMOOTH = 5;
+/** 采点最小步长（屏幕像素）：官方 addPoint 丢弃 <2px 的点 */
+export const STROKE_MIN_STEP = 2;
+/** 选中态端点圆点的内环半径与白底半径（官方 SelectionRenderer @DPR1） */
+export const STROKE_ANCHOR_R = 3.5;
+export const STROKE_ANCHOR_RING = 5.5;
+/** 端点圆点环色 = color-tv-blue-600 */
+export const STROKE_ANCHOR_COLOR = '#1e53e5';
+
+/** 自由笔迹类工具（笔刷 / 荧光笔）：走平滑 + 端点圆点这一套 */
+export function isFreehand(type: string): boolean {
+  return type === 'brush' || type === 'highlight';
+}
+
+/**
+ * 自由笔迹平滑：官方 BrushBasePaneView._updateImpl + _smoothArray 的等价实现。
+ * 输入屏幕坐标点列，输出「重采样 + 箱式模糊 + 补末点」后的点列。
+ */
+export function smoothStroke(pts: PxPt[], smooth = STROKE_SMOOTH): PxPt[] {
+  if (pts.length === 0) return [];
+  const s = Math.max(1, smooth);
+  // ① 重采样：每段切成 ≤ s 像素的小段（官方 Math.min(5, floor(len / smooth))）
+  const res: PxPt[] = [{ x: pts[0].x, y: pts[0].y }];
+  for (let n = 1; n < pts.length; n++) {
+    const dx = pts[n].x - pts[n - 1].x;
+    const dy = pts[n].y - pts[n - 1].y;
+    const len = Math.hypot(dx, dy);
+    const cnt = Math.min(5, Math.floor(len / s));
+    for (let k = 0; k < cnt - 1; k++) {
+      res.push({ x: pts[n - 1].x + (dx / cnt) * k, y: pts[n - 1].y + (dy / cnt) * k });
+    }
+    res.push({ x: pts[n].x, y: pts[n].y });
+  }
+  if (res.length === 1) return res;
+  // ② 箱式模糊：半径 = smooth，r-i / r+i 越界时夹到端点（官方做法，不做环绕）
+  const out: PxPt[] = new Array(res.length);
+  const k2 = 0.5 / s;
+  for (let r = 0; r < res.length; r++) {
+    let sx = 0;
+    let sy = 0;
+    for (let i = 0; i < s; i++) {
+      const a = res[Math.max(r - i, 0)];
+      const b = res[Math.min(r + i, res.length - 1)];
+      sx += a.x + b.x;
+      sy += a.y + b.y;
+    }
+    out[r] = { x: sx * k2, y: sy * k2 };
+  }
+  // ③ 官方补一个原始末点：笔迹必须收在松手处，不能被模糊拽回来
+  out.push({ x: res[res.length - 1].x, y: res[res.length - 1].y });
+  return out;
+}
+
+/** 笔迹命中容差：官方 PolygonRenderer.hitTest = max(interactionTolerance().line, ceil(w/2)) */
+export function strokeHitTol(width: number): number {
+  return Math.max(3, Math.ceil(width / 2));
+}
+
+/** 按工具给默认样式（官方默认属性表）；显式 patch 优先 */
+export function styleForTool(type: string, patch?: Partial<DrawStyle>): DrawStyle {
+  const s = drawStyle();
+  if (type === 'brush') {
+    s.color = BRUSH_COLOR;
+    s.width = BRUSH_WIDTH;
+    s.dash = [];
+  } else if (type === 'highlight') {
+    s.color = HIGHLIGHT_COLOR;
+    s.width = HIGHLIGHT_WIDTH;
+    s.dash = [];
+    s.fill = 'transparent';
+  }
+  return Object.assign(s, patch || {});
+}
+
+/* ===========================================================================
  * 3. 几何小工具（纯函数，好测）
  * ========================================================================= */
 
@@ -1172,15 +1274,19 @@ export class DrawLayer {
       } else if (d.type === 'dot') {
         // 圆心附近（半径 4px + 容差）
         if (Math.hypot(px - a.x, py - a.y) <= 4 + tol) return { d, part: 'body' };
-      } else if (d.type === 'highlight') {
-        // 自由笔迹：任意一段的宽笔画带内
-        for (let i = 0; i < p.length - 1; i++) {
-          if (distToSeg(px, py, p[i].x, p[i].y, p[i + 1].x, p[i + 1].y) <= 5 + 6) return { d, part: 'body' };
-        }
-      } else if (d.type === 'brush') {
-        // 笔刷笔迹：细笔画的带内
-        for (let i = 0; i < p.length - 1; i++) {
-          if (distToSeg(px, py, p[i].x, p[i].y, p[i + 1].x, p[i + 1].y) <= 5 + 3) return { d, part: 'body' };
+      } else if (isFreehand(d.type)) {
+        // 自由笔迹：按**平滑后**的轨迹算距离（和画出来的一致，不会出现「看着在线上却点不中」）。
+        // 容差照官方 PolygonRenderer.hitTest：max(3, ceil(linewidth/2)) ——
+        // 于是荧光笔（宽 20）的点击带是 ±10px，笔刷（宽 1）只有 ±3px。
+        const fw = Math.max(1, d.style.width || (d.type === 'highlight' ? HIGHLIGHT_WIDTH : BRUSH_WIDTH));
+        const ftol = strokeHitTol(fw);
+        const sp = smoothStroke(p, STROKE_SMOOTH);
+        if (sp.length === 1) {
+          if (Math.hypot(px - sp[0].x, py - sp[0].y) <= ftol) return { d, part: 'body' };
+        } else {
+          for (let i = 0; i < sp.length - 1; i++) {
+            if (distToSeg(px, py, sp[i].x, sp[i].y, sp[i + 1].x, sp[i + 1].y) <= ftol) return { d, part: 'body' };
+          }
         }
       } else if (d.type === 'arrowmark' || d.type === 'uparrow' || d.type === 'downarrow') {
         // 单击标记：以锚点为中心的字形包围盒
@@ -1506,7 +1612,7 @@ export class DrawLayer {
       id: this.nextId++,
       type,
       pts: pts.map((p) => ({ time: p.time, price: p.price })),
-      style: Object.assign(drawStyle(), style || {}),
+      style: styleForTool(type, style),
       locked: false,
       visible: true,
     };
@@ -1741,7 +1847,7 @@ export class DrawLayer {
         id: this.nextId++,
         type: this.tool,
         pts: [a],
-        style: Object.assign(drawStyle(), this.tool === 'highlight' ? { color: '#f7c52f' } : {}),
+        style: styleForTool(this.tool),
         locked: false,
         visible: true,
       };
@@ -1818,14 +1924,15 @@ export class DrawLayer {
   }
 
   onMove(px: number, py: number): void {
-    // 荧光笔/笔刷：轨迹采点 —— 距上一锚点 ≥6px 才记一个，太密了笔迹数据爆炸
-    if (this.pending && (this.pending.type === 'highlight' || this.pending.type === 'brush')) {
+    // 荧光笔/笔刷：轨迹采点 —— 官方 addPoint 会丢掉「与上一点屏幕距离 < 2px」的点，
+    // 2px 以上的才记（数据量由平滑算法兜住：每段最多插 5 个点）
+    if (this.pending && isFreehand(this.pending.type)) {
       const a = this.anchorAt(px, py);
       const pts = this.pending.pts;
       const last = pts[pts.length - 1];
       const dx = this.timeToX(a.time) - this.timeToX(last.time);
       const dy = this.host.yOf(a.price) - this.host.yOf(last.price);
-      if (Math.hypot(dx, dy) >= 6) pts.push(a);
+      if (Math.hypot(dx, dy) >= STROKE_MIN_STEP) pts.push(a);
       this.host.invalidate();
       return;
     }
@@ -1863,8 +1970,10 @@ export class DrawLayer {
   }
 
   onUp(): void {
-    // 荧光笔/笔刷收笔：一笔 = 一次快照（undo 一次退一整笔）；单击无轨迹时补成一个小短划
-    if (this.pending && (this.pending.type === 'highlight' || this.pending.type === 'brush')) {
+    // 荧光笔/笔刷收笔：一笔 = 一次快照（undo 一次退一整笔）。
+    // 官方单击只留 1 个点，PolygonRenderer 画半径 = 线宽/2 的实心圆；这里补成
+    // 退化短划（圆头笔帽同样画出一个点），视觉一致且不会留下一根看不见的线
+    if (this.pending && isFreehand(this.pending.type)) {
       if (this.pending.pts.length < 2) {
         const a = this.pending.pts[0];
         this.pending.pts.push({ time: a.time, price: a.price });
@@ -1989,64 +2098,48 @@ export class DrawLayer {
       ctx.beginPath();
       ctx.arc(a.x, a.y, 4, 0, Math.PI * 2);
       ctx.fill();
-    } else if (d.type === 'highlight') {
-      // 荧光笔迹：宽笔画 + 半透明 + 圆头，视觉上是「划过一道」
-      ctx.setLineDash([]);
-      ctx.globalAlpha = 0.35;
-      ctx.strokeStyle = col;
-      ctx.lineWidth = 10;
+    } else if (isFreehand(d.type)) {
+      // 自由笔迹（官方 BrushPaneView / HighlighterPaneView）：
+      // 先平滑再描边，圆头笔帽，单击画半径 = 线宽/2 的实心圆。
+      // 半透明来自颜色本身（荧光笔的 rgba(242,54,69,0.2)），不再叠 globalAlpha。
+      const hl = d.type === 'highlight';
+      const fw = Math.max(1, d.style.width || (hl ? HIGHLIGHT_WIDTH : BRUSH_WIDTH));
+      const sp = smoothStroke(p, STROKE_SMOOTH);
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = d.style.color;
+      ctx.fillStyle = d.style.color;
+      ctx.lineWidth = fw;
       ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.beginPath();
-      ctx.moveTo(p[0].x, p[0].y);
-      if (p.length === 1) {
-        // 单击：画一个小圆斑，保证至少留下痕迹
-        ctx.arc(p[0].x, p[0].y, 5, 0, Math.PI * 2);
-        ctx.fillStyle = col;
+      ctx.lineJoin = hl ? 'round' : 'miter';
+      // 笔刷官方有 linestyle 属性，虚线是合法设置；荧光笔没有，恒实线
+      ctx.setLineDash(hl ? [] : d.style.dash);
+      if (sp.length === 1) {
+        ctx.beginPath();
+        ctx.arc(sp[0].x, sp[0].y, fw / 2, 0, Math.PI * 2);
         ctx.fill();
       } else {
-        for (let i = 1; i < p.length; i++) ctx.lineTo(p[i].x, p[i].y);
+        ctx.beginPath();
+        ctx.moveTo(sp[0].x, sp[0].y);
+        for (let i = 1; i < sp.length; i++) ctx.lineTo(sp[i].x, sp[i].y);
         ctx.stroke();
+      }
+      // 选中态：官方只在首/末点画「白底 + 蓝环」圆点（无包围盒、无可拖手柄）
+      if (selected) {
+        const ends = [sp[0], sp[sp.length - 1]];
+        for (const q of ends) {
+          ctx.setLineDash([]);
+          ctx.beginPath();
+          ctx.arc(q.x, q.y, STROKE_ANCHOR_RING, 0, Math.PI * 2);
+          ctx.fillStyle = '#ffffff';
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(q.x, q.y, STROKE_ANCHOR_R, 0, Math.PI * 2);
+          ctx.lineWidth = 1;
+          ctx.strokeStyle = STROKE_ANCHOR_COLOR;
+          ctx.stroke();
+        }
       }
       ctx.restore();
-      // 选中态只描一个包围盒，不做逐锚点手柄
-      if (selected) {
-        let l = Infinity, t = Infinity, r2 = -Infinity, b2 = -Infinity;
-        for (const q of p) { l = Math.min(l, q.x); t = Math.min(t, q.y); r2 = Math.max(r2, q.x); b2 = Math.max(b2, q.y); }
-        ctx.save();
-        ctx.strokeStyle = '#1f6feb';
-        ctx.lineWidth = 1;
-        ctx.setLineDash([4, 3]);
-        ctx.strokeRect(l - 8, t - 8, r2 - l + 16, b2 - t + 16);
-        ctx.restore();
-      }
-      return;
-    } else if (d.type === 'brush') {
-      // 笔刷笔迹：细笔画实线、圆头（与荧光笔同机制，颜色/粗细走默认样式）
-      ctx.setLineDash([]);
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.beginPath();
-      ctx.moveTo(p[0].x, p[0].y);
-      if (p.length === 1) {
-        ctx.arc(p[0].x, p[0].y, 1.5, 0, Math.PI * 2);
-        ctx.fillStyle = col;
-        ctx.fill();
-      } else {
-        for (let i = 1; i < p.length; i++) ctx.lineTo(p[i].x, p[i].y);
-        ctx.stroke();
-      }
-      // 选中态描包围盒（同荧光笔，无逐锚点手柄）
-      if (selected) {
-        let l = Infinity, t = Infinity, r2 = -Infinity, b2 = -Infinity;
-        for (const q of p) { l = Math.min(l, q.x); t = Math.min(t, q.y); r2 = Math.max(r2, q.x); b2 = Math.max(b2, q.y); }
-        ctx.save();
-        ctx.strokeStyle = '#1f6feb';
-        ctx.lineWidth = 1;
-        ctx.setLineDash([4, 3]);
-        ctx.strokeRect(l - 8, t - 8, r2 - l + 16, b2 - t + 16);
-        ctx.restore();
-      }
       return;
     } else if (d.type === 'hray') {
       // 从锚点向右的水平射线 + 起点价格标签
@@ -3765,9 +3858,22 @@ export function drawSelfTest(): DrawTestResult {
     Lb.onMove(host.xCenter(22), host.yOf(103));
     Lb.onUp();
     const brushed = Lb.drawings.length === 1 && Lb.drawings[0].type === 'brush' &&
-      Lb.drawings[0].pts.length >= 3 && Lb.tool === 'cursor';
+      Lb.drawings[0].pts.length >= 3 && Lb.tool === 'cursor' &&
+      Lb.drawings[0].style.width === 1 && Lb.drawings[0].style.color === '#00bcd4';
     Lb.undo();
     t('笔刷：拖动采点收笔成型、一笔一次 undo', brushed && Lb.drawings.length === 0);
+
+    // --- 笔刷/荧光笔：对齐 charting_library（§2.6） ---
+    const sm0 = smoothStroke([{ x: 0, y: 0 }, { x: 10, y: 0 }], STROKE_SMOOTH);
+    t('笔刷/荧光笔：官方默认值（笔刷 #00bcd4·1px、荧光笔 20% 红·20px、smooth 5）',
+      styleForTool('brush').color === BRUSH_COLOR && styleForTool('brush').width === BRUSH_WIDTH &&
+      styleForTool('highlight').width === HIGHLIGHT_WIDTH &&
+      styleForTool('highlight').color === HIGHLIGHT_COLOR &&
+      STROKE_SMOOTH === 5 && STROKE_MIN_STEP === 2);
+    t('笔刷/荧光笔：平滑 = 重采样 + 箱式模糊 + 补原始末点；命中带宽 max(3, 线宽/2)',
+      sm0.length === 4 && Math.round(sm0[0].x) === 3 && Math.round(sm0[sm0.length - 1].x) === 10 &&
+      smoothStroke([]).length === 0 && smoothStroke([{ x: 5, y: 5 }]).length === 1 &&
+      strokeHitTol(20) === 10 && strokeHitTol(1) === 3 && STROKE_ANCHOR_RING === 5.5);
 
     // 箭头标记 / 向上 / 向下箭头：单击放置的字形
     const Lmk = new DrawLayer(host);

@@ -53,12 +53,12 @@ Pine 编辑器、权益曲线、统计组件目前**没有对应的 UI 入口**�
 ```
 npm run typecheck                          0 错误（strict）
 npm test (vitest)                          引擎 615 PASS（绘图 39 + Pine 74 + Pine 撮合 69 + 权益 26 + 统计 34 + 回放 27 + 布局目录 346）
-                                           共 590 个 vitest 用例（含 Agent / 工作区 / 数据 / 回放 / 布局 / 指标库 15 / 图表样式 8 / 商品代码 10 / 颜色选择器 5 / paneLayout 10 / 绘图工具扩充 338（含 emoji 选中框 8 + 测量对齐 8）+ 绘图属性工具条 22 + 长按信息卡 9 + 侧栏接线 26 + emoji 数据对齐 17，其中 1 条是与参考库逐字节同步）
+                                           共 599 个 vitest 用例（含 Agent / 工作区 / 数据 / 回放 / 布局 / 指标库 15 / 图表样式 8 / 商品代码 10 / 颜色选择器 5 / paneLayout 10 / 绘图工具扩充 347（含 emoji 选中框 8 + 测量对齐 8 + 笔刷/荧光笔对齐 9）+ 绘图属性工具条 22 + 长按信息卡 9 + 侧栏接线 26 + emoji 数据对齐 17，其中 1 条是与参考库逐字节同步）
 浏览器侧（dev 控制台 __app.runBrowserSelfTests()）
                                            图表 76（改造前 48，新增 setRange 回归 1 条 + 图表样式 8 条 + revealSpan 4 条 + 回放 15 条）+ 网格 20（含 55 种布局抽样的像素位置、时间联动）
-                                           + 权益 39（含 2.4 持仓色带像素断言 2 条）+ 统计 50 + 指标 31（含 2.6 窗格拖拽 / 最大化 / 折叠 / 坐标轴 12 条）+ 样式 52 + 绘图 125（2.8 起纳入；含光标组、线组、斐波那契/江恩组 13 种、音叉族 5 种、图表形态/艾略特波浪/循环组 14 种、预测/成交量/测量组 12 种（测量含官方配色 / 中线箭头 / 三行卡片 / 轴标签 6 条）、笔刷/箭头/形状组 16 种、文本标注组 7 种、emoji 标注（含选中框四角手柄与拖角改字号）、浮动属性工具条（setStyle/setLocked/repeatDraw/clone/selectionToolbarAnchor）与 setAllLocked 全锁断言）
-E2E（puppeteer 驱动 headless Chrome，未入库）  布局 13 + 指标 36 + 样式 38 + 商品代码搜索 28 PASS / 0 FAIL（早先的整页 E2E 79 条已随脚本被覆盖，未重跑）
-                                           近期功能 E2E：自选 15 + 告警 23 + 设置 20 + 交易 25 + 交易复刻 13 + 颜色选择器 13 + 副图窗格 8 + 右栏布局 13 + 绘图子菜单 23/26/26 + emoji 面板 14 + emoji 数据对齐 41 + emoji 选中框 20 + 测量对齐 13 + 绘图属性工具条 30 + 长按信息卡 6 + 对齐 charting_library 143 + 侧栏动作 17 PASS / 0 FAIL
+                                           + 权益 39（含 2.4 持仓色带像素断言 2 条）+ 统计 50 + 指标 31（含 2.6 窗格拖拽 / 最大化 / 折叠 / 坐标轴 12 条）+ 样式 52 + 绘图 127（2.8 起纳入；含光标组、线组、斐波那契/江恩组 13 种、音叉族 5 种、图表形态/艾略特波浪/循环组 14 种、预测/成交量/测量组 12 种（测量含官方配色 / 中线箭头 / 三行卡片 / 轴标签 6 条）、笔刷/箭头/形状组 16 种（笔刷/荧光笔含官方默认色与线宽、平滑算法、端点圆点）、文本标注组 7 种、emoji 标注（含选中框四角手柄与拖角改字号）、浮动属性工具条（setStyle/setLocked/repeatDraw/clone/selectionToolbarAnchor）与 setAllLocked 全锁断言）
+E2E（puppeteer 驱动 headless Chrome，未入库）  布局 13 + 指标 36 + 样式 38 + 商品代码搜索 28 + 测量对齐 13 + 笔刷/荧光笔对齐 13 PASS / 0 FAIL（早先的整页 E2E 79 条已随脚本被覆盖，未重跑）
+                                           近期功能 E2E：自选 15 + 告警 23 + 设置 20 + 交易 25 + 交易复刻 13 + 颜色选择器 13 + 副图窗格 8 + 右栏布局 13 + 绘图子菜单 23/26/26 + emoji 面板 14 + emoji 数据对齐 41 + emoji 选中框 20 + 测量对齐 13 + 笔刷/荧光笔对齐 13 + 绘图属性工具条 30 + 长按信息卡 6 + 对齐 charting_library 143 + 侧栏动作 17 PASS / 0 FAIL
 ```
 
 **任何改动之后这套数字必须只增不减。** 加功能要加断言，改逻辑不能让已有断言变红。
@@ -491,6 +491,51 @@ E2E（puppeteer 驱动 headless Chrome，未入库）  布局 13 + 指标 36 + �
 > 拖拽手势 vs 两次点击）；浏览器自检 draw 119 → **125**；真鼠标 E2E「测量对齐」**13 PASS / 0 FAIL**
 > （拖动预览有卡片 → 内部红底 → 两条中线是实色 → 卡片 90% 红 + 白字 → 时间/价格各 2 个蓝标签 →
 > 涨的那次是蓝不是绿）；截图 `docs/shot-measure-align.png`（跌）/ `docs/shot-measure-up.png`（涨）。
+
+
+### 2.8.11 「笔刷 / 荧光笔」对齐 charting_library（BrushBasePaneView）✅
+
+> **官方依据**（本机 `charting_library/bundles`，`library.*.js` 默认属性表 +
+> `lt-pane-views.*.js` 的 `52377`（BrushBasePaneView）/ `62641`（BrushPaneView）/ `75073`（HighlighterPaneView））：
+>
+> ```js
+> linetoolbrush:       { linecolor: color-sky-blue-500 (#00bcd4), linewidth: 1,
+>                        linestyle: 实线, smooth: 5, fillBackground: false }
+> linetoolhighlighter: { linecolor: generateColor(color-ripe-red-500 #F23645, 80), smooth: 5 }
+> // HighlighterPaneView 把 linewidth 写死 20、linecap/linejoin 都是 round
+> // PolygonRenderer：单点 → 半径 = linewidth/2 的实心圆；hitTest 容差 = max(3, ceil(w/2))
+> // SelectionRenderer：只画首/末两个「白底 + tv-blue-600 环」圆点（DPR1 外径 5.5 / 内环 3.5）
+> // LineToolBrushBase.addPoint：与上一点屏幕距离 < 2px 的点直接丢弃
+> ```
+>
+> 所以之前的实现有三处**明显不对味**：① 荧光笔是**黄**色、alpha 0.35、线宽 10；
+> ② 笔迹是**折线**（没有平滑，手一抖就是锯齿）；③ 选中态画**虚线包围盒**。
+>
+> **跟着改的**（`src/engine/draw.ts` §2.6）：
+> - 默认值换成官方的：笔刷 `#00bcd4` / 1px；荧光笔 `rgba(242,54,69,0.2)` / 20px（`styleForTool` 一条路，
+>   `add()` 和落笔都走它，显式传入的样式仍然优先）；
+> - **半透明只在颜色里**：删掉 `globalAlpha = 0.35`（再乘一层会比官方淡一半，白底实测 252/215/218 = 0.2 混合）；
+> - 新增纯函数 `smoothStroke`：先把每段按 ≤ smooth(5) 像素重采样（每段最多插 5 个点），再做半径 5 的
+>   箱式模糊（越界邻居夹端点），最后补一个**原始末点**收尾 —— 与官方 `_updateImpl` + `_smoothArray` 逐行等价；
+> - 命中按**平滑后**的轨迹算（不会出现「看着在线上却点不中」），容差 `max(3, ceil(线宽/2))`：
+>   荧光笔 ±10px、笔刷 ±3px（原来两者都是写死的 ±11 / ±8）；
+> - 采点步长 6px → **2px**（官方 `addPoint`），数据量由平滑算法兜住；
+> - 选中态：虚线包围盒 → **首/末点各一个白底 + `#1e53e5` 环圆点**（无可拖手柄 ——
+>   官方 `hasEditableCoordinates() === false`）；
+> - 笔刷保留官方 `linestyle` 属性（虚线合法），荧光笔恒实线。
+>
+> **诚实边界**：
+> ① 官方笔刷还有 `fillBackground / transparency / leftEnd / rightEnd / smooth` 五个属性，我们的浮动属性条
+> 只暴露颜色 / 线宽 / 线型 —— 默认值（不填背景、两端 Normal、smooth 5）与官方一致，但没有对应的 UI；
+> ② 官方荧光笔的线宽不可调（写死 20），我们的属性条仍可改（默认值一致，算超集）；
+> ③ 我们的荧光笔 / 笔刷是**持久图形**（可选中、拖动、撤销），官方是 LineDataSource 但同样持久 —— 这条一致。
+>
+> **断言**：`tests/drawTools.test.ts` 359 → **368**（默认色与线宽、`smoothStroke` 数值钉死
+> `[3,4,6,10]` 与尖角磨圆、荧光笔 20px 圆头圆角 alpha=1、笔刷 1px miter、单击圆斑、
+> 选中态两个圆点 + 无包围盒、命中带宽 10/3、<2px 丢点）；浏览器自检 draw 125 → **127**；
+> 真鼠标 E2E「笔刷/荧光笔对齐」**13 PASS / 0 FAIL**（菜单行 → 落笔类型 → 20% 红 → 法线 6px 内 14px 外 →
+> 端点白点与蓝环 → 笔刷青蓝 1px → 波浪平滑笔迹）；
+> 截图 `docs/shot-brush-align.png`（两种笔迹同框）/ `docs/shot-brush-anchor.png`（选中端点圆点）。
 
 
 | 2.9 | 布局存档（localStorage / 服务端） | ⬜ | 小 | 存/读往返一致，含视口、通道开关、绘图、联动开关 |

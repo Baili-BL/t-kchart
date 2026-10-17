@@ -15,6 +15,9 @@ import {
   EMOJI_MIN, EMOJI_MAX, EMOJI_KNOB_R,
   fmtMeasurePrice, fmtMeasurePercent, fmtMeasureSpan, fmtMeasureVolume,
   measureInfo, measureLabelBox, measureLabelAnchor, measureGuides,
+  smoothStroke, strokeHitTol, styleForTool, isFreehand,
+  BRUSH_COLOR, BRUSH_WIDTH, HIGHLIGHT_COLOR, HIGHLIGHT_WIDTH,
+  STROKE_SMOOTH, STROKE_MIN_STEP, STROKE_ANCHOR_R, STROKE_ANCHOR_RING, STROKE_ANCHOR_COLOR,
 } from '../src/engine/draw';
 import { fmtCrossTime } from '../src/engine/chart';
 import type { DrawHost, Drawing } from '../src/engine/draw';
@@ -1279,12 +1282,14 @@ describe('笔刷组：笔刷 brush（自由笔迹，默认色细线）', () => {
     expect(ops.stroke).toBeGreaterThanOrEqual(1);
   });
   it('命中：笔迹段上命中（无逐锚点手柄），离轨迹 40px 不命中', () => {
-    const hit = L.hitTest((p[1].x + p[2].x) / 2, (p[1].y + p[2].y) / 2);
+    // 官方笔迹是**平滑后**的曲线，命中按平滑轨迹算：取平滑轨迹上一段的中点
+    const sm = smoothStroke(p, STROKE_SMOOTH);
+    const hit = L.hitTest((sm[1].x + sm[2].x) / 2, (sm[1].y + sm[2].y) / 2);
     expect(hit && hit.d.id === d.id).toBe(true);
     expect(hit!.part).toBe('body');
     expect(L.hitTest(p[1].x, p[1].y + 40)).toBeNull();
     L.select(d.id);
-    expect(L.hitTest(p[1].x, p[1].y)!.part).toBe('body');
+    expect(L.hitTest(sm[1].x, sm[1].y)!.part).toBe('body');
   });
   it('拖动：整体平移，轨迹点数不变；undo/redo 往返', () => {
     const before = d.pts.map((q) => ({ ...q }));
@@ -2254,5 +2259,214 @@ describe('测量对齐 charting_library：配色 / 文案 / 几何 / 轴标签',
     expect(spy2.rec.texts.filter((x) => x.align === 'left').length).toBe(2);  // 价格轴
     expect(spy2.rec.texts.filter((x) => x.align === 'center').length).toBe(2); // 时间轴
     expect(d2.id).toBeGreaterThan(0);
+  });
+});
+
+/* ===========================================================================
+ * 「笔刷 / 荧光笔」对齐 charting_library（BrushBasePaneView + HighlighterPaneView）
+ *
+ * 官方口径（详见 src/engine/draw.ts §2.6 的注释）：
+ *   · linetoolbrush       = sky-blue-500 #00bcd4 / 1px / 实线 / smooth 5
+ *   · linetoolhighlighter = generateColor(ripe-red-500, 80) → rgba(242,54,69,0.2)，线宽写死 20
+ *   · 采点丢弃 <2px 的移动；平滑 = 重采样（每段 ≤5 个）+ 半径 5 的箱式模糊 + 补末点
+ *   · 选中态只在首/末点画「白底 + tv-blue-600 环」圆点，没有包围盒、没有可拖手柄
+ *   · 命中带宽 = max(3, ceil(线宽/2))：荧光笔 ±10px，笔刷 ±3px
+ * ========================================================================= */
+
+function makeStrokeCtx() {
+  const rec = {
+    strokes: [] as { w: number; color: string; cap: string; join: string; alpha: number; dash: number[] }[],
+    fills: [] as { color: string; alpha: number; r: number }[],
+    arcs: [] as { x: number; y: number; r: number }[],
+    strokeRects: 0,
+  };
+  const ctx: any = {
+    save() { /* no-op */ },
+    restore() { /* no-op */ },
+    beginPath() { /* no-op */ },
+    moveTo() { /* no-op */ },
+    lineTo() { /* no-op */ },
+    closePath() { /* no-op */ },
+    ellipse() { /* no-op */ },
+    quadraticCurveTo() { /* no-op */ },
+    rect() { /* no-op */ },
+    fillRect() { /* no-op */ },
+    fillText() { /* no-op */ },
+    measureText: (s: string) => ({ width: String(s).length * 7 }),
+    setLineDash(d: number[]) { ctx._dash = d ? [...d] : []; },
+    arc(x: number, y: number, r: number) { rec.arcs.push({ x, y, r }); },
+    stroke() {
+      rec.strokes.push({
+        w: ctx.lineWidth, color: String(ctx.strokeStyle), cap: ctx.lineCap,
+        join: ctx.lineJoin, alpha: ctx.globalAlpha, dash: [...(ctx._dash || [])],
+      });
+    },
+    fill() {
+      rec.fills.push({
+        color: String(ctx.fillStyle), alpha: ctx.globalAlpha,
+        r: rec.arcs.length ? rec.arcs[rec.arcs.length - 1].r : 0,
+      });
+    },
+    strokeRect() { rec.strokeRects++; },
+    _dash: [] as number[],
+    globalAlpha: 1, fillStyle: '#000', strokeStyle: '#000',
+    lineWidth: 1, lineCap: 'butt', lineJoin: 'miter',
+    font: '12px sans-serif', textAlign: 'left', textBaseline: 'alphabetic',
+  };
+  return { ctx, rec };
+}
+
+const zig = [anchor(10, 105), anchor(14, 106), anchor(18, 104), anchor(22, 105)];
+const flat = [anchor(10, 105), anchor(20, 105), anchor(30, 105), anchor(40, 105)];
+
+describe('笔刷/荧光笔对齐 charting_library：默认值 / 平滑 / 线宽 / 选中圆点', () => {
+  it('默认值照官方属性表：笔刷 #00bcd4·1px；荧光笔 rgba(242,54,69,0.2)·20px', () => {
+    expect(BRUSH_COLOR).toBe('#00bcd4');           // color-sky-blue-500
+    expect(BRUSH_WIDTH).toBe(1);
+    expect(HIGHLIGHT_COLOR).toBe('rgba(242,54,69,0.2)'); // generateColor(ripe-red-500, 80)
+    expect(HIGHLIGHT_WIDTH).toBe(20);
+    expect(STROKE_SMOOTH).toBe(5);
+    expect(STROKE_MIN_STEP).toBe(2);
+    expect(isFreehand('brush') && isFreehand('highlight') && !isFreehand('trend')).toBe(true);
+
+    const b = styleForTool('brush');
+    expect(b.color).toBe('#00bcd4');
+    expect(b.width).toBe(1);
+    expect(b.dash).toEqual([]);
+    const h = styleForTool('highlight');
+    expect(h.color).toBe('rgba(242,54,69,0.2)');
+    expect(h.width).toBe(20);
+    // 显式 patch 优先（用户改过的颜色不能被默认值盖掉）
+    expect(styleForTool('brush', { color: '#ffffff' }).color).toBe('#ffffff');
+
+    // 落笔链路也用同一套默认值
+    expect(draw('highlight', zig).d.style.width).toBe(20);
+    expect(draw('brush', zig).d.style.width).toBe(1);
+  });
+
+  it('平滑纯函数：空/单点原样；重采样 + 箱式模糊 + 补原始末点（数值钉死）', () => {
+    expect(smoothStroke([])).toEqual([]);
+    expect(smoothStroke([{ x: 3, y: 4 }])).toEqual([{ x: 3, y: 4 }]);
+
+    // 一段 10px 直线、smooth=5 → 重采样成 [(0,0),(0,0),(10,0)]，
+    // 半径 5 的箱式模糊（越界夹端点）后 = 3 / 4 / 6，最后补原始末点 10
+    const seg = smoothStroke([{ x: 0, y: 0 }, { x: 10, y: 0 }], 5);
+    expect(seg.map((p) => Math.round(p.x))).toEqual([3, 4, 6, 10]);
+    expect(seg.every((p) => p.y === 0)).toBe(true);
+
+    // 末点永远是原始末点（笔迹收在松手处，不被模糊拽回来）
+    const l = smoothStroke([{ x: 0, y: 0 }, { x: 40, y: 30 }], 5);
+    expect(l[l.length - 1]).toEqual({ x: 40, y: 30 });
+  });
+
+  it('平滑效果：抖动的尖角被磨圆，但不会把笔迹拉成一条直线', () => {
+    const raw = [
+      { x: 0, y: 100 }, { x: 30, y: 100 }, { x: 60, y: 140 },
+      { x: 90, y: 100 }, { x: 120, y: 100 },
+    ];
+    const sm = smoothStroke(raw, 5);
+    expect(sm.length).toBeGreaterThan(raw.length);   // 重采样插了中间点
+    const ys = sm.map((p) => p.y);
+    const peak = Math.max(...ys);
+    expect(peak).toBeLessThan(140);                  // 尖角被削
+    expect(peak).toBeGreaterThan(108);               // 但没被拉平成 100
+    expect(Math.min(...ys)).toBeGreaterThanOrEqual(100);
+  });
+
+  it('渲染：荧光笔 20px 圆头圆角、实线、alpha=1（半透明在颜色里）', () => {
+    const { L } = draw('highlight', zig);
+    L.select(null);                   // add() 会顺手选中，先取消才能只看笔迹本身
+    const { ctx, rec } = makeStrokeCtx();
+    L.render(ctx);
+    expect(rec.strokes.length).toBe(1);
+    const s = rec.strokes[0];
+    expect(s.w).toBe(20);
+    expect(s.cap).toBe('round');
+    expect(s.join).toBe('round');
+    expect(s.color).toBe('rgba(242,54,69,0.2)');
+    expect(s.alpha).toBe(1);          // 不能再乘 globalAlpha，否则比官方淡一半
+    expect(s.dash).toEqual([]);       // 荧光笔官方没有线型属性
+    expect(rec.strokeRects).toBe(0);
+  });
+
+  it('渲染：笔刷 1px 圆头、miter 拐角（官方只设 linecap round）', () => {
+    const { L } = draw('brush', zig);
+    L.select(null);
+    const { ctx, rec } = makeStrokeCtx();
+    L.render(ctx);
+    const s = rec.strokes[0];
+    expect(s.w).toBe(1);
+    expect(s.cap).toBe('round');
+    expect(s.join).toBe('miter');
+    expect(s.color).toBe('#00bcd4');
+    expect(s.alpha).toBe(1);
+  });
+
+  it('单击（只落一个点）：画半径 = 线宽/2 的实心圆，不抛错', () => {
+    const { L, d } = draw('highlight', [anchor(20, 105)]);
+    d.pts.push({ ...d.pts[0] });     // onUp 里补的退化短划
+    L.select(null);
+    const { ctx, rec } = makeStrokeCtx();
+    expect(() => L.render(ctx)).not.toThrow();
+    expect(rec.strokes.length).toBe(1);   // 退化线段照样出一次描边（圆头笔帽 = 圆点）
+  });
+
+  it('选中态：首/末点各一个「白底 + 蓝环」圆点，没有虚线包围盒', () => {
+    const { L, d } = draw('highlight', zig);
+    L.select(d.id);
+    const { ctx, rec } = makeStrokeCtx();
+    L.render(ctx);
+    expect(rec.strokeRects).toBe(0);                       // 不再画包围盒
+    const white = rec.fills.filter((f) => f.color === '#ffffff' && f.r === STROKE_ANCHOR_RING);
+    expect(white.length).toBe(2);                          // 两个白底
+    expect(rec.arcs.filter((q) => q.r === STROKE_ANCHOR_R).length).toBe(2);
+    const ring = rec.strokes.filter((s) => s.color === STROKE_ANCHOR_COLOR && s.w === 1);
+    expect(ring.length).toBe(2);                           // 两个蓝环
+    // 圆点位置 = 平滑轨迹的首点 / 原始末点
+    const sp = smoothStroke(L.pixelPts(d), STROKE_SMOOTH);
+    const marks = rec.arcs.filter((q) => q.r === STROKE_ANCHOR_RING);
+    expect(marks[0].x).toBeCloseTo(sp[0].x, 6);
+    expect(marks[0].y).toBeCloseTo(sp[0].y, 6);
+    expect(marks[1].x).toBeCloseTo(sp[sp.length - 1].x, 6);
+    expect(marks[1].y).toBeCloseTo(sp[sp.length - 1].y, 6);
+  });
+
+  it('命中带宽按线宽：荧光笔 ±10px、笔刷 ±3px（官方 max(3, ceil(w/2))）', () => {
+    expect(strokeHitTol(20)).toBe(10);
+    expect(strokeHitTol(1)).toBe(3);
+    expect(strokeHitTol(4)).toBe(3);
+    expect(strokeHitTol(7)).toBe(4);
+
+    // 水平笔迹：y 方向偏移量就是到笔迹的距离
+    const { L, d } = draw('highlight', flat);
+    const sp = smoothStroke(L.pixelPts(d), STROKE_SMOOTH);
+    const mx = (sp[1].x + sp[2].x) / 2;
+    expect(L.hitTest(mx, sp[1].y + 8)!.d.id).toBe(d.id);   // 8 ≤ 10
+    expect(L.hitTest(mx, sp[1].y + 12)).toBeNull();        // 12 > 10
+
+    const { L: Lb, d: db } = draw('brush', flat);
+    const spb = smoothStroke(Lb.pixelPts(db), STROKE_SMOOTH);
+    const mbx = (spb[1].x + spb[2].x) / 2;
+    expect(Lb.hitTest(mbx, spb[1].y + 2)!.d.id).toBe(db.id);
+    expect(Lb.hitTest(mbx, spb[1].y + 4)).toBeNull();
+  });
+
+  it('采点：相距 < 2px 的移动被丢弃（官方 addPoint），≥ 2px 才记一个点', () => {
+    const L = new DrawLayer(HOST);
+    L.setTool('brush');
+    const x0 = HOST.xCenter(10);
+    const y0 = HOST.yOf(105);
+    const pts = (): { time: number; price: number }[] => (L as any).pending.pts;
+    L.onDown(x0, y0);
+    expect(pts().length).toBe(1);
+    L.onMove(x0 + 1, y0);          // 1px：丢
+    expect(pts().length).toBe(1);
+    L.onMove(x0 + 1.5, y0);        // 1.5px（相对起点）：还是丢
+    expect(pts().length).toBe(1);
+    L.onMove(x0 + 3, y0);          // 3px：记
+    expect(pts().length).toBe(2);
+    L.onUp();
+    expect(L.drawings.length).toBe(1);
+    expect(L.drawings[0].type).toBe('brush');
   });
 });
