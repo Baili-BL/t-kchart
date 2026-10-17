@@ -9,7 +9,9 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "sync:emoji": "node scripts/sync-tv-emoji.mjs",
+    "check:emoji": "node scripts/sync-tv-emoji.mjs --check"
   },
   "dependencies": {
     "react": "^18.3.1",

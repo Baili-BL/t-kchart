@@ -53,7 +53,7 @@ Pine 编辑器、权益曲线、统计组件目前**没有对应的 UI 入口**�
 ```
 npm run typecheck                          0 错误（strict）
 npm test (vitest)                          引擎 615 PASS（绘图 39 + Pine 74 + Pine 撮合 69 + 权益 26 + 统计 34 + 回放 27 + 布局目录 346）
-                                           共 569 个 vitest 用例（含 Agent / 工作区 / 数据 / 回放 / 布局 / 指标库 15 / 图表样式 8 / 商品代码 10 / 颜色选择器 5 / paneLayout 10 / 绘图工具扩充 322 + 绘图属性工具条 22 + 长按信息卡 9 + 侧栏接线 26 + emoji 数据对齐 13）
+                                           共 574 个 vitest 用例（含 Agent / 工作区 / 数据 / 回放 / 布局 / 指标库 15 / 图表样式 8 / 商品代码 10 / 颜色选择器 5 / paneLayout 10 / 绘图工具扩充 322 + 绘图属性工具条 22 + 长按信息卡 9 + 侧栏接线 26 + emoji 数据对齐 17，其中 1 条是与参考库逐字节同步）
 浏览器侧（dev 控制台 __app.runBrowserSelfTests()）
                                            图表 76（改造前 48，新增 setRange 回归 1 条 + 图表样式 8 条 + revealSpan 4 条 + 回放 15 条）+ 网格 20（含 55 种布局抽样的像素位置、时间联动）
                                            + 权益 39（含 2.4 持仓色带像素断言 2 条）+ 统计 50 + 指标 31（含 2.6 窗格拖拽 / 最大化 / 折叠 / 坐标轴 12 条）+ 样式 52 + 绘图 116（2.8 起纳入；含光标组、线组、斐波那契/江恩组 13 种、音叉族 5 种、图表形态/艾略特波浪/循环组 14 种、预测/成交量/测量组 12 种、笔刷/箭头/形状组 16 种、文本标注组 7 种、emoji 标注、浮动属性工具条（setStyle/setLocked/repeatDraw/clone/selectionToolbarAnchor）与 setAllLocked 全锁断言）
@@ -378,6 +378,39 @@ E2E（puppeteer 驱动 headless Chrome，未入库）  布局 13 + 指标 36 + �
 > 要补建议单开一组「新增表情」。② 官方落笔默认 `linetoolemoji.size=40`（其单位）、emoji 旋转 `angle=0.5π`，
 > 且选中后可在属性里换 emoji 与字号；我们仍是单点落笔、字号 28、不可旋转（属性条只有颜色/线宽/线型）。
 > ③ 官方面板是**虚拟化列表**（单滚动 + 小标题），我们是设计稿的「9 tab + 单滚动 + 小标题」，数据相同、排布更窄。
+
+#### 2.8c 表情数据改为「直接吃参考库」（2026-10-17）
+
+> 2.8b 的字符是抄进 TS 字面量的，等于多了一份副本：参考库升级要人手重抄，抄错也没人知道。
+> 这一轮把数据源头换成**把官方模块跑起来**，TS 里不再有第二份字符表。
+>
+> **为什么不能运行时 import**：那 18MB bundle 是 webpack 产物，模块 173 依赖 React、i18n、IconItem
+> 与 TV 的运行时上下文，`import` 进来会连带初始化整个库；它是给页面用的，不是给库用的。
+> 所以取在**同步时**：`scripts/sync-tv-emoji.mjs` 用 `node:vm` 造一个只有 `self/window` 的沙箱，
+> 让 chunk 自己 `push` 进 `webpackChunktradingview`，再把模块表捞出来执行。
+>
+> **怎么骗过依赖**：假 `require` 只认真认三个 id —— React 的 `createElement` 返回 `null`、
+> i18n 的 `t(k, ctx, v)` 原样返回 `v`、`IconItem` 返回 `null`；**其余一律返回 `{__moduleId:id}`**。
+> 于是官方那句 `t(null,{context:"emoji_group"}, o(96330))` 的标题就成了一个带 id 的记号，
+> 我们据此知道每组对应的语言包模块 id，再用真语言包（`zh.4782` / `en.4782`）调用那个 id 的工厂，
+> 拿到「笑脸&人像 / smiles & people」。字符与组名都来自官方运行时，没有任何一处手抄。
+>
+> **产物两层**：`emoji-source.json`（1802 行 / 32KB，一个 emoji 一行，便于 diff —— 官方加一个表情就是
+> 一行增删）+ `emoji-data.ts` 只剩薄适配层（派生 `EMOJI_CATEGORIES` / `EMOJI_ALL` / 白名单，
+> 不存字符）。手绘 tab 图标挪到 `emoji-icons.ts`，按**语义 key**（smile/animal/…）对应而非数组下标，
+> 官方调分组顺序也不会串图。
+>
+> **抽完就地断言**：9 组、首组必须是空的「最近使用」、每组 ≥50、全集无重复、
+> 且 `removeUnavailableEmoji(['😀','文字','A','🇿🇼'])` 必须只留下两个 —— 任一条不满足就报错不写盘，
+> 宁可失败也不写半对的数据。
+>
+> **防漂移**：`npm run sync:emoji` 重新生成、`npm run check:emoji` 只校对。
+> `tests/emojiData.test.ts` 里有一条「本机有参考库时跑 `--check`，输出必须与提交的 JSON 逐字节一致」
+> （1.4s；没库的机器 skip 而不是假绿）。chunk 定位按 `removeUnavailableEmoji:()=>` 找、候选文件排序后取，
+> 换机器选到同一个（24.001 版落在 `5890.*.js`，`drawing-toolbar.*.js` 内联了同一模块）。
+>
+> **断言**：vitest 569 → **574**（新增 4 条出处与派生一致性 + 1 条逐字节同步）；
+> 回归 emoji 数据对齐 E2E 41、旧 emoji 面板 E2E 14，全绿。
 
 
 | 2.9 | 布局存档（localStorage / 服务端） | ⬜ | 小 | 存/读往返一致，含视口、通道开关、绘图、联动开关 |
