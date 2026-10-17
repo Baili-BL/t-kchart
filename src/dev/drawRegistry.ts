@@ -36,6 +36,10 @@ export interface DrawLayerSnapshot {
   pts: { x: number; y: number }[][];
   /** 每个图形的样式（颜色 / 线宽 / 填充 / 线型），用来断言「默认值是否与官方一致」 */
   styles: { color: string; width: number; fill: string; dash: number[] }[];
+  /** 橡皮擦悬停高亮的图形 id（同官方 setHoveredSource；null 表示没悬停或工具不是橡皮） */
+  hover: number | null;
+  /** 每个图形被橡皮擦擦掉的档位下标（只有多档位工具会非空） */
+  hiddenLevels: number[][];
 }
 
 /** 所有活着的绘图层的快照 */
@@ -52,6 +56,8 @@ export function drawLayerSnapshots(): DrawLayerSnapshot[] {
     styles: l.drawings.map((d) => ({
       color: d.style.color, width: d.style.width, fill: d.style.fill, dash: d.style.dash.slice(),
     })),
+    hover: l.hoverId,
+    hiddenLevels: l.drawings.map((d) => (d.style.hiddenLevels ? d.style.hiddenLevels.slice() : [])),
   }));
 }
 

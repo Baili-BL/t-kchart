@@ -39,6 +39,12 @@ export interface DrawStyle {
   fill: string;
   fontSize: number;
   text: string;
+  /**
+   * 被橡皮擦「擦掉的档位」下标（只对多档位工具有效）。
+   * 官方口径：⌘/Ctrl + 橡皮擦点某一条档位线 = 只隐藏这一条（`processErase` →
+   * `properties().child('levelN').visible = false`），整个图形还在。
+   */
+  hiddenLevels?: number[];
 }
 
 export interface Drawing {
@@ -328,6 +334,36 @@ export const FIB_EXTENSIONS: number[] = [1, 1.618, 2.618, 4.236, 6.854];
 
 /** 江恩网格分割（1/8） */
 export const GANN_DIVS: number[] = [0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1];
+
+/**
+ * 有「档位」的工具 → 档位数量（下标 = 档位序号）。
+ * 官方这些工具都实现了 `processErase(model, eraseMarker)`：⌘/Ctrl + 橡皮擦
+ * 只隐藏被点到的那一档，而不是整条删掉。其余工具没有档位，模改键不生效。
+ */
+export const LEVEL_TOOLS: Record<string, number> = {
+  fib: FIB_LEVELS.length,
+  fibext: FIB_EXT_LEVELS.length,
+  fibchannel: FIB_CHANNEL_R.length,
+  fibfan: FIB_RATIOS.length + 1,          // 0 档 + 各比例
+  fibtz: FIB_EXTENSIONS.length + 1,       // 起点 + 各倍数
+  fibttz: FIB_EXTENSIONS.length + 1,
+};
+
+/**
+ * 橡皮擦光标 —— 对齐官方的 `pane--cursor-eraser`：`charting_library/bundles` 里是
+ * `eraser.c80610a04a92d2465b03.cur`（32×32、热点 **5,5**、白身 + #353535 描边、
+ * 斜置橡皮右上角实心）。这里用同样造型的 SVG（不搬官方位图），
+ * `url() 5 5` 的热点与官方一致；不支持 SVG 光标的浏览器退回 crosshair。
+ */
+export const ERASER_CURSOR = 'url("data:image/svg+xml;utf8,'
+  + encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">'
+    + '<path d="M2.6 5h4.8M5 2.6v4.8" stroke="#353535" stroke-width="1.3" stroke-linecap="round"/>'
+    + '<g transform="rotate(-42 15 14)">'
+    + '<rect x="5.5" y="9.6" width="19" height="9" rx="1.3" fill="#fff" stroke="#353535" stroke-width="1.5"/>'
+    + '<path d="M13.6 9.6h9.6a1.3 1.3 0 0 1 1.3 1.3v6.4a1.3 1.3 0 0 1-1.3 1.3h-9.6z" fill="#353535"/>'
+    + '</g></svg>',
+  ) + '") 5 5, crosshair';
 
 /**
  * emoji 标注的默认字号（px）—— 对齐官方 `linetoolemoji.size = 40`。
@@ -1210,6 +1246,12 @@ export class DrawLayer {
   emojiChar = '😀';
   /** 「重复绘制」：画完一个图形后不切回光标，继续用当前工具（设计稿浮动条 aria-pressed 按钮） */
   repeatDraw = false;
+  /**
+   * 橡皮擦悬停到的图形（只影响**渲染**：画它的锚点方块 + 置顶，和官方
+   * `setHoveredSource` → `areAnchorsVisible()` 同一套口径）。
+   * 不改选中态、不接管拖动 —— 松开鼠标它就该消失。
+   */
+  hoverId: number | null = null;
 
   private nextId: number;
   private pending: Drawing | null;
@@ -1301,6 +1343,11 @@ export class DrawLayer {
   }
 
   /* -------------------------------------------------------------- 命中 */
+
+  /** 某条档位是否已被橡皮擦擦掉（官方 `properties().child('levelN').visible === false`） */
+  private levelHidden(d: Drawing, i: number): boolean {
+    return !!d.style.hiddenLevels && d.style.hiddenLevels.includes(i);
+  }
 
   /**
    * 曲线类工具（螺旋/弧/楔形）的采样折线（渲染与命中共用一套几何）。
@@ -1462,46 +1509,53 @@ export class DrawLayer {
         const e = rayToX(a.x, a.y, b.x, b.y, ch.plot.r + 50);
         if (distToSeg(px, py, a.x, a.y, e.x, e.y) <= tol) return { d, part: 'body' };
       } else if (d.type === 'fib') {
-        // 任意一条水平档位线
-        for (const lv of FIB_LEVELS) {
-          const y = a.y + lv.l * (b.y - a.y);
+        // 任意一条水平档位线；part 带上档位下标，⌘/Ctrl + 橡皮擦才知道要擦哪一条
+        for (let i = 0; i < FIB_LEVELS.length; i++) {
+          if (this.levelHidden(d, i)) continue;
+          const y = a.y + FIB_LEVELS[i].l * (b.y - a.y);
           if (distToSeg(px, py, Math.min(a.x, b.x), y, Math.max(a.x, b.x), y) <= tol) {
-            return { d, part: 'body' };
+            return { d, part: 'level:' + i };
           }
         }
       } else if (d.type === 'fibext') {
         // 档位横跨整个绘图区的水平线（价格锚定 p2，单位价差 = p1-p0）
         const dp = d.pts[1].price - d.pts[0].price;
-        for (const lv of FIB_EXT_LEVELS) {
-          const y = ch.yOf(d.pts[2].price + lv.l * dp);
-          if (distToSeg(px, py, ch.plot.l, y, ch.plot.r, y) <= tol) return { d, part: 'body' };
+        for (let i = 0; i < FIB_EXT_LEVELS.length; i++) {
+          if (this.levelHidden(d, i)) continue;
+          const y = ch.yOf(d.pts[2].price + FIB_EXT_LEVELS[i].l * dp);
+          if (distToSeg(px, py, ch.plot.l, y, ch.plot.r, y) <= tol) return { d, part: 'level:' + i };
         }
       } else if (d.type === 'fibchannel') {
         // 基线 p0→p1 沿宽度向量 (p2-p0) 的斐波那契倍数平移出的平行线（两端延伸出绘图区）
         const wx = c.x - a.x;
         const wy = c.y - a.y;
-        for (const r of FIB_CHANNEL_R) {
+        for (let i = 0; i < FIB_CHANNEL_R.length; i++) {
+          if (this.levelHidden(d, i)) continue;
+          const r = FIB_CHANNEL_R[i];
           const sx = a.x + wx * r;
           const sy = a.y + wy * r;
           const ex = b.x + wx * r;
           const ey = b.y + wy * r;
           const l = rayToX(sx, sy, ex, ey, ch.plot.l - 50);
           const rt = rayToX(sx, sy, ex, ey, ch.plot.r + 50);
-          if (distToSeg(px, py, l.x, l.y, rt.x, rt.y) <= tol) return { d, part: 'body' };
+          if (distToSeg(px, py, l.x, l.y, rt.x, rt.y) <= tol) return { d, part: 'level:' + i };
         }
       } else if (d.type === 'fibtz' || d.type === 'fibttz') {
         // 垂直线组：时区单位 = |p1.x-p0.x| 从 p0 起；趋势时间单位 = p1.x-p0.x 从 p2 起
         const unit = b.x - a.x;
         const origin = d.type === 'fibtz' ? a.x : c.x;
-        if (Math.abs(px - origin) <= tol) return { d, part: 'body' };
-        for (const r of FIB_EXTENSIONS) {
-          if (Math.abs(px - (origin + r * unit)) <= tol) return { d, part: 'body' };
+        if (Math.abs(px - origin) <= tol) return { d, part: 'level:0' };
+        for (let i = 0; i < FIB_EXTENSIONS.length; i++) {
+          if (this.levelHidden(d, i + 1)) continue;
+          if (Math.abs(px - (origin + FIB_EXTENSIONS[i] * unit)) <= tol) return { d, part: 'level:' + (i + 1) };
         }
       } else if (d.type === 'fibfan') {
         // 从 p0 出发、穿过 (p1.x, p0.y + r*(p1.y-p0.y)) 的射线组
-        for (const r of [0, ...FIB_RATIOS]) {
-          const e = rayToX(a.x, a.y, b.x, a.y + r * (b.y - a.y), ch.plot.r + 50);
-          if (distToSeg(px, py, a.x, a.y, e.x, e.y) <= tol) return { d, part: 'body' };
+        const rays = [0, ...FIB_RATIOS];
+        for (let i = 0; i < rays.length; i++) {
+          if (this.levelHidden(d, i)) continue;
+          const e = rayToX(a.x, a.y, b.x, a.y + rays[i] * (b.y - a.y), ch.plot.r + 50);
+          if (distToSeg(px, py, a.x, a.y, e.x, e.y) <= tol) return { d, part: 'level:' + i };
         }
       } else if (d.type === 'fibcirc') {
         // 同心圆：圆心 p0，半径 r*|p0p1|
@@ -1772,6 +1826,23 @@ export class DrawLayer {
     this.host.invalidate();
   }
 
+  /**
+   * 擦掉某个图形的一条档位（官方 `processErase`：把 `levelN.visible` 置 false，
+   * 图形本身留着）。只对 `LEVEL_TOOLS` 里的工具生效；入撤销栈。
+   * @returns 没这一档 / 已经擦过 都返回 false
+   */
+  hideLevel(id: number, i: number): boolean {
+    const d = this.find(id);
+    if (!d) return false;
+    const n = LEVEL_TOOLS[d.type];
+    if (!n || !Number.isInteger(i) || i < 0 || i >= n) return false;
+    if (this.levelHidden(d, i)) return false;
+    this.pushHistory();
+    d.style.hiddenLevels = [...(d.style.hiddenLevels ?? []), i].sort((a, b) => a - b);
+    this.host.invalidate();
+    return true;
+  }
+
   /** 「重复绘制」开关（浮动属性工具条的 aria-pressed 按钮） */
   setRepeat(on: boolean): void {
     this.repeatDraw = !!on;
@@ -1792,7 +1863,8 @@ export class DrawLayer {
 
   /**
    * 锁定 / 解锁。锁定的图形：能被选中（好弹工具条解锁），但不能拖动，
-   * 橡皮擦与 Delete 键也删不掉。同样入撤销栈。
+   * Delete 键也删不掉。**橡皮擦是例外** —— 官方的锁定判断排在橡皮分支之后，
+   * 照着擦也能擦掉（见 onDown ⓪'）。同样入撤销栈。
    */
   setLocked(id: number, on: boolean): boolean {
     const d = this.find(id);
@@ -1864,6 +1936,8 @@ export class DrawLayer {
     this.pending = null;
     this.pendingPlaced = 0;
     this.tool = t;
+    // 换工具时把橡皮擦的悬停高亮收掉（官方悬停态只属于当前工具）
+    if (t !== 'eraser') this.hoverId = null;
     this.applyCursor();
     this.host.invalidate();
   }
@@ -1954,7 +2028,7 @@ export class DrawLayer {
    * 给 KChart 用的三个钩子。
    * onDown 返回 true = 这次点击被绘图层接管，KChart **不要平移**。
    */
-  onDown(px: number, py: number): boolean {
+  onDown(px: number, py: number, mod = false): boolean {
     const def = toolDef(this.tool);
 
     // ⓪ 荧光笔/笔刷：按下开始采点，拖动收集轨迹，onUp 收笔成一笔
@@ -1974,11 +2048,21 @@ export class DrawLayer {
       return true;
     }
 
-    // ⓪' 橡皮擦：点中谁删谁（remove 内部先 pushHistory，可撤销）；点空也消费掉这次点击（不平移）。
-    //     锁定的图形受保护：橡皮擦擦不掉（先解锁再删）
+    // ⓪' 橡皮擦（对齐官方 `LineToolEraser` / `_tryHandleEraserMouseDown`）：
+    //     · 只有「按下」就擦，没有拖拽连擦（官方只在 mousedown 里处理）；
+    //     · 点空什么也不做，但这次点击被消费掉（不平移图表）；
+    //     · **锁定的图形照样擦得掉** —— 官方的 `lockDrawings` / `isLocked` 判断排在橡皮分支
+    //       之后，`removeSource` 只看 `isUserDeletable()`（= userEditEnabled），与冻结无关；
+    //     · ⌘/Ctrl + 点某条档位线：只把那一档隐藏（官方 `processErase`，图形本身还在）。
     if (this.tool === 'eraser') {
       const hit = this.hitTest(px, py);
-      if (hit && !hit.d.locked) this.remove(hit.d.id);
+      if (hit) {
+        const lvl = typeof hit.part === 'string' && hit.part.startsWith('level:')
+          ? Number(hit.part.slice(6)) : null;
+        if (mod && lvl != null && LEVEL_TOOLS[hit.d.type] != null) this.hideLevel(hit.d.id, lvl);
+        else this.remove(hit.d.id);
+        this.setHover(null);   // 擦掉的那条不该再高亮
+      }
       this.host.invalidate();
       return true;
     }
@@ -2032,7 +2116,8 @@ export class DrawLayer {
     if (hit.d.locked) return true;
     this.drag = {
       d: hit.d,
-      part: hit.part,
+      // 档位命中（'level:n'）只是给橡皮擦用的标记；光标模式下抓档位线 = 整体平移
+      part: typeof hit.part === 'string' && hit.part.startsWith('level:') ? 'body' : hit.part,
       orig: hit.d.pts.map((p) => ({ time: p.time, price: p.price })),
       px,
       py,
@@ -2084,7 +2169,27 @@ export class DrawLayer {
       this.host.invalidate();
       return;
     }
-    this.applyCursor(this.hitTest(px, py));
+    const hit = this.hitTest(px, py);
+    // 橡皮擦：悬停到谁就把谁的锚点亮出来（官方 setHoveredSource → areAnchorsVisible）。
+    // 锁定的不亮 —— 官方那句 `isHoveredSource() && !isLocked()` 就是这个意思。
+    this.setHover(this.tool === 'eraser' && hit && !hit.d.locked ? hit.d.id : null);
+    this.applyCursor(hit);
+  }
+
+  /** 橡皮擦悬停高亮（不动选中态、不接管拖动） */
+  setHover(id: number | null): void {
+    if (this.hoverId === id) return;
+    this.hoverId = id;
+    this.host.invalidate();
+  }
+
+  /** 指针离开画布：悬停高亮跟着消失 */
+  onLeave(): void {
+    this.setHover(null);
+    if (this.tool === 'eraser') {
+      const c = this.host.canvas;
+      if (c) c.style.cursor = '';
+    }
   }
 
   onUp(): void {
@@ -2118,18 +2223,31 @@ export class DrawLayer {
     if (!this.repeatDraw) this.setTool('cursor');
   }
 
+  /**
+   * 当前该显示的光标。chart.ts 每次 pointermove 都会自己写 canvas 的 cursor，
+   * 所以真正吃这个值的是它的 `cursorFor` 钩子（它按这里返回的写）。
+   * 官方口径：`setCursorForTool()` 里 `tool === 'eraser'` → `pane--cursor-eraser`，
+   * 也就是那张 32×32、热点 (5,5) 的橡皮光标。
+   */
+  cursorAt(px: number, py: number): string {
+    return this.cursorForHit(this.hitTest(px, py));
+  }
+
+  private cursorForHit(hit: { d: Drawing; part: number | string } | null): string {
+    if (this.tool === 'eraser') return ERASER_CURSOR;
+    if (this.tool !== 'cursor') return 'crosshair';
+    if (!hit) return 'crosshair';
+    // emoji 四角：给出缩放光标（与官方一致，拖角就是改大小）
+    if (hit.part === 'emoji-nw' || hit.part === 'emoji-se') return 'nwse-resize';
+    if (hit.part === 'emoji-ne' || hit.part === 'emoji-sw') return 'nesw-resize';
+    if (hit.part === 'body' || (typeof hit.part === 'string' && hit.part.startsWith('level:'))) return 'move';
+    return 'pointer';
+  }
+
   private applyCursor(hit?: { d: Drawing; part: number | string } | null): void {
     const c = this.host.canvas;
     if (!c) return;
-    if (this.tool !== 'cursor') { c.style.cursor = 'crosshair'; return; }
-    if (hit) {
-      // emoji 四角：给出缩放光标（与官方一致，拖角就是改大小）
-      if (hit.part === 'emoji-nw' || hit.part === 'emoji-se') { c.style.cursor = 'nwse-resize'; return; }
-      if (hit.part === 'emoji-ne' || hit.part === 'emoji-sw') { c.style.cursor = 'nesw-resize'; return; }
-      c.style.cursor = hit.part === 'body' ? 'move' : 'pointer';
-      return;
-    }
-    c.style.cursor = 'crosshair';
+    c.style.cursor = this.cursorForHit(hit ?? null);
   }
 
   /* ---------------------------------------------------------- 键盘 */
@@ -2181,14 +2299,18 @@ export class DrawLayer {
   /** 由 KChart 的 onDraw 钩子调用（已经在绘图区裁剪内） */
   render(ctx: CanvasRenderingContext2D): void {
     if (this.hidden) return;
+    // 橡皮擦悬停到的那条最后画（官方 showOnTopOnHovering），锚点方块才不会被别的图形压住
+    const hov = this.hoverId != null && this.hoverId !== this.activeId ? this.find(this.hoverId) : null;
     for (const d of this.drawings) {
       if (!d.visible) continue;
+      if (hov && d.id === hov.id) continue;
       this.renderOne(ctx, d, d.id === this.activeId);
     }
+    if (hov && hov.visible) this.renderOne(ctx, hov, false, true);
     if (this.pending) this.renderOne(ctx, this.pending, false);
   }
 
-  private renderOne(ctx: CanvasRenderingContext2D, d: Drawing, selected: boolean): void {
+  private renderOne(ctx: CanvasRenderingContext2D, d: Drawing, selected: boolean, hovered = false): void {
     const ch = this.host;
     const p = this.pixelPts(d);
     if (!p.length) return;
@@ -2241,8 +2363,9 @@ export class DrawLayer {
         for (let i = 1; i < sp.length; i++) ctx.lineTo(sp[i].x, sp[i].y);
         ctx.stroke();
       }
-      // 选中态：官方只在首/末点画「白底 + 蓝环」圆点（无包围盒、无可拖手柄）
-      if (selected) {
+      // 选中/悬停：官方 `areAnchorsVisible() = (isHovered && !isLocked) || isSelected`，
+      // 悬停和选中画的是同一套锚点，区别只在「悬停不改线色」
+      if (selected || hovered) {
         const ends = [sp[0], sp[sp.length - 1]];
         for (const q of ends) {
           ctx.setLineDash([]);
@@ -2370,7 +2493,9 @@ export class DrawLayer {
       const x0 = Math.min(a.x, b.x);
       const x1 = Math.max(a.x, b.x);
       const dPrice = d.pts[1].price - d.pts[0].price;
-      for (const lv of FIB_LEVELS) {
+      for (let li = 0; li < FIB_LEVELS.length; li++) {
+        if (this.levelHidden(d, li)) continue;      // 被 ⌘/Ctrl + 橡皮擦擦掉的那一档不画
+        const lv = FIB_LEVELS[li];
         const y = a.y + lv.l * (b.y - a.y);
         ctx.strokeStyle = lv.c;
         ctx.setLineDash(lv.l === 0 || lv.l === 1 ? [] : [5, 4]);
@@ -2384,7 +2509,9 @@ export class DrawLayer {
     } else if (d.type === 'fibext') {
       // 趋势扩展：横跨全区的水平档位，价格锚定 p2，单位价差 = p1-p0
       const dp = d.pts[1].price - d.pts[0].price;
-      for (const lv of FIB_EXT_LEVELS) {
+      for (let li = 0; li < FIB_EXT_LEVELS.length; li++) {
+        if (this.levelHidden(d, li)) continue;
+        const lv = FIB_EXT_LEVELS[li];
         const price = d.pts[2].price + lv.l * dp;
         const y = ch.yOf(price);
         ctx.strokeStyle = lv.c;
@@ -2400,6 +2527,7 @@ export class DrawLayer {
       const wx = c.x - a.x;
       const wy = c.y - a.y;
       for (let i = 0; i < FIB_CHANNEL_R.length; i++) {
+        if (this.levelHidden(d, i)) continue;
         const r = FIB_CHANNEL_R[i];
         const sx = a.x + wx * r;
         const sy = a.y + wy * r;
@@ -2423,6 +2551,7 @@ export class DrawLayer {
       ctx.setLineDash([]);
       const xs = [origin, ...FIB_EXTENSIONS.map((r) => origin + r * unit)];
       for (let i = 0; i < xs.length; i++) {
+        if (this.levelHidden(d, i)) continue;
         const x = xs[i];
         if (x < ch.plot.l - 2 || x > ch.plot.r + 2) continue;
         ctx.beginPath();
@@ -2434,6 +2563,7 @@ export class DrawLayer {
     } else if (d.type === 'fibfan') {
       // 速度阻力扇：从 p0 发出的射线组（0 与各 fib 比例）
       for (let i = 0; i <= FIB_RATIOS.length; i++) {
+        if (this.levelHidden(d, i)) continue;
         const r = i === 0 ? 0 : FIB_RATIOS[i - 1];
         const e = rayToX(a.x, a.y, b.x, a.y + r * (b.y - a.y), ch.plot.r + 50);
         ctx.strokeStyle = i === 0 ? '#787b86' : FIB_COLORS[(i - 1) % FIB_COLORS.length];
@@ -2924,9 +3054,9 @@ export class DrawLayer {
         ctx.fillText(ch, a.x, a.y);
       }
       ctx.restore();
-      // 选中态：贴合字形的细蓝框 + 四个白色圆手柄（对齐 charting_library 的 emoji 选中样式），
+      // 选中/悬停：贴合字形的细框 + 四个白色圆手柄（对齐 charting_library 的 emoji 选中样式），
       // 四角可拖拽改字号；中点是位置而不是手柄，所以不画通用方块手柄
-      if (selected) {
+      if (selected || hovered) {
         ctx.save();
         ctx.setLineDash([]);
         ctx.strokeStyle = '#1f6feb';
@@ -2943,7 +3073,7 @@ export class DrawLayer {
         ctx.restore();
       }
     } else if (d.type === 'measure') {
-      this.renderMeasure(ctx, d, selected);
+      this.renderMeasure(ctx, d, selected || hovered);
     } else {
       // trend（默认）
       ctx.beginPath();
@@ -2953,8 +3083,8 @@ export class DrawLayer {
     }
     ctx.restore();
 
-    // 选中态画手柄（emoji 用自己的四角圆手柄，见上面的 emoji 分支）
-    if (selected && d.type !== 'emoji') {
+    // 选中 / 悬停都画锚点手柄（emoji 用自己的四角圆手柄，见上面的 emoji 分支）
+    if ((selected || hovered) && d.type !== 'emoji') {
       ctx.save();
       ctx.fillStyle = '#0e1116';
       ctx.strokeStyle = '#1f6feb';
@@ -3758,6 +3888,54 @@ export function drawSelfTest(): DrawTestResult {
     const erased = Lr.drawings.length === 1;
     Lr.undo();
     t('橡皮擦：点中删除且 undo 复原', erased && Lr.drawings.length === 2);
+
+    // --- 橡皮擦对齐官方 LineToolEraser：悬停高亮 / 锁定照擦 / ⌘+点擦档位 ---
+    const Ler = new DrawLayer(host);
+    const der1 = Ler.add('trend', [
+      { time: host.bars[5].time, price: 100 },
+      { time: host.bars[45].time, price: 118 },
+    ]);
+    const per1 = Ler.pixelPts(Ler.drawings.find((x) => x.id === der1.id)!);
+    const emid = { x: (per1[0].x + per1[1].x) / 2, y: (per1[0].y + per1[1].y) / 2 };
+    Ler.select(null);
+    Ler.onMove(emid.x, emid.y);
+    const noHoverInCursor = Ler.hoverId === null;
+    Ler.setTool('eraser');
+    Ler.onMove(emid.x, emid.y);
+    t('橡皮擦：悬停到图形就点亮锚点（光标模式不亮、只亮不选）',
+      noHoverInCursor && Ler.hoverId === der1.id && Ler.activeId === null);
+    Ler.onMove(emid.x, host.plot.b - 4);
+    t('橡皮擦：移开就收掉悬停高亮', Ler.hoverId === null);
+    t('橡皮擦：光标是带热点 5 5 的 url（官方 .cur 同款）',
+      ERASER_CURSOR.startsWith('url("data:image/svg+xml') && ERASER_CURSOR.includes('5 5, crosshair'));
+
+    Ler.setLocked(der1.id, true);
+    Ler.onMove(emid.x, emid.y);
+    const lockedNoHover = Ler.hoverId === null;
+    Ler.onDown(emid.x, emid.y);
+    t('橡皮擦：锁定的图形悬停不亮，但照样擦得掉（官方锁定判断在橡皮分支之后）',
+      lockedNoHover && Ler.drawings.length === 0);
+
+    const Lf2 = new DrawLayer(host);
+    const df2 = Lf2.add('fib', [
+      { time: host.bars[5].time, price: 96 },
+      { time: host.bars[45].time, price: 124 },
+    ]);
+    const pf2 = Lf2.pixelPts(Lf2.drawings.find((x) => x.id === df2.id)!);
+    const li2 = 3;                                  // 0.5 档
+    const ly2 = pf2[0].y + FIB_LEVELS[li2].l * (pf2[1].y - pf2[0].y);
+    const fx2 = host.xCenter(25);
+    const partLv = Lf2.hitTest(fx2, ly2);
+    Lf2.setTool('eraser');
+    Lf2.onDown(fx2, ly2, true);
+    const oneLervel = Lf2.drawings.length === 1 &&
+      JSON.stringify(Lf2.drawings[0].style.hiddenLevels) === '[' + li2 + ']';
+    const gone = Lf2.hitTest(fx2, ly2);
+    Lf2.undo();
+    t('橡皮擦：⌘/Ctrl + 点档位线只擦那一档（图形还在、该档不再命中、undo 复原）',
+      !!partLv && String(partLv.part) === 'level:' + li2 && oneLervel &&
+      (gone ? String(gone.part) : '') !== 'level:' + li2 &&
+      (Lf2.drawings[0].style.hiddenLevels ?? []).length === 0);
 
     // --- 设计稿「预测/基于成交量/测量」子菜单（多头仓位按钮）：12 种新工具 ---
     t('预测组：多/空仓位 2 锚点、仓位预测 3 锚点、K线形态 1 锚点',

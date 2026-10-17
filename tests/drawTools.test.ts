@@ -18,6 +18,7 @@ import {
   smoothStroke, strokeHitTol, styleForTool, isFreehand,
   BRUSH_COLOR, BRUSH_WIDTH, HIGHLIGHT_COLOR, HIGHLIGHT_WIDTH,
   STROKE_SMOOTH, STROKE_MIN_STEP, STROKE_ANCHOR_R, STROKE_ANCHOR_RING, STROKE_ANCHOR_COLOR,
+  FIB_LEVELS, LEVEL_TOOLS, ERASER_CURSOR,
 } from '../src/engine/draw';
 import { fmtCrossTime } from '../src/engine/chart';
 import type { DrawHost, Drawing } from '../src/engine/draw';
@@ -449,6 +450,131 @@ describe('光标组新工具：荧光笔 highlight（自由笔迹）', () => {
     expect(L.drawings.length).toBe(n - 1);
     L.redo();
     expect(L.drawings.length).toBe(n);
+  });
+});
+
+describe('橡皮擦：对齐 charting_library 的 LineToolEraser', () => {
+  it('锁定的图形也能擦掉（官方的 lockDrawings / isLocked 判断排在橡皮分支之后）', () => {
+    const L = new DrawLayer(HOST);
+    const d = L.add('hline', [anchor(10, 105)]);
+    L.setLocked(d.id, true);
+    const y = L.pixelPts(L.find(d.id)!)[0].y;
+    L.setTool('eraser');
+    expect(L.onDown(HOST.xCenter(20), y)).toBe(true);
+    expect(L.find(d.id)).toBeNull();
+  });
+
+  it('⌘/Ctrl + 点档位线：只隐藏那一档（processErase），图形还在，可 undo', () => {
+    const L = new DrawLayer(HOST);
+    const f = L.add('fib', [anchor(5, 95), anchor(45, 125)]);
+    const p = L.pixelPts(f);
+    const px = HOST.xCenter(25);
+    const i = 3;                                  // 0.5 那一档
+    const y = p[0].y + FIB_LEVELS[i].l * (p[1].y - p[0].y);
+    L.setTool('eraser');
+    expect(L.onDown(px, y, true)).toBe(true);
+    expect(L.drawings.length).toBe(1);             // 不是整条删
+    expect(L.find(f.id)!.style.hiddenLevels).toEqual([i]);
+    // 擦掉的那一档不再参与命中（同一点最多命中别的档位，不会还是这一档）
+    const again = L.hitTest(px, y);
+    expect(again ? again.part : null).not.toBe('level:' + i);
+    // 再擦一次同一档：已经擦过，什么都不发生
+    expect(L.hideLevel(f.id, i)).toBe(false);
+    expect(L.find(f.id)!.style.hiddenLevels).toEqual([i]);
+    // undo 复原
+    L.undo();
+    expect(L.find(f.id)!.style.hiddenLevels ?? []).toEqual([]);
+  });
+
+  it('不按模改键点档位线 = 整条删（官方：普通点击走 removeSource）', () => {
+    const L = new DrawLayer(HOST);
+    const f = L.add('fib', [anchor(5, 95), anchor(45, 125)]);
+    const p = L.pixelPts(f);
+    const y = p[0].y + FIB_LEVELS[3].l * (p[1].y - p[0].y);
+    L.setTool('eraser');
+    L.onDown(HOST.xCenter(25), y);
+    expect(L.find(f.id)).toBeNull();
+  });
+
+  it('没有档位的工具，⌘/Ctrl + 点也是整条删（没有 eraseMarker 就没有 processErase）', () => {
+    const L = new DrawLayer(HOST);
+    const d = L.add('trend', [anchor(10, 100), anchor(30, 110)]);
+    const m = L.pixelPts(L.find(d.id)!);
+    const mid = { x: (m[0].x + m[1].x) / 2, y: (m[0].y + m[1].y) / 2 };
+    L.setTool('eraser');
+    L.onDown(mid.x, mid.y, true);
+    expect(L.find(d.id)).toBeNull();
+  });
+
+  it('悬停：只有橡皮擦亮锚点；移开 / 换工具就收掉', () => {
+    const L = new DrawLayer(HOST);
+    const d = L.add('trend', [anchor(10, 100), anchor(30, 110)]);
+    L.select(null);                               // add() 会自动选中，先清掉
+    const m = L.pixelPts(L.find(d.id)!);
+    const mid = { x: (m[0].x + m[1].x) / 2, y: (m[0].y + m[1].y) / 2 };
+
+    L.onMove(mid.x, mid.y);                       // 光标模式：不亮
+    expect(L.hoverId).toBeNull();
+
+    L.setTool('eraser');
+    L.onMove(mid.x, mid.y);
+    expect(L.hoverId).toBe(d.id);
+    expect(L.activeId).toBeNull();                // 只是高亮，不是选中
+    L.onMove(mid.x, mid.y + 90);                  // 移开
+    expect(L.hoverId).toBeNull();
+    L.onMove(mid.x, mid.y);                       // 再悬停
+    expect(L.hoverId).toBe(d.id);
+    L.setTool('cursor');                          // 换工具
+    expect(L.hoverId).toBeNull();
+    L.onLeave();
+    expect(L.hoverId).toBeNull();
+  });
+
+  it('锁定的图形悬停不亮（官方 areAnchorsVisible 要求 hovered && !locked）', () => {
+    const L = new DrawLayer(HOST);
+    const d = L.add('trend', [anchor(10, 100), anchor(30, 110)]);
+    L.select(null);
+    L.setLocked(d.id, true);
+    const m = L.pixelPts(L.find(d.id)!);
+    L.setTool('eraser');
+    L.onMove((m[0].x + m[1].x) / 2, (m[0].y + m[1].y) / 2);
+    expect(L.hoverId).toBeNull();
+  });
+
+  it('光标：橡皮擦是带热点 5 5 的 url，光标模式下命中图形是 move', () => {
+    const L = new DrawLayer(HOST);
+    const d = L.add('hline', [anchor(10, 105)]);
+    expect(L.cursorAt(5, 5)).toBe('crosshair');
+    L.setTool('eraser');
+    const c = L.cursorAt(5, 5);
+    expect(c.startsWith('url("data:image/svg+xml')).toBe(true);
+    expect(c).toContain('5 5, crosshair');          // 热点必须和官方 .cur 一致
+    expect(c).toBe(ERASER_CURSOR);
+    L.setTool('cursor');
+    expect(L.cursorAt(HOST.xCenter(20), L.pixelPts(L.find(d.id)!)[0].y)).toBe('move');
+  });
+
+  it('悬停高亮渲染：命中图形多画一套锚点方块（rect 计数 +2）', () => {
+    const L = new DrawLayer(HOST);
+    const d = L.add('trend', [anchor(10, 100), anchor(30, 110)]);
+    L.select(null);                               // 同上：先取消选中，否则画的是选中态
+    const m = L.pixelPts(L.find(d.id)!);
+    const mid = { x: (m[0].x + m[1].x) / 2, y: (m[0].y + m[1].y) / 2 };
+    const base = makeCtx();
+    L.render(base.ctx);
+    const before = base.ops.rect;
+    L.setTool('eraser');
+    L.onMove(mid.x, mid.y);
+    const hov = makeCtx();
+    L.render(hov.ctx);
+    expect(hov.ops.rect).toBe(before + 2);         // 两个锚点各一个方块
+  });
+
+  it('档位工具都有档位数量（否则模改键会悄悄变成整条删）', () => {
+    for (const k of ['fib', 'fibext', 'fibchannel', 'fibfan', 'fibtz', 'fibttz']) {
+      expect(LEVEL_TOOLS[k], k).toBeGreaterThan(0);
+    }
+    expect(LEVEL_TOOLS.hline).toBeUndefined();
   });
 });
 

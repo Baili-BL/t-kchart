@@ -83,10 +83,15 @@ export function ChartGridView(): JSX.Element {
       for (const c of live) {
         if (layers.has(c)) continue;
         const layer = new DrawLayer(c);
+        const mod = (e?: { ctrlKey?: boolean; metaKey?: boolean }): boolean =>
+          !!(e && (e.ctrlKey || e.metaKey));
         c.setHooks({
-          onDown: (px: number, py: number) => layer.onDown(px, py),
+          onDown: (px: number, py: number, e: PointerEvent) => layer.onDown(px, py, mod(e)),
           onMove: (px: number, py: number) => layer.onMove(px, py),
           onUp: () => layer.onUp(),
+          // 橡皮擦要用自己的光标（官方是 32×32 的 .cur，热点 5,5）；其它工具交回图表
+          cursorFor: (px: number, py: number) => layer.cursorAt(px, py),
+          onLeave: () => layer.onLeave(),
           onDraw: (ctx: CanvasRenderingContext2D) => {
             layer.render(ctx);
             if (layer.active()) barLayer = layer;
@@ -248,7 +253,12 @@ export function ChartGridView(): JSX.Element {
       unbindDraw();
       propsBar.dispose();
       grid.el.removeEventListener('activechange', onActive);
-      for (const l of layers.values()) l.dispose();
+      for (const l of layers.values()) {
+        // dev 注册表也要清：StrictMode 双挂载会先建一层再销毁，
+        // 只 dispose 不反注册会留下「僵尸层」，E2E 读 drawings()[0] 会读到它
+        if (import.meta.env.DEV) unregisterDrawLayer(l);
+        l.dispose();
+      }
       layers.clear();
       registerGrid(null);
       grid.dispose();

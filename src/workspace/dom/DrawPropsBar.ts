@@ -362,7 +362,7 @@ export function createDrawPropsBar(getLayer: () => DrawLayer | null): DrawPropsB
   });
   bar.appendChild(repeatBtn);
 
-  /* —— 锁定（aria-pressed 开关；锁定后不能拖、橡皮擦与 Delete 都删不掉）—— */
+  /* —— 锁定（aria-pressed 开关；锁定后不能拖、Delete 删不掉；橡皮擦照擦，同官方）—— */
   const lockBtn = mkBtn(ICON_LOCK, '锁定');
   lockBtn.setAttribute('aria-pressed', 'false');
   lockBtn.addEventListener('click', () => {

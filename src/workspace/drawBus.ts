@@ -53,7 +53,7 @@ class DrawBus {
     this.hidden = on;
     this.emit({ type: 'hidden', on });
   }
-  /** 全部锁定 / 解锁；锁定的图形能选中但不能拖、橡皮擦与 Delete 也删不掉 */
+  /** 全部锁定 / 解锁；锁定的图形能选中但不能拖、Delete 也删不掉（橡皮擦例外，官方口径是照擦） */
   setLockAll(on: boolean): void {
     this.lockAll = on;
     this.emit({ type: 'lock', on });

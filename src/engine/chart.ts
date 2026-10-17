@@ -246,6 +246,13 @@ export interface ChartHooks {
   onDown?(px: number, py: number, e: PointerEvent): boolean;
   onMove?(px: number, py: number, e: PointerEvent): void;
   onUp?(px: number, py: number, e: PointerEvent): void;
+  /**
+   * 画布光标归外部图层决定时返回 CSS cursor（如橡皮擦的 url(...)）；返回空 = 由图表自己算。
+   * 每次 pointermove 都会问一次 —— 图表自己写 cursor 是在 onMove 之后，不这么问就会被盖掉。
+   */
+  cursorFor?(px: number, py: number): string;
+  /** 指针离开画布（清掉外部图层的悬停高亮） */
+  onLeave?(): void;
   /** 在绘图区裁剪内、十字光标之前调用 */
   onDraw?(ctx: CanvasRenderingContext2D): void;
   /**
@@ -1417,8 +1424,11 @@ export class KChart {
       }
       if (py < this.plot.b && this.hooks && this.hooks.onMove) this.hooks.onMove(px, py, e);
       this.hoverSep = this.hitSeparator(px, py);
-      c.style.cursor = this.hitStudyButton(px, py) ? 'pointer'
-        : this.hoverSep >= 0 ? 'ns-resize' : 'crosshair';
+      // 外部图层的光标优先（橡皮擦的 url(...) 必须由绘图层给，否则这里会把它盖回 crosshair）
+      const custom = py < this.plot.b && this.hooks && this.hooks.cursorFor
+        ? this.hooks.cursorFor(px, py) : '';
+      c.style.cursor = custom || (this.hitStudyButton(px, py) ? 'pointer'
+        : this.hoverSep >= 0 ? 'ns-resize' : 'crosshair');
       if (this.dragging) {
         const dx = e.clientX - this.dragX;
         this.dragX = e.clientX;
@@ -1450,6 +1460,7 @@ export class KChart {
       this.pointer = null;
       this.hoverSep = -1;
       this.clearLongPress(true);
+      if (this.hooks && this.hooks.onLeave) this.hooks.onLeave();
       this.notifyCrosshair();
       this.invalidate();
     }, sig);

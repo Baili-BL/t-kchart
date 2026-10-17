@@ -52,13 +52,13 @@ Pine 编辑器、权益曲线、统计组件目前**没有对应的 UI 入口**�
 
 ```
 npm run typecheck                          0 错误（strict）
-npm test (vitest)                          引擎 642 PASS（绘图 39 + Pine 74 + Pine 撮合 69 + 权益 26 + 统计 34 + 回放 27 + 布局目录 346）
-                                           共 642 个 vitest 用例（含 Agent / 工作区 / 数据 / 回放 / 布局 / 指标库 15 / 图表样式 8 / 商品代码 10 / 颜色选择器 5 / paneLayout 10 / 绘图工具扩充 347（含 emoji 选中框 8 + 测量对齐 8 + 笔刷/荧光笔对齐 9）+ 工具默认属性 16（与官方 defaultProperties 逐条核对，其中 1 条是与参考库逐字节同步）+ 绘图属性工具条 22 + 长按信息卡 9 + 侧栏接线 26 + emoji 数据对齐 17，其中 1 条是与参考库逐字节同步 + emoji 资源层 15（twemoji 映射 / 面板尺寸 / 与线上面板快照 830 码点逐字节核对）+ 侧栏深色主题 12（两套色板变量同名同数量 / var 全部可解析 / 弹层文字对比度 AA / 不再靠 filter 反相））
+npm test (vitest)                          引擎 651 PASS（绘图 39 + Pine 74 + Pine 撮合 69 + 权益 26 + 统计 34 + 回放 27 + 布局目录 346）
+                                           共 651 个 vitest 用例（含 Agent / 工作区 / 数据 / 回放 / 布局 / 指标库 15 / 图表样式 8 / 商品代码 10 / 颜色选择器 5 / paneLayout 10 / 绘图工具扩充 356（含 emoji 选中框 8 + 测量对齐 8 + 笔刷/荧光笔对齐 9 + 橡皮擦对齐 9）+ 工具默认属性 16（与官方 defaultProperties 逐条核对，其中 1 条是与参考库逐字节同步）+ 绘图属性工具条 22 + 长按信息卡 9 + 侧栏接线 26 + emoji 数据对齐 17，其中 1 条是与参考库逐字节同步 + emoji 资源层 15（twemoji 映射 / 面板尺寸 / 与线上面板快照 830 码点逐字节核对）+ 侧栏深色主题 12（两套色板变量同名同数量 / var 全部可解析 / 弹层文字对比度 AA / 不再靠 filter 反相））
 浏览器侧（dev 控制台 __app.runBrowserSelfTests()）
                                            图表 76（改造前 48，新增 setRange 回归 1 条 + 图表样式 8 条 + revealSpan 4 条 + 回放 15 条）+ 网格 20（含 55 种布局抽样的像素位置、时间联动）
-                                           + 权益 39（含 2.4 持仓色带像素断言 2 条）+ 统计 50 + 指标 31（含 2.6 窗格拖拽 / 最大化 / 折叠 / 坐标轴 12 条）+ 样式 52 + 绘图 129（2.8 起纳入；含光标组、线组、斐波那契/江恩组 13 种、音叉族 5 种、图表形态/艾略特波浪/循环组 14 种、预测/成交量/测量组 12 种（测量含官方配色 / 中线箭头 / 三行卡片 / 轴标签 6 条）、笔刷/箭头/形状组 16 种（笔刷/荧光笔含官方默认色与线宽、平滑算法、端点圆点）、各工具默认样式（矩形紫 / 圆橙 / 三角绿 / 趋势线 2px）、文本标注组 7 种、emoji 标注（含选中框四角手柄与拖角改字号、twemoji 图未就绪时的字形兜底）、浮动属性工具条（setStyle/setLocked/repeatDraw/clone/selectionToolbarAnchor）与 setAllLocked 全锁断言）
+                                           + 权益 39（含 2.4 持仓色带像素断言 2 条）+ 统计 50 + 指标 31（含 2.6 窗格拖拽 / 最大化 / 折叠 / 坐标轴 12 条）+ 样式 52 + 绘图 134（2.8 起纳入；含光标组、线组、斐波那契/江恩组 13 种、音叉族 5 种、图表形态/艾略特波浪/循环组 14 种、预测/成交量/测量组 12 种（测量含官方配色 / 中线箭头 / 三行卡片 / 轴标签 6 条）、笔刷/箭头/形状组 16 种（笔刷/荧光笔含官方默认色与线宽、平滑算法、端点圆点）、各工具默认样式（矩形紫 / 圆橙 / 三角绿 / 趋势线 2px）、文本标注组 7 种、emoji 标注（含选中框四角手柄与拖角改字号、twemoji 图未就绪时的字形兜底）、浮动属性工具条（setStyle/setLocked/repeatDraw/clone/selectionToolbarAnchor）与 setAllLocked 全锁断言、橡皮擦 5 条（悬停只亮不选 / 移开收掉 / 光标热点 5,5 / 锁定悬停不亮但照擦 / ⌘+点只隐藏一档且 undo 复原））
 E2E（puppeteer 驱动 headless Chrome，未入库）  布局 13 + 指标 36 + 样式 38 + 商品代码搜索 28 + 测量对齐 13 + 笔刷/荧光笔对齐 13 + 工具默认样式 8 + 表情包换图 1 PASS / 0 FAIL（早先的整页 E2E 79 条已随脚本被覆盖，未重跑）
-                                           近期功能 E2E：自选 15 + 告警 23 + 设置 20 + 交易 25 + 交易复刻 13 + 颜色选择器 13 + 副图窗格 8 + 右栏布局 13 + 绘图子菜单 23/26/26 + emoji 面板 14 + emoji 数据对齐 41 + emoji 选中框 20 + 测量对齐 13 + 笔刷/荧光笔对齐 13 + 绘图属性工具条 30 + 长按信息卡 6 + 对齐 charting_library 143 + 侧栏动作 17 PASS / 0 FAIL
+                                           近期功能 E2E：自选 15 + 告警 23 + 设置 20 + 交易 25 + 交易复刻 13 + 颜色选择器 13 + 副图窗格 8 + 右栏布局 13 + 绘图子菜单 23/26/26 + emoji 面板 14 + emoji 数据对齐 41 + emoji 选中框 20 + 测量对齐 13 + 笔刷/荧光笔对齐 13 + 绘图属性工具条 30 + 长按信息卡 6 + 对齐 charting_library 143 + 侧栏动作 17 + 橡皮擦对齐 20 PASS / 0 FAIL
 ```
 
 **任何改动之后这套数字必须只增不减。** 加功能要加断言，改逻辑不能让已有断言变红。
@@ -658,6 +658,50 @@ E2E（puppeteer 驱动 headless Chrome，未入库）  布局 13 + 指标 36 + �
 > hue-rotate(180deg)` 那套老办法 —— 它们没有挂在 body 下的弹层，反相本身不出错，只是配色和左栏
 > 不再是同一套（右栏图标里有品牌渐变，直接换色板要逐个核）；② 深色下的「选中行」沿用
 > `--bg-active`，与官方的 `#2a2e39` 不是同一个值 —— 取的是本项目的 tokens，视觉一致优先于数值一致。
+
+
+### 2.8.14 「橡皮擦」对齐 charting_library（LineToolEraser / _tryHandleEraserMouseDown）✅
+
+> **你报的现象**：橡皮擦点一下就把整条删了，悬停时没有任何反馈，光标还是十字线；
+> 与官方那套「悬停亮起来 → 点掉 / ⌘+点只擦一档」不是一回事。
+>
+> **先说清楚工具链**：REA 这一轮仍然不可用（MCP 握手成功但客户端没加载 rea 工具；静态分析在本机
+> chunk 上 `spawn EPERM`；镜头要 9222 调试端口）。所以照旧直接读本地 `charting_library/bundles`
+> 反推，五条口径逐条对上：
+>
+> | | 官方（bundle 里的证据） | 本项目原来 | 现在 |
+> | --- | --- | --- | --- |
+> | 工具注册 | `supportedLineTools` 里 `eraser:{name:"eraser",onlySelectable:!0}` —— 不是 LineTool，点了不落图形 | 同（本来就没画东西） | 同 |
+> | 锁定能不能擦 | `_tryHandleEraserMouseDown` 的调用点在 `lockDrawings()` / `isLocked()` **之前**，`removeSource` 只看 `isUserDeletable()`（= `userEditEnabled`） | 有 `!hit.d.locked` 保护，擦不动 | **照擦**，`setLocked` 注释也改成「Delete 删不掉；橡皮擦是例外」 |
+> | 悬停反馈 | `_updateHoveredSource` 里 `tool==='eraser'` → `model.setHoveredSource()`；view 端 `areAnchorsVisible() = (isHoveredSource() && !isLocked() \|\| isSelectedSource()) && isEditMode()`；`showOnTopOnHovering()` → 悬停的图形最后画（置顶） | 无 | `hoverId`：悬停亮锚点 + 置顶重绘，**只亮不选**（`activeId` 不动、属性条不弹）、锁定不亮、移开收掉 |
+> | 光标 | `7717.*.css` → `.pane--cursor-eraser{cursor:url(eraser.<hash>.cur)}`；`.cur` 实测 32×32 / 32bpp / 热点 **(5,5)**，白橡皮 + `#353535` 实心右上角 + 左上角十字 | 十字线 | `ERASER_CURSOR`（内联 SVG，同一造型同一热点），`cursorAt()` 按命中分派 `move` / `pointer` / `nwse-resize` 等 |
+> | 多档位工具 | `processErase(model, eraseMarker)` 只把 `levelN.visible` 置 false（命令名 `TranslatedString("erase level line")`），**图形本身还在** | 整条删 | ⌘/Ctrl + 点某条档位线 → `hiddenLevels` 记下标、渲染跳过、命中跳过；不按模改键仍是整条删 |
+>
+> 只有 `mousedown` 才处理（官方 `_tryHandleEraserMouseDown` 挂在 `_mouseDownEvent`，没有拖拽连擦），
+> 所以「按住拖过去连擦」没做 —— 这是对齐，不是缺功能。
+>
+> **连带修的两处**：
+> ① `KChart` 在 `hooks.onMove` 之后自己写 `canvas.style.cursor`，会把图层设的光标盖掉 →
+> `ChartHooks` 新增 `cursorFor` / `onLeave`，光标外部优先；
+> ② dev 注册表 `unregisterDrawLayer` 在组件卸载时漏调，StrictMode 双挂载后留下 2 个**僵尸层**，
+> `drawings()[0]` 会读到死层（E2E 一开始就是这么被坑的：图形数恒为 0）→ 卸载时一并反注册。
+>
+> **断言**：vitest 642 → **651**（新增 9 条：锁定照擦 / ⌘+点只隐藏该档 + 该档不再命中 + 重复擦幂等
+> + undo 复原 / 不按模改键整条删 / 无档位工具 ⌘+点也整条删 / 悬停只在橡皮下亮且不动 `activeId` /
+> 锁定悬停不亮 / `cursorAt` 的 url 含 `5 5, crosshair`）；`drawSelfTest` **129 → 134**。
+>
+> **headless 实测**（Playwright，20 条全绿）：悬停线上 `hover` 恰好一层有值、`cursor` 是
+> `url("data:image/svg+xml;utf8,…") 5 5, crosshair`、属性条不弹；点一下 `count` 1→0；
+> 锁定时 `locked=1` 但悬停不亮、点击仍 `count`→0；斐波那契 ⌘+点中线后 `hiddenLevels===[[3]]`
+> 且 `count` 仍为 1。截图 `docs/shot-eraser-hover.png`（锚点亮起、无属性条）、
+> `docs/shot-eraser-level.png`（0.5 那条黄线缺位，其余档位还在）。
+>
+> **诚实边界**：① 悬停高亮只画锚点方块，没有官方那个「擦掉后会怎样」的预览描边；
+> ② 档位擦除只覆盖 6 个带档位数组的工具（`LEVEL_TOOLS`：fib / fibext / fibchannel / fibfan /
+> fibtz / fibttz），扇形与江恩类的档位几何还没拆到 `processErase` 那么细；
+> ③ 官方擦除后会走一次 `model.removeSource(..., isUserDeletable())` 并广播变更事件，
+> 我们走的是 `remove()` + 自己的 undo 栈 —— 行为等价，事件名不对等。
+
 
 | 2.9 | 布局存档（localStorage / 服务端） | ⬜ | 小 | 存/读往返一致，含视口、通道开关、绘图、联动开关 |
 | 2.10 | 手机端手势：双指缩放、惯性滑动 | ⬜ | 中 | 真机或 Chrome 设备模拟下截图 + 手势日志 |
