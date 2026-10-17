@@ -1285,6 +1285,21 @@ export class DrawLayer {
   }
 
   /**
+   * 全部锁定 / 全部解锁（左栏「锁定所有绘图」）。
+   * 只改状态真的变了的那些，并且**只在有变化时**入撤销栈 ——
+   * 否则连点两次「锁定所有绘图」会堆出一摞内容相同的快照，撤销要按好几次才动。
+   * 返回被改动的图形数（0 表示本来就是目标状态）。
+   */
+  setAllLocked(on: boolean): number {
+    const hit = this.drawings.filter((d) => d.locked !== !!on);
+    if (!hit.length) return 0;
+    this.pushHistory();
+    for (const d of hit) d.locked = !!on;
+    this.host.invalidate();
+    return hit.length;
+  }
+
+  /**
    * 克隆：复制一份并按像素偏移 (48px, -36px) 换位，新副本自动选中。
    * 挂在浮动工具条「⋯」菜单里。
    */
@@ -3470,6 +3485,19 @@ export function drawSelfTest(): DrawTestResult {
       !!Lfb.hitTest((pfb[0].x + pfb[1].x) / 2, pfb[0].y) &&
       !!Lfb.hitTest((pfb[0].x + pfb[1].x) / 2, pfb[0].y - 8) &&
       Lfb.hitTest((pfb[0].x + pfb[1].x) / 2, pfb[0].y + 60) === null);
+
+    // --- 左栏「锁定所有绘图」：全锁 / 幂等 / 一次撤销回滚 ---
+    const Llk = new DrawLayer(host);
+    Llk.add('trend', [{ time: host.bars[4].time, price: 98 }, { time: host.bars[18].time, price: 104 }]);
+    Llk.add('hline', [{ time: host.bars[8].time, price: 101 }]);
+    Llk.add('rect', [{ time: host.bars[12].time, price: 99 }, { time: host.bars[28].time, price: 106 }]);
+    const nLock = Llk.setAllLocked(true);
+    t('setAllLocked(true)：3 个图形全上锁，返回改动数 3',
+      nLock === 3 && Llk.drawings.every((d) => d.locked));
+    t('setAllLocked 幂等：重复调用返回 0，且只入一次撤销栈',
+      Llk.setAllLocked(true) === 0 && (() => { Llk.undo(); return Llk.drawings.every((d) => !d.locked); })());
+    t('全锁后撤销已回滚，再调 setAllLocked(false) 是空操作（返回 0）',
+      Llk.setAllLocked(false) === 0 && Llk.drawings.every((d) => !d.locked));
   }
 
   log('绘图层自检：' + pass + ' PASS / ' + fail + ' FAIL');

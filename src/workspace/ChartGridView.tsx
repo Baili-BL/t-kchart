@@ -14,6 +14,7 @@ import { replayController, useReplayStore } from '../store/replayStore';
 import type { ReplayState } from '../engine/replay';
 import { SYMBOL_BY_TICKER } from '../data/symbols';
 import { applyTo, useChartSettingsStore } from '../store/chartSettingsStore';
+import { useToast } from '../ui/toast';
 
 /** 美股习惯：涨绿跌红（引擎默认是 A 股的涨红跌绿） */
 const CHART_COLORS = { upColor: '#089981', downColor: '#f23645' };
@@ -53,7 +54,7 @@ export function ChartGridView(): JSX.Element {
     grid.setStudyHandler((uid, action) => {
       const ss = useStudyStore.getState();
       if (action === 'remove') ss.removeStudy(uid);
-      else ss.edit(uid);
+      else if (!ss.edit(uid)) useToast.getState().show('指标已锁定：先在左栏「锁定指标」解锁');
     });
     grid.setStudies(useStudyStore.getState().studies);
     const unStudies = useStudyStore.subscribe((s, prev) => {
@@ -95,6 +96,8 @@ export function ChartGridView(): JSX.Element {
         layer.setTool(drawBus.tool);
         layer.setMagnet(drawBus.magnet);
         layer.setHidden(drawBus.hidden);
+        if (drawBus.lockAll) layer.setAllLocked(true);
+        layer.repeatDraw = drawBus.repeatDraw;
         c.longPressTip = drawBus.longPressTip;
         if (import.meta.env.DEV) registerDrawLayer(layer);
         layers.set(c, layer);
@@ -119,6 +122,8 @@ export function ChartGridView(): JSX.Element {
         }
         else if (ev.type === 'magnet') l.setMagnet(ev.on);
         else if (ev.type === 'hidden') l.setHidden(ev.on);
+        else if (ev.type === 'lock') l.setAllLocked(ev.on);
+        else if (ev.type === 'repeat') l.repeatDraw = ev.on;
         else if (ev.type === 'clear') l.clear();
       }
       if (ev.type === 'longPressTip') {

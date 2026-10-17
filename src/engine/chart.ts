@@ -1649,6 +1649,7 @@ export class KChart {
   private drawOverlayStudies(i0: number, i1: number): void {
     const g = this.mainGeom(i0, i1);
     for (const st of this.studies) {
+      if (st.def.hidden) continue;
       if (st.output && st.output.overlay) drawStudyOutput(this.ctx, st.output, g);
     }
   }

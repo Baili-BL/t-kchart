@@ -321,7 +321,7 @@ export function StudySettingsDialog(): JSX.Element | null {
   }, [study, defs]);
 
   if (!study) return null;
-  const close = (): void => edit(null);
+  const close = (): void => { edit(null); };
   const indicator = study.indicatorId ? indicatorById(study.indicatorId) : null;
 
   const apply = (): void => {

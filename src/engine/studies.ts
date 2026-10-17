@@ -76,6 +76,8 @@ export interface StudyDef {
   /** Pine v6 源码 */
   source: string;
   inputs: { [title: string]: any };
+  /** 隐藏（左栏「隐藏指标」）：照常运行、图例仍在，只是不画 */
+  hidden?: boolean;
 }
 
 /** 图上一个指标实例的「运行结果」 */
@@ -101,7 +103,7 @@ export function getStudyRunner(): StudyRunner | null {
 
 /** 副图里的指标（overlay=false 且运行成功的） */
 export function paneStudies(list: Study[]): Study[] {
-  return list.filter((s) => s.output && !s.output.overlay);
+  return list.filter((s) => s.output && !s.output.overlay && !s.def.hidden);
 }
 
 /* ===========================================================================

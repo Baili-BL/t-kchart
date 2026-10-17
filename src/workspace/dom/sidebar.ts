@@ -190,7 +190,7 @@ export const LONGPRESS_TIP_LABEL = '长按时显示数值工具提示';
 
 // 分段与原稿分隔线位置一致：十字线 | 趋势/斐波 | 形态/仓位/笔刷/文字 | 图标 |
 // 测量/放大 | 磁铁/继续/锁定/隐藏 | 移除。
-const SECTIONS: Section[] = [
+export const SECTIONS: Section[] = [
   { tools: [
     { icon: CROSS, caret: CARET, label: '十字线', items: [
       ['十字线', CROSS], ['圆点', DOT], ['箭头', ARROW_ICON], ['荧光笔', HIGHLIGHTER], ['橡皮擦', ERASER],

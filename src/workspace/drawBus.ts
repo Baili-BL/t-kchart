@@ -6,6 +6,10 @@ export type DrawEvent =
   | { type: 'tool'; tool: string; char?: string }
   | { type: 'magnet'; on: boolean }
   | { type: 'hidden'; on: boolean }
+  /** 全部锁定 / 解锁（左栏「锁定所有绘图」） */
+  | { type: 'lock'; on: boolean }
+  /** 「继续绘图」开关 */
+  | { type: 'repeat'; on: boolean }
   | { type: 'longPressTip'; on: boolean }
   | { type: 'clear' }
   | { type: 'undo' }
@@ -15,6 +19,10 @@ class DrawBus {
   tool = 'cursor';
   magnet = false;
   hidden = false;
+  /** 「锁定所有绘图」的当前状态（新格子建层时要跟上） */
+  lockAll = false;
+  /** 「继续绘图」的当前状态 */
+  repeatDraw = false;
   /** 设计稿「长按时显示数值工具提示」开关，默认开 */
   longPressTip = true;
   private listeners = new Set<(ev: DrawEvent) => void>();
@@ -44,6 +52,20 @@ class DrawBus {
   setHidden(on: boolean): void {
     this.hidden = on;
     this.emit({ type: 'hidden', on });
+  }
+  /** 全部锁定 / 解锁；锁定的图形能选中但不能拖、橡皮擦与 Delete 也删不掉 */
+  setLockAll(on: boolean): void {
+    this.lockAll = on;
+    this.emit({ type: 'lock', on });
+  }
+  /** 「继续绘图」开关：画完一个图形后不回到光标 */
+  setRepeatDraw(on: boolean): void {
+    if (this.repeatDraw === on) return;
+    this.repeatDraw = on;
+    this.emit({ type: 'repeat', on });
+  }
+  toggleRepeatDraw(): void {
+    this.setRepeatDraw(!this.repeatDraw);
   }
   setLongPressTip(on: boolean): void {
     this.longPressTip = on;
@@ -97,6 +119,7 @@ export function toolKeyForLabel(label: string): string | null {
     case '平行通道':
       return 'channel';
     case '三角形形态':
+    case '三角形':
       return 'triangle';
     case '椭圆':
       return 'ellipse';
@@ -254,4 +277,63 @@ export function toolKeyForLabel(label: string): string | null {
 
 export function isMagnetLabel(label: string): boolean {
   return label === '磁铁' || label === '强力磁铁' || label === '弱磁铁';
+}
+
+/* ===========================================================================
+ * 菜单项 → 意图
+ *
+ * 左栏里有的行是「画图工具」，有的是「动作」（移除 / 隐藏 / 锁定 / 磁铁 / 面板）。
+ * 早先这些动作行统一落到 `toolKeyForLabel() === null` 的分支里弹「暂未实现」，
+ * 于是侧栏上明明看得见、点了却什么都不做 —— 上线清单和引擎能力对不上。
+ *
+ * 这里把 label 一次性翻成 DrawIntent（纯函数，无副作用，可单测），
+ * DrawToolbar 只负责执行。新增菜单行时忘接线，tests/sidebarWiring.test.ts 会红。
+ * ========================================================================= */
+
+export type DrawIntent =
+  /** 选中一个绘图工具 */
+  | { kind: 'tool'; label: string; key: string }
+  /** 开磁吸 */
+  | { kind: 'magnet'; label: string }
+  /** 清空：绘图 / 指标 / 两者 */
+  | { kind: 'clear'; target: 'drawings' | 'studies' | 'all' }
+  /** 隐藏：绘图 / 指标 / 两者 */
+  | { kind: 'hide'; target: 'drawings' | 'studies' | 'all' }
+  /** 锁定：绘图 / 指标 */
+  | { kind: 'lock'; target: 'drawings' | 'studies' }
+  /** 开关型（继续绘图） */
+  | { kind: 'toggle'; label: string; what: 'repeatDraw' }
+  /** 打开面板（图标 = emoji 面板） */
+  | { kind: 'panel'; panel: 'emoji' }
+  /** 还没接上引擎的动作（放大：图上单击缩放，属于图表层而非绘图层） */
+  | { kind: 'stub'; label: string; why: string };
+
+export function drawIntent(label: string): DrawIntent {
+  const key = toolKeyForLabel(label);
+  if (key) return { kind: 'tool', label, key };
+  if (isMagnetLabel(label)) return { kind: 'magnet', label };
+  switch (label) {
+    case '移除图形':
+      return { kind: 'clear', target: 'drawings' };
+    case '移除指标':
+      return { kind: 'clear', target: 'studies' };
+    case '移除全部':
+      return { kind: 'clear', target: 'all' };
+    case '隐藏绘图':
+      return { kind: 'hide', target: 'drawings' };
+    case '隐藏指标':
+      return { kind: 'hide', target: 'studies' };
+    case '隐藏所有图形':
+      return { kind: 'hide', target: 'all' };
+    case '锁定所有绘图':
+      return { kind: 'lock', target: 'drawings' };
+    case '锁定指标':
+      return { kind: 'lock', target: 'studies' };
+    case '继续绘图':
+      return { kind: 'toggle', label, what: 'repeatDraw' };
+    case '放大':
+      return { kind: 'stub', label, why: '放大是图表层动作（单击以点为锚缩放），不属于绘图层' };
+    default:
+      return { kind: 'stub', label, why: '没有对应的引擎能力' };
+  }
 }

@@ -26,6 +26,8 @@ export interface DrawLayerSnapshot {
   types: string[];
   /** 未成型的待定图形已放置锚点数（0 表示没有半成品） */
   pending: number;
+  /** 已锁定的图形数（左栏「锁定所有绘图」） */
+  locked: number;
 }
 
 /** 所有活着的绘图层的快照 */
@@ -35,6 +37,7 @@ export function drawLayerSnapshots(): DrawLayerSnapshot[] {
     count: l.drawings.length,
     types: l.drawings.map((d) => d.type),
     pending: l.pendingCount(),
+    locked: l.drawings.filter((d) => d.locked).length,
   }));
 }
 

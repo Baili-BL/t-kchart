@@ -32,10 +32,13 @@ interface StudyState {
   dialogOpen: boolean;
   /** 正在改参数的指标 uid */
   editingUid: string | null;
+  /** 左栏「锁定指标」：锁住后改参数 / 删指标都要先解锁 */
+  locked: boolean;
 
   openDialog: () => void;
   closeDialog: () => void;
-  edit: (uid: string | null) => void;
+  /** 进参数编辑；被锁时返回 false */
+  edit: (uid: string | null) => boolean;
   /** 按清单 id 加一个指标；不可用 / 不存在返回 ok=false 并说明原因 */
   addIndicator: (id: string, inputs?: { [k: string]: any }) => StudyResult;
   /** 按 uid 删除；返回是否删到了 */
@@ -44,6 +47,10 @@ interface StudyState {
   removeByQuery: (q: string) => number;
   setInputs: (uid: string, inputs: { [k: string]: any }) => void;
   clearStudies: () => void;
+  /** 左栏「隐藏指标」：全部不画（仍照常计算，图例保留） */
+  setAllHidden: (on: boolean) => void;
+  /** 左栏「锁定指标」：锁住参数编辑与删除 */
+  setLocked: (on: boolean) => void;
   toggleFavorite: (id: string) => void;
 }
 
@@ -52,10 +59,16 @@ export const useStudyStore = create<StudyState>((set, get) => ({
   favorites: loadFavorites(),
   dialogOpen: false,
   editingUid: null,
+  locked: false,
 
   openDialog: () => set({ dialogOpen: true }),
   closeDialog: () => set({ dialogOpen: false }),
-  edit: (editingUid) => set({ editingUid }),
+  edit: (editingUid) => {
+    // 被锁时连「取消编辑」（uid=null）都放行，不然会卡在编辑态出不来
+    if (editingUid && get().locked) return false;
+    set({ editingUid });
+    return true;
+  },
 
   addIndicator: (id, inputs = {}) => {
     const def = indicatorById(id);
@@ -67,6 +80,7 @@ export const useStudyStore = create<StudyState>((set, get) => ({
   },
 
   removeStudy: (uid) => {
+    if (get().locked) return false;
     const had = get().studies.some((s) => s.uid === uid);
     if (had) set((s) => ({ studies: s.studies.filter((x) => x.uid !== uid), editingUid: s.editingUid === uid ? null : s.editingUid }));
     return had;
@@ -80,10 +94,18 @@ export const useStudyStore = create<StudyState>((set, get) => ({
     return n;
   },
 
-  setInputs: (uid, inputs) =>
-    set((s) => ({ studies: s.studies.map((x) => (x.uid === uid ? { ...x, inputs: { ...inputs } } : x)) })),
+  setInputs: (uid, inputs) => {
+    if (get().locked) return;
+    set((s) => ({ studies: s.studies.map((x) => (x.uid === uid ? { ...x, inputs: { ...inputs } } : x)) }));
+  },
 
   clearStudies: () => set({ studies: [], editingUid: null }),
+
+  setAllHidden: (on) => set((s) => ({
+    studies: s.studies.map((d) => (d.hidden === !!on ? d : { ...d, hidden: !!on })),
+  })),
+
+  setLocked: (on) => set({ locked: !!on, editingUid: on ? null : get().editingUid }),
 
   toggleFavorite: (id) => {
     const cur = get().favorites;
