@@ -45,17 +45,58 @@ function el<K extends keyof HTMLElementTagNameMap>(
 }
 
 /* --------------------------------------------------------------- 样式注入 */
-const CSS = `
+/* 深色主题：这份样式原本是写死的浅色稿，过去靠 app.css 里对 .kc-sidebar 整体
+   `filter: invert(.9) hue-rotate(180deg)` 硬翻。但子菜单和 emoji 面板都挂在
+   <body> 下（fixed 定位，否则会被 sidebar 的 overflow 裁掉），压根不在那个
+   filter 的作用域里 —— 深色下就是「白卡 + 浅灰字」，字基本看不见。
+   现在改成正经的两套色板：变量定义在 :root（body 下的弹层也能继承到），
+   :root[data-theme='dark'] 换一套值；图标一律 currentColor，跟着文字色走。 */
+/** 侧栏样式（导出只为单测能核对色板：深色 / 浅色两套变量都要齐全且够对比度） */
+export const SIDEBAR_CSS = `
+:root {
+  --kcs-base: rgb(235,235,235);      /* 轨道底色（比卡片深一档） */  --kcs-card: #fff;                  /* 分组卡片（浅色下是白） */
+  --kcs-ink: rgb(15,15,15);          /* 图标 / 文字 */
+  --kcs-muted: rgb(140,140,145);     /* 分组标题 / 快捷键 */
+  --kcs-hover: rgb(242,242,242);     /* 悬停药丸 */
+  --kcs-sel: rgb(235,235,235);       /* 选中药丸 */
+  --kcs-on: rgb(231,240,255);        /* 开关类按钮打开态 */
+  --kcs-rule: rgb(235,235,235);      /* 分割线 */
+  --kcs-pop-bg: #fff;                /* 弹层（子菜单 / emoji 面板） */
+  --kcs-pop-sel: rgb(240,240,243);   /* 弹层里选中的那一行 */
+  --kcs-pop-div: rgb(218,218,218);   /* 弹层内分隔线 */
+  --kcs-pop-shadow: 0 4px 10px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.04);
+  --kcs-sw-on: rgb(15,15,15);        /* 开关：开 */
+  --kcs-sw-off: rgb(200,200,200);
+  --kcs-sw-knob: #fff;
+}
+/* 深色：底色 / 阴影直接取 app 的 tokens（tokens.css），保证和顶栏、面板同族 */
+:root[data-theme='dark'] {
+  --kcs-base: var(--bg-subtle);      /* #151a20 */
+  --kcs-card: var(--bg);             /* #0f1216 */
+  --kcs-ink: var(--text);            /* #e8ecf1 */
+  --kcs-muted: #8a919e;
+  --kcs-hover: var(--bg-hover);      /* #212832 */
+  --kcs-sel: var(--bg-active);       /* #29313c */
+  --kcs-on: var(--accent-soft);      /* #1b2a4d */
+  --kcs-rule: var(--border);         /* #242c36 */
+  --kcs-pop-bg: var(--bg-sunken);    /* #1b2128 */
+  --kcs-pop-sel: var(--bg-active);
+  --kcs-pop-div: var(--border-strong);
+  --kcs-pop-shadow: 0 8px 24px rgba(0,0,0,.55), 0 0 0 1px var(--border-strong);
+  --kcs-sw-on: #e8ecf1;
+  --kcs-sw-off: #323c49;
+  --kcs-sw-knob: #0f1216;
+}
 .kc-sidebar {
   display: flex; flex-direction: column; flex: 0 0 auto; width: 52px;
-  background: rgb(235,235,235); color: rgb(15,15,15); user-select: none; position: relative; z-index: 100;
+  background: var(--kcs-base); color: var(--kcs-ink); user-select: none; position: relative; z-index: 100;
   font: 400 14px/normal -apple-system, "system-ui", "Trebuchet MS", Roboto, Ubuntu, sans-serif;
   font-feature-settings: "lnum","tnum";
   overflow-y: auto; overflow-x: hidden; scrollbar-width: none;
 }
 .kc-sidebar::-webkit-scrollbar { display: none; }
-.kc-sb-section { background: #fff; padding: 6px 0; position: relative; }
-.kc-sb-div { height: 1px; background: rgb(235,235,235); margin: 0 8px; }
+.kc-sb-section { background: var(--kcs-card); padding: 6px 0; position: relative; }
+.kc-sb-div { height: 1px; background: var(--kcs-base); margin: 0 8px; }
 .kc-sb-section + .kc-sb-div + .kc-sb-section { padding-bottom: 6px; }
 /* —— 工具行：52×38，主按钮 + 悬停浮现的箭头区 —— */
 .kc-sb-tool { position: relative; width: 52px; }
@@ -69,9 +110,9 @@ const CSS = `
   position: absolute; z-index: -1; left: 9px; right: 9px; top: 2px; bottom: 2px;
   width: 34px; height: 34px; border-radius: 6px; background: transparent;
 }
-.kc-sb-btn:hover .pill { background: rgb(242,242,242); }
-.kc-sb-btn.kc-sel .pill { background: rgb(235,235,235); }
-.kc-sb-btn.kc-on .pill { background: rgb(231,240,255); }
+.kc-sb-btn:hover .pill { background: var(--kcs-hover); }
+.kc-sb-btn.kc-sel .pill { background: var(--kcs-sel); }
+.kc-sb-btn.kc-on .pill { background: var(--kcs-on); }
 /* —— 小箭头：默认隐藏，悬停浮现。（z-index 必须高于主按钮：btn 在 DOM 里更靠后，否则箭头永远被盖住点不到） —— */
 .kc-sb-caret {
   position: absolute; right: 0; top: 2px; width: 11px; height: 34px; z-index: 1;
@@ -80,15 +121,15 @@ const CSS = `
   transition: opacity .1s ease;
 }
 .kc-sb-tool:hover .kc-sb-caret { opacity: 1; }
-.kc-sb-caret > svg { position: absolute; left: 3px; top: 13px; width: 4px; height: 7px; fill: rgb(15,15,15); transition: transform .5s cubic-bezier(.175,.885,.32,1.275); }
+.kc-sb-caret > svg { position: absolute; left: 3px; top: 13px; width: 4px; height: 7px; fill: var(--kcs-ink); transition: transform .5s cubic-bezier(.175,.885,.32,1.275); }
 .kc-sb-caret:hover > svg { transform: scale(1.25); }
 .kc-sb-tool.open .kc-sb-caret > svg { transform: rotate(180deg); }
 /* —— 子菜单：白卡阴影，右侧弹出。挂在 body 下用 fixed 定位，
       避免 sidebar 的 overflow-x:hidden 把整张菜单裁掉（裁剪后既不可见也不可点） —— */
 .kc-sb-menu {
   position: fixed; min-width: 220px; padding: 6px 0; margin: 0;
-  list-style: none; background: #fff; border-radius: 6px;
-  box-shadow: 0 4px 10px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.04);
+  list-style: none; background: var(--kcs-pop-bg); color: var(--kcs-ink); border-radius: 6px;
+  box-shadow: var(--kcs-pop-shadow);
   font-size: 13px; z-index: 1200; display: none;
 }
 .kc-sb-menu.open { display: block; }
@@ -141,44 +182,52 @@ const CSS = `
   font-size: 22px; line-height: ${EMOJI_PANEL.rowHeight}px;
   font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
 }
+/* —— 深色主题：弹层（子菜单 / emoji 面板）不跟着 sidebar 的 filter 走，
+      必须自己换一套色（浅色值来自官方快照，保持不变） —— */
+:root[data-theme='dark'] .kc-emoji-panel { background: var(--kcs-pop-bg); color: var(--kcs-ink); box-shadow: var(--kcs-pop-shadow); }
+:root[data-theme='dark'] .kc-emoji-tabs { border-bottom-color: var(--kcs-rule); }
+:root[data-theme='dark'] .kc-emoji-tabs button { color: var(--kcs-ink); }
+:root[data-theme='dark'] .kc-emoji-tabs button:hover,
+:root[data-theme='dark'] .kc-emoji-grid button:hover { background: var(--kcs-hover); }
+:root[data-theme='dark'] .kc-emoji-group { color: var(--kcs-muted); }
 .kc-sb-menu li {
   display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; cursor: pointer;
   transition: background-color .06s ease; white-space: nowrap;
 }
-.kc-sb-menu li:hover { background: rgb(242,242,242); }
+.kc-sb-menu li:hover { background: var(--kcs-hover); }
 .kc-sb-menu li > svg { flex: 0 0 auto; }
 /* 选中项：整行灰底（设计稿 rgb(240,240,243)），文字保持墨色 */
-.kc-sb-menu li.sel { background: rgb(240,240,243); color: rgb(15,15,15); }
+.kc-sb-menu li.sel { background: var(--kcs-pop-sel); color: var(--kcs-ink); }
 /* —— 子菜单内的分隔线 + 开关行（设计稿「长按时显示数值工具提示」） —— */
-.kc-sb-menu .kc-menu-div { height: 1px; margin: 5px 12px; padding: 0; background: rgb(218,218,218); cursor: default; }
-.kc-sb-menu .kc-menu-div:hover { background: rgb(218,218,218); }
+.kc-sb-menu .kc-menu-div { height: 1px; margin: 5px 12px; padding: 0; background: var(--kcs-pop-div); cursor: default; }
+.kc-sb-menu .kc-menu-div:hover { background: var(--kcs-pop-div); }
 .kc-menu-toggle {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   height: 34px; padding: 0 12px; font-size: 13px; cursor: pointer; white-space: nowrap;
   transition: background-color .06s ease;
 }
-.kc-menu-toggle:hover { background: rgb(242,242,242); }
+.kc-menu-toggle:hover { background: var(--kcs-hover); }
 .kc-menu-switch {
   position: relative; flex: 0 0 auto; width: 34px; height: 20px; border-radius: 10px;
-  background: rgb(15,15,15); transition: background-color .15s ease;
+  background: var(--kcs-sw-on); transition: background-color .15s ease;
 }
 .kc-menu-switch::after {
   content: ''; position: absolute; left: 15px; top: 2px; width: 16px; height: 16px;
-  border-radius: 50%; background: #fff; transition: left .15s ease;
+  border-radius: 50%; background: var(--kcs-sw-knob); transition: left .15s ease;
 }
-.kc-menu-toggle.off .kc-menu-switch { background: rgb(200,200,200); }
+.kc-menu-toggle.off .kc-menu-switch { background: var(--kcs-sw-off); }
 .kc-menu-toggle.off .kc-menu-switch::after { left: 3px; }
 /* —— 分组标题 / 快捷键提示 / 信息徽标 / 收藏星（设计稿「趋势线」子菜单） —— */
 .kc-sb-menu .kc-menu-group {
   display: block; height: auto; padding: 8px 12px 2px; margin: 0;
-  color: rgb(140,140,145); font-size: 11px; cursor: default;
+  color: var(--kcs-muted); font-size: 11px; cursor: default;
 }
 .kc-sb-menu .kc-menu-group:hover { background: transparent; }
 .kc-sb-menu li .kc-li-spacer { flex: 1 1 auto; }
-.kc-sb-menu li .kc-menu-key { color: rgb(140,140,145); font-size: 12px; }
+.kc-sb-menu li .kc-menu-key { color: var(--kcs-muted); font-size: 12px; }
 .kc-sb-menu li .kc-info-badge { display: inline-flex; }
 .kc-sb-menu li .kc-star {
-  display: inline-flex; color: rgb(15,15,15); opacity: 0; cursor: pointer;
+  display: inline-flex; color: var(--kcs-ink); opacity: 0; cursor: pointer;
   transition: opacity .1s ease;
 }
 .kc-sb-menu li:hover .kc-star { opacity: 0.55; }
@@ -191,7 +240,7 @@ function injectStyle(): void {
   if (document.getElementById('kc-sidebar-css')) return;
   const s = document.createElement('style');
   s.id = 'kc-sidebar-css';
-  s.textContent = CSS;
+  s.textContent = SIDEBAR_CSS;
   document.head.appendChild(s);
 }
 

@@ -685,8 +685,8 @@ input, textarea { font: inherit; color: inherit; }
 .page-table th, .page-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
 .page-table th { color: var(--text-3); font-weight: 500; font-size: 12px; }
 
-/* dom/sidebar.ts 是写死的浅色稿，深色主题下整体反相（再把色相转回去，避免涨跌色变味） */
-:root[data-theme='dark'] .draw-toolbar .kc-sidebar { filter: invert(0.9) hue-rotate(180deg); }
+/* dom/sidebar.ts 自带浅/深两套色板（变量在 :root[data-theme='dark'] 里换值），
+   这里不再整体反相 —— 反相管不到挂在 <body> 下的子菜单 / emoji 面板。 */
 
 /* 回放控制条：只在回放中显示 */
 .replay-bar {
