@@ -76,3 +76,30 @@ export const STAR = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 
 
 // 信息徽标（灰底圆 + i）
 export const INFO_BADGE = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"16\" height=\"16\"><circle cx=\"14\" cy=\"14\" r=\"9\" fill=\"rgb(178,178,182)\"></circle><rect x=\"13\" y=\"12\" width=\"2\" height=\"8\" rx=\"1\" fill=\"#fff\"></rect><rect x=\"13\" y=\"8\" width=\"2\" height=\"2\" rx=\"1\" fill=\"#fff\"></rect></svg>";
+
+/* —— 设计稿「斐波那契回撤」子菜单（斐波那契 + 江恩 工具组）图标 —— */
+export const FIBEXT_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M3 17 L9 11 L13 14 L21 6 M4 11 H24 M4 17 H24\"></path></svg>";
+
+export const FIBCHAN_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\"><path d=\"M4 21 L17 8 M8 24 L21 11 M12 24 L24 12\"></path></svg>";
+
+export const FIBTZ_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M3 18 L8 12 L11 15 L16 8 M7 4 V24 M13 4 V24 M20 4 V24\"></path></svg>";
+
+export const FIBFAN_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\"><path d=\"M4 23 L24 8 M4 23 L24 15 M4 23 L24 23\"></path></svg>";
+
+export const FIBTTZ_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M3 17 L9 10 L13 13 L18 6 M8 6 V24 M14 10 V24\"></path></svg>";
+
+export const FIBCIRC_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\"><circle cx=\"14\" cy=\"14\" r=\"3\"></circle><circle cx=\"14\" cy=\"14\" r=\"7.5\"></circle><circle cx=\"14\" cy=\"14\" r=\"11\"></circle></svg>";
+
+export const FIBSPI_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\"><path d=\"M14 14 A2.2 2.2 0 1 1 9.6 15.8 A5 5 0 0 1 15 8.5 A8 8 0 0 1 22 17\"></path></svg>";
+
+export const FIBARC_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\"><path d=\"M4 23 A15 15 0 0 1 24 12 M4 23 A9 9 0 0 1 17 16\"></path></svg>";
+
+export const FIBWEDGE_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\"><path d=\"M4 24 A17 17 0 0 1 21 24 L4 24 M4 24 A10 10 0 0 1 14 24\"></path></svg>";
+
+export const TILTFAN_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\"><path d=\"M4 23 L24 13 M4 23 L25 19 M4 23 L20 5\"></path></svg>";
+
+export const GANNBOX_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\"><path d=\"M4 5 H24 V23 H4 Z M10.6 5 V23 M17.3 5 V23 M4 11 H24 M4 17 H24 M4 5 L24 23\"></path></svg>";
+
+export const GANNSQF_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\"><path d=\"M4 4 H24 V24 H4 Z M10.6 4 V24 M17.3 4 V24 M4 10.6 H24 M4 17.3 H24 M4 4 L24 24 M24 4 L4 24\"></path></svg>";
+
+export const GANNSQ_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\"><path d=\"M4 9 H21 V24 H4 Z M9.6 9 V24 M15.3 9 V24 M4 14 H21 M4 19 H21\"></path></svg>";

@@ -107,7 +107,7 @@ export const DRAW_TOOLS: DrawToolDef[] = [
     icon: 'M9 3 L16 14 L2 14 Z' },
   { key: 'channel', label: '平行通道', points: 3, key2: 'c',
     icon: 'M3 4 L15 4 M3 12 L15 12 M3 4 L3 12' },
-  { key: 'fib', label: '斐波那契回撤', points: 2, key2: 'f',
+  { key: 'fib', label: '斐波那契回撤', points: 2, key2: 'f', key3: '⌥F',
     icon: 'M2 4 L16 4 M2 7.5 L16 7.5 M2 11 L16 11 M2 14.5 L16 14.5' },
   { key: 'text', label: '文字', points: 1, key2: 'x',
     icon: 'M4 4 L14 4 M9 4 L9 15' },
@@ -127,6 +127,33 @@ export const DRAW_TOOLS: DrawToolDef[] = [
     icon: 'M3 14 L14 4 M3 10 A4 4 0 0 1 7 14' },
   { key: 'crossline', label: '横线', points: 1, key3: '⌥C',
     icon: 'M2 9 L16 9 M9 2 L9 16' },
+  // —— 设计稿「斐波那契回撤」子菜单（斐波那契 + 江恩 工具组）新增的十三种 ——
+  { key: 'fibext', label: '斐波那契趋势扩展', points: 3,
+    icon: 'M2 12 L7 7 L11 10 L16 4 M3 8 L16 8 M3 13 L16 13' },
+  { key: 'fibchannel', label: '斐波那契通道', points: 3,
+    icon: 'M3 13 L13 3 M7 15 L16 6 M11 15 L16 10' },
+  { key: 'fibtz', label: '斐波那契时区', points: 2,
+    icon: 'M4 3 L4 15 M9 3 L9 15 M14 3 L14 15' },
+  { key: 'fibfan', label: '斐波那契速度阻力扇', points: 2,
+    icon: 'M3 14 L16 5 M3 14 L16 10 M3 14 L16 14' },
+  { key: 'fibttz', label: '斐波那契趋势时间', points: 3,
+    icon: 'M3 12 L8 6 L12 9 L16 3 M6 5 L6 16 M11 8 L11 16' },
+  { key: 'fibcirc', label: '斐波那契圆', points: 2,
+    icon: 'M9 7.5 A1.5 1.5 0 1 0 9.01 7.5 M9 3.5 A5.5 5.5 0 1 0 9.01 3.5' },
+  { key: 'fibspiral', label: '斐波那契螺旋', points: 2,
+    icon: 'M9 9 A1.5 1.5 0 1 1 6 10.5 A4.5 4.5 0 0 1 12 6 A6 6 0 0 1 15.5 12' },
+  { key: 'fibarc', label: '斐波那契速度阻力弧', points: 2,
+    icon: 'M3 14 A8 8 0 0 1 15 8 M3 14 A5 5 0 0 1 11 10' },
+  { key: 'fibwedge', label: '斐波那契楔形', points: 2,
+    icon: 'M3 15 A12 12 0 0 1 15 15 L3 15 M3 15 A7 7 0 0 1 10 15' },
+  { key: 'tiltfan', label: '倾斜扇形', points: 2,
+    icon: 'M3 14 L15 6 M3 14 L16 11 M3 14 L13 3' },
+  { key: 'gannbox', label: '江恩箱', points: 2,
+    icon: 'M3 4 L15 4 L15 14 L3 14 Z M7 4 L7 14 M11 4 L11 14 M3 8 L15 8 M3 11 L15 11 M3 4 L15 14' },
+  { key: 'gannsqf', label: '固定江恩正方', points: 2,
+    icon: 'M3 3 L15 3 L15 15 L3 15 Z M7 3 L7 15 M11 3 L11 15 M3 7 L15 7 M3 11 L15 11 M3 3 L15 15' },
+  { key: 'gannsq', label: '江恩正方', points: 2,
+    icon: 'M3 6 L12 6 L12 15 L3 15 Z M6 6 L6 15 M9 6 L9 15 M3 9 L12 9 M3 12 L12 12' },
 ];
 
 export const FIB_LEVELS: { l: number; c: string }[] = [
@@ -138,6 +165,32 @@ export const FIB_LEVELS: { l: number; c: string }[] = [
   { l: 0.786, c: '#2962ff' },
   { l: 1, c: '#787b86' },
 ];
+
+/** 斐波那契档位配色（扇/弧/通道按序取色用） */
+export const FIB_COLORS: string[] = FIB_LEVELS.map((l) => l.c);
+
+/**
+ * 斐波那契趋势扩展档位：0..1 复用回撤配色，>1 为向趋势方向延伸的档位。
+ * 价格 = p2.price + l * (p1.price - p0.price)。
+ */
+export const FIB_EXT_LEVELS: { l: number; c: string }[] = [
+  ...FIB_LEVELS,
+  { l: 1.618, c: '#b39ddb' },
+  { l: 2.618, c: '#81d4fa' },
+  { l: 4.236, c: '#a5d6a7' },
+];
+
+/** 斐波那契通道的偏移倍数（基线沿宽度向量平移） */
+export const FIB_CHANNEL_R: number[] = [0, 0.236, 0.382, 0.618, 1, 1.618, 2.618, 4.236];
+
+/** 斐波那契比例组（扇/圆/弧共用） */
+export const FIB_RATIOS: number[] = [0.236, 0.382, 0.5, 0.618, 0.786, 1];
+
+/** 时区/趋势时间的垂直线倍数（第一根在锚点上，之后按 1, φ, φ², … 向右排布） */
+export const FIB_EXTENSIONS: number[] = [1, 1.618, 2.618, 4.236, 6.854];
+
+/** 江恩网格分割（1/8） */
+export const GANN_DIVS: number[] = [0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1];
 
 export function drawStyle(color?: string): DrawStyle {
   return {
@@ -209,6 +262,37 @@ export function inParallelogram(
   const dotDD = dx * dx + dy * dy;
   const u = dotDD ? (apx * dx + apy * dy) / dotDD : 0;
   return t >= 0 && t <= 1 && u >= 0 && u <= 1;
+}
+
+/** 圆弧采样折线：中心 (cx,cy)、半径 r、角 a0→a1（弧度，屏幕坐标 y 向下）、seg 段 */
+export function arcPts(cx: number, cy: number, r: number, a0: number, a1: number, seg = 32): { x: number; y: number }[] {
+  const out: { x: number; y: number }[] = [];
+  for (let i = 0; i <= seg; i++) {
+    const ang = a0 + (a1 - a0) * (i / seg);
+    out.push({ x: cx + r * Math.cos(ang), y: cy + r * Math.sin(ang) });
+  }
+  return out;
+}
+
+/** 对数螺旋采样：中心 (cx,cy)、起始半径 r0、每 90° 半径增长 g、共 turns 圈 */
+export function spiralPts(cx: number, cy: number, r0: number, g: number, turns = 1.5, seg = 72): { x: number; y: number }[] {
+  const out: { x: number; y: number }[] = [];
+  for (let i = 0; i <= seg; i++) {
+    const ang = (i / seg) * turns * Math.PI * 2;
+    const r = r0 * Math.pow(g, ang / (Math.PI / 2));
+    out.push({ x: cx + r * Math.cos(ang), y: cy + r * Math.sin(ang) });
+  }
+  return out;
+}
+
+/** 点到折线的最短距离 */
+export function distToPolyline(px: number, py: number, pts: { x: number; y: number }[]): number {
+  let best = Infinity;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const d = distToSeg(px, py, pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y);
+    if (d < best) best = d;
+  }
+  return best;
 }
 
 /* ===========================================================================
@@ -315,6 +399,53 @@ export class DrawLayer {
   /* -------------------------------------------------------------- 命中 */
 
   /**
+   * 曲线类工具（螺旋/弧/楔形）的采样折线（渲染与命中共用一套几何）。
+   * 弧半径 = ratio * |ab|；楔形再补两条边界射线。
+   */
+  private curvePolylines(d: Drawing, a: { x: number; y: number }, b: { x: number; y: number }): { x: number; y: number }[][] {
+    const R = Math.max(Math.hypot(b.x - a.x, b.y - a.y), 2);
+    const th = Math.atan2(b.y - a.y, b.x - a.x);
+    if (d.type === 'fibarc') {
+      // 朝趋势方向的半圆弧组
+      return FIB_RATIOS.map((r) => arcPts(a.x, a.y, r * R, th - Math.PI / 2, th + Math.PI / 2));
+    }
+    if (d.type === 'fibwedge') {
+      // 楔形：趋势方向 90° 扇区内的 3 条 fib 弧 + 两条边界射线
+      const arcs = [0.382, 0.618, 1].map((r) => arcPts(a.x, a.y, r * R, th, th + Math.PI / 2));
+      for (const ang of [th, th + Math.PI / 2]) {
+        arcs.push([a, { x: a.x + R * Math.cos(ang), y: a.y + R * Math.sin(ang) }]);
+      }
+      return arcs;
+    }
+    // 斐波那契螺旋：从中心按 φ/90° 长出约 1.5 圈，最外半径 ≈ |ab|
+    return [spiralPts(a.x, a.y, Math.max(R * 0.05, 2), 1.618)];
+  }
+
+  /** 江恩网格的几何（箱/固定正方/正方共用）：1/8 网格线 + 两条对角线 + 外框 */
+  private gannLines(x0: number, y0: number, x1: number, y1: number): { x1: number; y1: number; x2: number; y2: number }[] {
+    const l = Math.min(x0, x1);
+    const r = Math.max(x0, x1);
+    const t = Math.min(y0, y1);
+    const b = Math.max(y0, y1);
+    const w = r - l;
+    const h = b - t;
+    const out: { x1: number; y1: number; x2: number; y2: number }[] = [];
+    for (const dv of GANN_DIVS) {
+      if (dv > 0 && dv < 1) {
+        out.push({ x1: l + w * dv, y1: t, x2: l + w * dv, y2: b });
+        out.push({ x1: l, y1: t + h * dv, x2: r, y2: t + h * dv });
+      }
+    }
+    out.push({ x1: l, y1: t, x2: r, y2: b });
+    out.push({ x1: r, y1: t, x2: l, y2: b });
+    out.push({ x1: l, y1: t, x2: r, y2: t });
+    out.push({ x1: r, y1: t, x2: r, y2: b });
+    out.push({ x1: r, y1: b, x2: l, y2: b });
+    out.push({ x1: l, y1: b, x2: l, y2: t });
+    return out;
+  }
+
+  /**
    * 命中检测。返回 `{ d, part }`：
    *   part 是 'body'（整条线/整个框）或锚点下标（0/1，拖手柄改形状）。
    */
@@ -409,6 +540,74 @@ export class DrawLayer {
             return { d, part: 'body' };
           }
         }
+      } else if (d.type === 'fibext') {
+        // 档位横跨整个绘图区的水平线（价格锚定 p2，单位价差 = p1-p0）
+        const dp = d.pts[1].price - d.pts[0].price;
+        for (const lv of FIB_EXT_LEVELS) {
+          const y = ch.yOf(d.pts[2].price + lv.l * dp);
+          if (distToSeg(px, py, ch.plot.l, y, ch.plot.r, y) <= tol) return { d, part: 'body' };
+        }
+      } else if (d.type === 'fibchannel') {
+        // 基线 p0→p1 沿宽度向量 (p2-p0) 的斐波那契倍数平移出的平行线（两端延伸出绘图区）
+        const wx = c.x - a.x;
+        const wy = c.y - a.y;
+        for (const r of FIB_CHANNEL_R) {
+          const sx = a.x + wx * r;
+          const sy = a.y + wy * r;
+          const ex = b.x + wx * r;
+          const ey = b.y + wy * r;
+          const l = rayToX(sx, sy, ex, ey, ch.plot.l - 50);
+          const rt = rayToX(sx, sy, ex, ey, ch.plot.r + 50);
+          if (distToSeg(px, py, l.x, l.y, rt.x, rt.y) <= tol) return { d, part: 'body' };
+        }
+      } else if (d.type === 'fibtz' || d.type === 'fibttz') {
+        // 垂直线组：时区单位 = |p1.x-p0.x| 从 p0 起；趋势时间单位 = p1.x-p0.x 从 p2 起
+        const unit = b.x - a.x;
+        const origin = d.type === 'fibtz' ? a.x : c.x;
+        if (Math.abs(px - origin) <= tol) return { d, part: 'body' };
+        for (const r of FIB_EXTENSIONS) {
+          if (Math.abs(px - (origin + r * unit)) <= tol) return { d, part: 'body' };
+        }
+      } else if (d.type === 'fibfan') {
+        // 从 p0 出发、穿过 (p1.x, p0.y + r*(p1.y-p0.y)) 的射线组
+        for (const r of [0, ...FIB_RATIOS]) {
+          const e = rayToX(a.x, a.y, b.x, a.y + r * (b.y - a.y), ch.plot.r + 50);
+          if (distToSeg(px, py, a.x, a.y, e.x, e.y) <= tol) return { d, part: 'body' };
+        }
+      } else if (d.type === 'fibcirc') {
+        // 同心圆：圆心 p0，半径 r*|p0p1|
+        const R = Math.hypot(b.x - a.x, b.y - a.y);
+        const rr = Math.hypot(px - a.x, py - a.y);
+        for (const r of FIB_RATIOS) {
+          if (Math.abs(rr - r * R) <= tol + 1) return { d, part: 'body' };
+        }
+      } else if (d.type === 'fibspiral' || d.type === 'fibarc' || d.type === 'fibwedge') {
+        // 曲线类统一按采样折线命中
+        for (const poly of this.curvePolylines(d, a, b)) {
+          if (distToPolyline(px, py, poly) <= tol) return { d, part: 'body' };
+        }
+      } else if (d.type === 'tiltfan') {
+        // 以趋势方向为基准 ±60°/±30°/0° 的射线扇
+        const th = Math.atan2(b.y - a.y, b.x - a.x);
+        const R = ch.plot.w + ch.plot.h;
+        for (const off of [-Math.PI / 3, -Math.PI / 6, 0, Math.PI / 6, Math.PI / 3]) {
+          const x2 = a.x + R * Math.cos(th + off);
+          const y2 = a.y + R * Math.sin(th + off);
+          if (distToSeg(px, py, a.x, a.y, x2, y2) <= tol) return { d, part: 'body' };
+        }
+      } else if (d.type === 'gannbox' || d.type === 'gannsqf' || d.type === 'gannsq') {
+        // 江恩箱：矩形网格；固定正方/正方：以 |dx|,|dy| 的较大值为边长的正方形
+        let ex = b.x;
+        let ey = b.y;
+        if (d.type !== 'gannbox') {
+          const side = Math.max(Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+          ex = a.x + (b.x >= a.x ? side : -side);
+          ey = a.y + (b.y >= a.y ? side : -side);
+        }
+        for (const s of this.gannLines(a.x, a.y, ex, ey)) {
+          if (distToSeg(px, py, s.x1, s.y1, s.x2, s.y2) <= tol) return { d, part: 'body' };
+        }
+        if (inRect(px, py, a.x, a.y, ex, ey)) return { d, part: 'body' };
       } else if (d.type === 'text') {
         const w = Math.max(24, d.style.text.length * 7);
         if (inRect(px, py, a.x - 2, a.y - 10, a.x + w, a.y + 6)) return { d, part: 'body' };
@@ -957,6 +1156,144 @@ export class DrawLayer {
         const price = d.pts[0].price + lv.l * dPrice;
         this.label(ctx, (lv.l * 100).toFixed(1) + '%  ' + price.toFixed(2), x1 + 4, y, lv.c);
       }
+    } else if (d.type === 'fibext') {
+      // 趋势扩展：横跨全区的水平档位，价格锚定 p2，单位价差 = p1-p0
+      const dp = d.pts[1].price - d.pts[0].price;
+      for (const lv of FIB_EXT_LEVELS) {
+        const price = d.pts[2].price + lv.l * dp;
+        const y = ch.yOf(price);
+        ctx.strokeStyle = lv.c;
+        ctx.setLineDash(lv.l === 0 || lv.l === 1 ? [] : [5, 4]);
+        ctx.beginPath();
+        ctx.moveTo(ch.plot.l, y);
+        ctx.lineTo(ch.plot.r, y);
+        ctx.stroke();
+        this.label(ctx, (lv.l * 100).toFixed(1) + '%  ' + price.toFixed(2), ch.plot.l + 4, y - 4, lv.c);
+      }
+    } else if (d.type === 'fibchannel') {
+      // 斐波那契通道：基线沿宽度向量 (p2-p0) 的倍数平移出的平行线，两端延伸出绘图区
+      const wx = c.x - a.x;
+      const wy = c.y - a.y;
+      for (let i = 0; i < FIB_CHANNEL_R.length; i++) {
+        const r = FIB_CHANNEL_R[i];
+        const sx = a.x + wx * r;
+        const sy = a.y + wy * r;
+        const ex = b.x + wx * r;
+        const ey = b.y + wy * r;
+        const l = rayToX(sx, sy, ex, ey, ch.plot.l - 50);
+        const rt = rayToX(sx, sy, ex, ey, ch.plot.r + 50);
+        ctx.strokeStyle = FIB_COLORS[i % FIB_COLORS.length];
+        ctx.setLineDash(r === 0 ? [] : [5, 4]);
+        ctx.beginPath();
+        ctx.moveTo(l.x, l.y);
+        ctx.lineTo(rt.x, rt.y);
+        ctx.stroke();
+        this.label(ctx, (r * 100).toFixed(1) + '%', rt.x - 44, rt.y - 4, ctx.strokeStyle as string);
+      }
+    } else if (d.type === 'fibtz' || d.type === 'fibttz') {
+      // 时区 / 趋势时间：垂直线组（时区锚 p0；趋势时间单位取 p0→p1、锚 p2）
+      const unit = b.x - a.x;
+      const origin = d.type === 'fibtz' ? a.x : c.x;
+      ctx.strokeStyle = '#787b86';
+      ctx.setLineDash([]);
+      const xs = [origin, ...FIB_EXTENSIONS.map((r) => origin + r * unit)];
+      for (let i = 0; i < xs.length; i++) {
+        const x = xs[i];
+        if (x < ch.plot.l - 2 || x > ch.plot.r + 2) continue;
+        ctx.beginPath();
+        ctx.moveTo(x, ch.plot.t);
+        ctx.lineTo(x, ch.plot.b);
+        ctx.stroke();
+        this.label(ctx, String(i === 0 ? 0 : FIB_EXTENSIONS[i - 1]), x + 3, ch.plot.t + 14, '#787b86');
+      }
+    } else if (d.type === 'fibfan') {
+      // 速度阻力扇：从 p0 发出的射线组（0 与各 fib 比例）
+      for (let i = 0; i <= FIB_RATIOS.length; i++) {
+        const r = i === 0 ? 0 : FIB_RATIOS[i - 1];
+        const e = rayToX(a.x, a.y, b.x, a.y + r * (b.y - a.y), ch.plot.r + 50);
+        ctx.strokeStyle = i === 0 ? '#787b86' : FIB_COLORS[(i - 1) % FIB_COLORS.length];
+        ctx.setLineDash(r === 0 || r === 1 ? [] : [5, 4]);
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(e.x, e.y);
+        ctx.stroke();
+        this.label(ctx, (r * 100).toFixed(1) + '%', e.x - 36, e.y - 4, ctx.strokeStyle as string);
+      }
+    } else if (d.type === 'fibcirc') {
+      // 斐波那契圆：圆心 p0 的同心圆组 + 中线
+      const R = Math.hypot(b.x - a.x, b.y - a.y);
+      ctx.strokeStyle = '#787b86';
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      for (let i = 0; i < FIB_RATIOS.length; i++) {
+        const rr = FIB_RATIOS[i] * R;
+        if (rr < 2) continue;
+        ctx.strokeStyle = FIB_COLORS[i % FIB_COLORS.length];
+        ctx.beginPath();
+        ctx.arc(a.x, a.y, rr, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    } else if (d.type === 'fibspiral' || d.type === 'fibarc' || d.type === 'fibwedge') {
+      // 曲线类：按采样折线绘制（弧/楔形分档配色，螺旋单色金）
+      const polys = this.curvePolylines(d, a, b);
+      if (d.type === 'fibspiral') {
+        ctx.strokeStyle = d.type === 'fibspiral' ? '#b8860b' : col;
+        ctx.setLineDash([]);
+        const poly = polys[0];
+        ctx.beginPath();
+        ctx.moveTo(poly[0].x, poly[0].y);
+        for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i].x, poly[i].y);
+        ctx.stroke();
+      } else {
+        for (let i = 0; i < polys.length; i++) {
+          const isRay = i >= (d.type === 'fibwedge' ? 3 : FIB_RATIOS.length);
+          ctx.strokeStyle = isRay ? '#787b86' : FIB_COLORS[i % FIB_COLORS.length];
+          ctx.setLineDash(isRay ? [5, 4] : []);
+          const poly = polys[i];
+          ctx.beginPath();
+          ctx.moveTo(poly[0].x, poly[0].y);
+          for (let j = 1; j < poly.length; j++) ctx.lineTo(poly[j].x, poly[j].y);
+          ctx.stroke();
+        }
+      }
+    } else if (d.type === 'tiltfan') {
+      // 倾斜扇形：趋势方向 ±60°/±30°/0° 的射线
+      const th = Math.atan2(b.y - a.y, b.x - a.x);
+      const R = ch.plot.w + ch.plot.h;
+      ctx.strokeStyle = '#787b86';
+      ctx.setLineDash([]);
+      for (const off of [-Math.PI / 3, -Math.PI / 6, 0, Math.PI / 6, Math.PI / 3]) {
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(a.x + R * Math.cos(th + off), a.y + R * Math.sin(th + off));
+        ctx.stroke();
+      }
+    } else if (d.type === 'gannbox' || d.type === 'gannsqf' || d.type === 'gannsq') {
+      // 江恩箱 / 固定江恩正方 / 江恩正方：1/8 网格 + 对角线
+      let ex = b.x;
+      let ey = b.y;
+      if (d.type !== 'gannbox') {
+        // 固定正方 / 正方：边长取 |dx|、|dy| 的较大者（正方是可旋转版本的近似）
+        const side = Math.max(Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+        ex = a.x + (b.x >= a.x ? side : -side);
+        ey = a.y + (b.y >= a.y ? side : -side);
+      }
+      const l = Math.min(a.x, ex);
+      const t = Math.min(a.y, ey);
+      ctx.fillStyle = 'rgba(120,123,134,0.08)';
+      ctx.fillRect(l, t, Math.abs(ex - a.x), Math.abs(ey - a.y));
+      ctx.strokeStyle = '#787b86';
+      ctx.setLineDash([]);
+      for (const s of this.gannLines(a.x, a.y, ex, ey)) {
+        ctx.beginPath();
+        ctx.moveTo(s.x1, s.y1);
+        ctx.lineTo(s.x2, s.y2);
+        ctx.stroke();
+      }
     } else if (d.type === 'text') {
       ctx.setLineDash([]);
       this.label(ctx, d.style.text || '文字', a.x, a.y, col, d.style.fontSize);
@@ -1349,12 +1686,60 @@ export function drawSelfTest(): DrawTestResult {
     const dd = Ld.add('dot', [{ time: host.bars[20].time, price: 105 }]);
     const pd = Ld.pixelPts(dd)[0];
     t('圆点：圆心命中 / 40px 外不命中', !!Ld.hitTest(pd.x, pd.y) && Ld.hitTest(pd.x + 40, pd.y) === null);
-    t('光标组：工具表 21 种且新三项就位',
-      DRAW_TOOLS.length === 21 &&
+    t('光标组：工具表 34 种且新三项就位',
+      DRAW_TOOLS.length === 34 &&
       toolDef('dot').points === 1 && toolDef('highlight').points === 0 && toolDef('eraser').points === 0);
     t('线组：信息线/趋势角度/横线 就位',
       toolDef('infoline').points === 2 && toolDef('angle').points === 2 && toolDef('crossline').points === 1 &&
       toolDef('trend').key3 === '⌥T' && toolDef('crossline').key3 === '⌥C');
+    t('斐波那契/江恩组：13 种新工具就位（锚点数 + ⌥F）',
+      toolDef('fib').key3 === '⌥F' &&
+      ['fibext', 'fibchannel', 'fibttz'].every((k) => toolDef(k).points === 3) &&
+      ['fibtz', 'fibfan', 'fibcirc', 'fibspiral', 'fibarc', 'fibwedge', 'tiltfan', 'gannbox', 'gannsqf', 'gannsq'].every((k) => toolDef(k).points === 2));
+
+    // --- 斐波那契/江恩组抽测：时区垂直线 + 江恩箱网格 + 螺旋折线 ---
+    const Lz = new DrawLayer(host);
+    const dz = Lz.add('fibtz', [
+      { time: host.bars[10].time, price: 100 },
+      { time: host.bars[20].time, price: 100 },
+    ]);
+    const pz = Lz.pixelPts(dz);
+    const zunit = pz[1].x - pz[0].x;
+    t('斐波那契时区：锚点与 φ/φ² 倍数处的垂直线都能命中',
+      !!Lz.hitTest(pz[0].x, 200) &&
+      !!Lz.hitTest(pz[0].x + 1.618 * zunit, 200) &&
+      Lz.hitTest(pz[0].x + 0.5 * zunit, 200) === null);
+
+    const Lg = new DrawLayer(host);
+    const dg = Lg.add('gannbox', [
+      { time: host.bars[10].time, price: 100 },
+      { time: host.bars[35].time, price: 112 },
+    ]);
+    const pg = Lg.pixelPts(dg);
+    const gl = Math.min(pg[0].x, pg[1].x);
+    const gt = Math.min(pg[0].y, pg[1].y);
+    const gw = Math.abs(pg[1].x - pg[0].x);
+    const gh = Math.abs(pg[1].y - pg[0].y);
+    const gbot = Math.max(pg[0].y, pg[1].y);
+    t('江恩箱：内部 / 对角线 / 外部',
+      !!Lg.hitTest((pg[0].x + pg[1].x) / 2, (pg[0].y + pg[1].y) / 2) &&
+      !!Lg.hitTest(gl + gw * 0.25, gt + gh * 0.25) &&
+      Lg.hitTest((pg[0].x + pg[1].x) / 2, gbot + 30) === null);
+
+    const Ls = new DrawLayer(host);
+    const ds = Ls.add('fibspiral', [
+      { time: host.bars[10].time, price: 105 },
+      { time: host.bars[30].time, price: 105 },
+    ]);
+    const ps = Ls.pixelPts(ds);
+    const sp = spiralPts(ps[0].x, ps[0].y, Math.max(Math.hypot(ps[1].x - ps[0].x, ps[1].y - ps[0].y) * 0.05, 2), 1.618);
+    const sm = sp[Math.floor(sp.length / 2)];
+    t('斐波那契螺旋：采样折线上的点能命中 / 远点不命中',
+      !!Ls.hitTest(sm.x, sm.y) && Ls.hitTest(ps[0].x, ps[0].y - 150) === null);
+    t('几何：distToPolyline / arcPts / spiralPts',
+      near(distToPolyline(5, 5, [{ x: 0, y: 0 }, { x: 10, y: 0 }]), 5) &&
+      arcPts(0, 0, 10, 0, Math.PI).length === 33 &&
+      near(spiralPts(0, 0, 2, 1.618, 1.5, 4)[4].x, -2 * Math.pow(1.618, 6), 1e-6));
 
     const Lh = new DrawLayer(host);
     Lh.setTool('highlight');

@@ -97,6 +97,33 @@ export function toolKeyForLabel(label: string): string | null {
       return 'ellipse';
     case '斐波那契回撤':
       return 'fib';
+    case '斐波那契趋势扩展':
+    case '斐波那契扩展':
+      return 'fibext';
+    case '斐波那契通道':
+      return 'fibchannel';
+    case '斐波那契时区':
+      return 'fibtz';
+    case '斐波那契速度阻力扇':
+      return 'fibfan';
+    case '斐波那契趋势时间':
+      return 'fibttz';
+    case '斐波那契圆':
+      return 'fibcirc';
+    case '斐波那契螺旋':
+      return 'fibspiral';
+    case '斐波那契速度阻力弧':
+      return 'fibarc';
+    case '斐波那契楔形':
+      return 'fibwedge';
+    case '倾斜扇形':
+      return 'tiltfan';
+    case '江恩箱':
+      return 'gannbox';
+    case '固定江恩正方':
+      return 'gannsqf';
+    case '江恩正方':
+      return 'gannsq';
     case '文字':
       return 'text';
     case '测量':

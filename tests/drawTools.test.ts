@@ -303,8 +303,8 @@ describe('2.8 几何纯函数与回归', () => {
     expect(L.drawings.length).toBe(1);
     expect(L.drawings[0].pts.length).toBe(2);
   });
-  it('工具表：9 → 21 种，新工具的锚点数与快捷键就位', () => {
-    expect(DRAW_TOOLS.length).toBe(21);
+  it('工具表：9 → 34 种，新工具的锚点数与快捷键就位', () => {
+    expect(DRAW_TOOLS.length).toBe(34);
     const want: Record<string, number> = {
       hray: 1, extline: 2, arrow: 2, ellipse: 2, triangle: 3, channel: 3,
       dot: 1, highlight: 0, eraser: 0, infoline: 2, angle: 2, crossline: 1,
@@ -552,5 +552,247 @@ describe('线组新工具：横线 crossline（十字）', () => {
     expect(L.drawings.length).toBe(n - 1);
     L.redo();
     expect(L.drawings.length).toBe(n);
+  });
+});
+
+/* ===========================================================================
+ * 设计稿「斐波那契回撤」子菜单（斐波那契 + 江恩组）：13 种新工具 × 四判据
+ * 数据驱动：每种工具给「图形上应命中的点」与「图形外不应命中的点」两个探针。
+ * ========================================================================= */
+
+import { FIB_RATIOS, FIB_EXTENSIONS, spiralPts, distToPolyline } from '../src/engine/draw';
+
+interface ToolSpec {
+  key: string;
+  pts: { time: number; price: number }[];
+  /** 返回一个在图形上的像素点 */
+  inside: (L: DrawLayer, d: Drawing) => { x: number; y: number };
+  /** 返回一个确定不在图形上的像素点 */
+  outside: (L: DrawLayer, d: Drawing) => { x: number; y: number };
+  minStrokes: number;
+}
+
+const px = (i: number) => HOST.xCenter(i);
+
+const SPECS: ToolSpec[] = [
+  {
+    key: 'fibext',
+    pts: [anchor(8, 96), anchor(45, 116), anchor(30, 106)],
+    // 0.5 档：price = 106 + 0.5*20 = 116，横跨全区
+    inside: (L, d) => ({ x: HOST.plot.r - 30, y: L.host.yOf(d.pts[2].price + 0.5 * (d.pts[1].price - d.pts[0].price)) }),
+    // 0.3 不是档位（与 0.236/0.382 相距约 1.3 price 单位 ≈ 19px）
+    outside: (L, d) => ({ x: 350, y: L.host.yOf(d.pts[2].price + 0.3 * (d.pts[1].price - d.pts[0].price)) }),
+    minStrokes: 10,
+  },
+  {
+    key: 'fibchannel',
+    pts: [anchor(8, 100), anchor(40, 100), anchor(8, 110)],
+    // r=1 的平行线：price 110 的水平线
+    inside: (L, d) => ({ x: px(20), y: L.host.yOf(110) }),
+    outside: (L, d) => ({ x: px(20), y: L.host.yOf(105) }),
+    minStrokes: 8,
+  },
+  {
+    key: 'fibtz',
+    pts: [anchor(10, 100), anchor(20, 100)],
+    inside: (_L, d) => ({ x: px(10), y: 200 }),  // 锚点垂直线
+    outside: (_L, d) => ({ x: (px(10) + px(10) + (px(20) - px(10)) * (FIB_EXTENSIONS[0])) / 2, y: 200 }),
+    minStrokes: 6,
+  },
+  {
+    key: 'fibfan',
+    pts: [anchor(8, 100), anchor(40, 110)],
+    // 0.5 射线在 x=px(40) 处经过 y = y(100)+0.5*(y(110)-y(100))
+    inside: (L, d) => {
+      const p = L.pixelPts(d);
+      return { x: p[1].x, y: p[0].y + 0.5 * (p[1].y - p[0].y) };
+    },
+    outside: (L, d) => {
+      const p = L.pixelPts(d);
+      return { x: p[1].x, y: p[0].y + 0.7 * (p[1].y - p[0].y) };
+    },
+    minStrokes: 7,
+  },
+  {
+    key: 'fibttz',
+    pts: [anchor(8, 100), anchor(18, 100), anchor(30, 105)],
+    inside: (_L, d) => ({ x: px(30), y: 200 }),  // 锚在 p2 的第一根垂直线
+    outside: (_L, d) => ({ x: px(30) + 0.5 * (px(18) - px(8)), y: 200 }),
+    minStrokes: 6,
+  },
+  {
+    key: 'fibcirc',
+    pts: [anchor(10, 105), anchor(30, 105)],
+    inside: (L, d) => {
+      const p = L.pixelPts(d);
+      const R = Math.hypot(p[1].x - p[0].x, p[1].y - p[0].y);
+      return { x: p[0].x + 0.5 * R, y: p[0].y };  // 0.5 圆与中线的交点
+    },
+    outside: (L, d) => {
+      const p = L.pixelPts(d);
+      const R = Math.hypot(p[1].x - p[0].x, p[1].y - p[0].y);
+      return { x: p[0].x + 1.4 * R, y: p[0].y };  // 最大圆 (1*R) 之外
+    },
+    minStrokes: 7,
+  },
+  {
+    key: 'fibspiral',
+    pts: [anchor(10, 105), anchor(30, 105)],
+    inside: (L, d) => {
+      const p = L.pixelPts(d);
+      const R = Math.hypot(p[1].x - p[0].x, p[1].y - p[0].y);
+      const poly = spiralPts(p[0].x, p[0].y, Math.max(R * 0.05, 2), 1.618);
+      return poly[Math.floor(poly.length * 0.6)];
+    },
+    outside: (L, d) => {
+      const p = L.pixelPts(d);
+      const R = Math.hypot(p[1].x - p[0].x, p[1].y - p[0].y);
+      return { x: p[0].x - R * 0.6, y: p[0].y - R * 0.6 };
+    },
+    minStrokes: 1,
+  },
+  {
+    key: 'fibarc',
+    pts: [anchor(10, 105), anchor(30, 105)],
+    inside: (L, d) => {
+      const p = L.pixelPts(d);
+      const R = Math.hypot(p[1].x - p[0].x, p[1].y - p[0].y);
+      return { x: p[0].x + 0.618 * R, y: p[0].y };  // 半圆朝 b 方向，0.618 弧与中线交点
+    },
+    outside: (L, d) => {
+      const p = L.pixelPts(d);
+      const R = Math.hypot(p[1].x - p[0].x, p[1].y - p[0].y);
+      return { x: p[0].x - 0.618 * R, y: p[0].y };  // 反方向没有弧
+    },
+    minStrokes: 6,
+  },
+  {
+    key: 'fibwedge',
+    pts: [anchor(8, 100), anchor(40, 100)],
+    inside: (L, d) => {
+      const p = L.pixelPts(d);
+      const R = Math.hypot(p[1].x - p[0].x, p[1].y - p[0].y);
+      // 45° 方向、0.382*R 半径处正好在第一条弧上
+      return { x: p[0].x + 0.382 * R * Math.SQRT1_2, y: p[0].y + 0.382 * R * Math.SQRT1_2 };
+    },
+    outside: (L, d) => {
+      const p = L.pixelPts(d);
+      const R = Math.hypot(p[1].x - p[0].x, p[1].y - p[0].y);
+      // 45° 方向、0.85*R：不在 0.382/0.618/1 任何弧上，也不在两条边界射线上
+      return { x: p[0].x + 0.85 * R * Math.SQRT1_2, y: p[0].y + 0.85 * R * Math.SQRT1_2 };
+    },
+    minStrokes: 5,
+  },
+  {
+    key: 'tiltfan',
+    pts: [anchor(10, 105), anchor(30, 105)],
+    inside: (L, d) => ({ x: px(20), y: L.pixelPts(d)[0].y }),  // 0° 射线
+    outside: (L, d) => {
+      const p = L.pixelPts(d);
+      // ±30° 射线在 x=px(20) 处偏移 100*tan30°≈57.7px，取中间 25px 处
+      return { x: px(20), y: p[0].y + 25 };
+    },
+    minStrokes: 5,
+  },
+  {
+    key: 'gannbox',
+    pts: [anchor(10, 100), anchor(35, 112)],
+    inside: (L, d) => {
+      const p = L.pixelPts(d);
+      return { x: (p[0].x + p[1].x) / 2, y: (p[0].y + p[1].y) / 2 };
+    },
+    outside: (L, d) => {
+      const p = L.pixelPts(d);
+      return { x: (p[0].x + p[1].x) / 2, y: Math.max(p[0].y, p[1].y) + 30 };
+    },
+    minStrokes: 20,
+  },
+  {
+    key: 'gannsqf',
+    pts: [anchor(10, 105), anchor(30, 105)],
+    inside: (L, d) => {
+      const p = L.pixelPts(d);
+      const side = Math.max(Math.abs(p[1].x - p[0].x), Math.abs(p[1].y - p[0].y));
+      return { x: p[0].x + side * 0.5, y: p[0].y + side * 0.5 };
+    },
+    outside: (L, d) => {
+      const p = L.pixelPts(d);
+      return { x: p[0].x + 50, y: p[0].y - 40 };
+    },
+    minStrokes: 20,
+  },
+  {
+    key: 'gannsq',
+    pts: [anchor(10, 105), anchor(30, 105)],
+    inside: (L, d) => {
+      const p = L.pixelPts(d);
+      const side = Math.max(Math.abs(p[1].x - p[0].x), Math.abs(p[1].y - p[0].y));
+      return { x: p[0].x + side * 0.5, y: p[0].y + side * 0.5 };
+    },
+    outside: (L, d) => {
+      const p = L.pixelPts(d);
+      return { x: p[0].x + 50, y: p[0].y - 40 };
+    },
+    minStrokes: 14,
+  },
+];
+
+describe('设计稿「斐波那契/江恩」组：13 种工具 × 四判据（数据驱动）', () => {
+  for (const spec of SPECS) {
+    describe(spec.key, () => {
+      const { L, d } = draw(spec.key, spec.pts);
+
+      it(`① 画法：render 不抛错且 stroke ≥ ${spec.minStrokes}`, () => {
+        const { ctx, ops } = makeCtx();
+        expect(() => L.render(ctx)).not.toThrow();
+        expect(ops.stroke).toBeGreaterThanOrEqual(spec.minStrokes);
+      });
+      it('② 命中：图形上的点能命中', () => {
+        const pt = spec.inside(L, d);
+        const hit = L.hitTest(pt.x, pt.y);
+        expect(hit && hit.d.id === d.id).toBe(true);
+      });
+      it('③ 命中外：图形外的点不命中', () => {
+        const pt = spec.outside(L, d);
+        expect(L.hitTest(pt.x, pt.y)).toBeNull();
+      });
+      it('④ 手柄+撤销：拖 0 号手柄只动 p0，undo×2 退回 / redo 复原', () => {
+        const p0px = L.pixelPts(d)[0];
+        L.select(d.id);
+        expect(L.hitTest(p0px.x, p0px.y)!.part).toBe(0);
+        const orig1 = { ...d.pts[1] };
+        L.onDown(p0px.x, p0px.y);
+        L.onMove(p0px.x + 40, p0px.y + 20);
+        L.onUp();
+        expect(d.pts[1].time).toBe(orig1.time);
+        expect(d.pts[1].price).toBeCloseTo(orig1.price, 9);
+        const movedTime = L.find(d.id)!.pts[0].time;
+        expect(movedTime).not.toBe(spec.pts[0].time);
+        L.undo(); // 退回拖拽
+        expect(L.find(d.id)!.pts[0].time).toBe(spec.pts[0].time);
+        L.undo(); // 移除图形
+        expect(L.drawings.length).toBe(0);
+        L.redo();
+        expect(L.drawings.length).toBe(1);
+      });
+    });
+  }
+
+  it('⌥F 组合键映射就位（斐波那契回撤）', () => {
+    expect(DRAW_TOOLS.find((t) => t.key === 'fib')?.key3).toBe('⌥F');
+  });
+  it('螺旋采样几何：最外圈半径 ≈ |ab|（r0=0.05R, φ^(1.5圈×4)）', () => {
+    const R = 200;
+    const poly = spiralPts(0, 0, R * 0.05, 1.618);
+    const last = poly[poly.length - 1];
+    expect(Math.hypot(last.x, last.y)).toBeCloseTo(R * 0.05 * Math.pow(1.618, 6), 0);
+  });
+  it('distToPolyline：多段折线取最短', () => {
+    expect(distToPolyline(5, 5, [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }])).toBe(5);
+  });
+  it('FIB_RATIOS / FIB_EXTENSIONS / 档位表常量就位', () => {
+    expect(FIB_RATIOS).toContain(0.618);
+    expect(FIB_EXTENSIONS[0]).toBe(1);
+    expect(FIB_EXTENSIONS[FIB_EXTENSIONS.length - 1]).toBeCloseTo(6.854, 2);
   });
 });

@@ -12,6 +12,9 @@ import {
   RAY_ICON, INFOLINE_ICON, EXTLINE_ICON, ANGLE_ICON,
   HLINE_ICON, HRAY_ICON, VLINE_ICON, CROSSLINE_ICON,
   STAR, INFO_BADGE,
+  FIBEXT_ICON, FIBCHAN_ICON, FIBTZ_ICON, FIBFAN_ICON, FIBTTZ_ICON,
+  FIBCIRC_ICON, FIBSPI_ICON, FIBARC_ICON, FIBWEDGE_ICON, TILTFAN_ICON,
+  GANNBOX_ICON, GANNSQF_ICON, GANNSQ_ICON,
 } from './sidebar-icons';
 
 /* ------------------------------------------------------------------ 工具 */
@@ -172,7 +175,26 @@ const SECTIONS: Section[] = [
         ['平行通道', TRENDLINE],
       ] },
     ] },
-    { icon: FIB, caret: CARET, label: '斐波那契回撤', items: [['斐波那契回撤', FIB], ['斐波那契扩展', FIB], ['斐波那契通道', FIB]] },
+    { icon: FIB, caret: CARET, label: '斐波那契回撤', groups: [
+      { label: '斐波那契', items: [
+        ['斐波那契回撤', FIB, '⌥F'],
+        ['斐波那契趋势扩展', FIBEXT_ICON],
+        ['斐波那契通道', FIBCHAN_ICON],
+        ['斐波那契时区', FIBTZ_ICON],
+        ['斐波那契速度阻力扇', FIBFAN_ICON],
+        ['斐波那契趋势时间', FIBTTZ_ICON],
+        ['斐波那契圆', FIBCIRC_ICON],
+        ['斐波那契螺旋', FIBSPI_ICON],
+        ['斐波那契速度阻力弧', FIBARC_ICON],
+        ['斐波那契楔形', FIBWEDGE_ICON],
+        ['倾斜扇形', TILTFAN_ICON],
+      ] },
+      { label: '江恩', items: [
+        ['江恩箱', GANNBOX_ICON],
+        ['固定江恩正方', GANNSQF_ICON],
+        ['江恩正方', GANNSQ_ICON],
+      ] },
+    ] },
   ]},
   { tools: [
     { icon: PATTERN, caret: CARET, label: 'XABCD形态', items: [['XABCD形态', PATTERN], ['三角形形态', PATTERN], ['头肩形态', PATTERN]] },

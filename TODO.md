@@ -35,7 +35,7 @@
 | `src/engine/pine.ts` | Pine v5 / v6 子集解释器 |
 | `src/data/symbols.ts`、`src/workspace/SymbolSearchDialog.tsx` | 商品代码目录（9 类 97 个演示标的）+ 屏幕正中的「商品代码搜索」弹窗 |
 | `src/engine/studies.ts`、`src/indicators/` | 指标（study）模型与画法（副图 / 叠加 / fill）+ 内置指标库（全部 Pine v6 脚本）+ 浏览器自检 |
-| `src/engine/draw.ts` | 绘图工具层（9 种工具） |
+| `src/engine/draw.ts` | 绘图工具层（34 种：线组/光标组/斐波那契组/江恩组） |
 | `src/engine/equity.ts` | 权益曲线 + 双均线回测口径 |
 | `src/engine/analytics.ts` | 收益分布 / 交易环形图 / 季节性叠加线 |
 | `src/agent/` | Agent 抽象（provider / runner / 工具集）+ mock provider + DeepSeek 空壳 |
@@ -53,10 +53,10 @@ Pine 编辑器、权益曲线、统计组件目前**没有对应的 UI 入口**�
 ```
 npm run typecheck                          0 错误（strict）
 npm test (vitest)                          引擎 615 PASS（绘图 39 + Pine 74 + Pine 撮合 69 + 权益 26 + 统计 34 + 回放 27 + 布局目录 346）
-                                           共 230 个 vitest 用例（含 Agent / 工作区 / 数据 / 回放 / 布局 / 指标库 15 / 图表样式 8 / 商品代码 10 / 颜色选择器 5 / paneLayout 10 / 绘图工具扩充 51）
+                                           共 286 个 vitest 用例（含 Agent / 工作区 / 数据 / 回放 / 布局 / 指标库 15 / 图表样式 8 / 商品代码 10 / 颜色选择器 5 / paneLayout 10 / 绘图工具扩充 107）
 浏览器侧（dev 控制台 __app.runBrowserSelfTests()）
                                            图表 76（改造前 48，新增 setRange 回归 1 条 + 图表样式 8 条 + revealSpan 4 条 + 回放 15 条）+ 网格 20（含 55 种布局抽样的像素位置、时间联动）
-                                           + 权益 39（含 2.4 持仓色带像素断言 2 条）+ 统计 50 + 指标 31（含 2.6 窗格拖拽 / 最大化 / 折叠 / 坐标轴 12 条）+ 样式 52 + 绘图 60（2.8 起纳入；含光标组与线组 信息线/趋势角度/横线 断言）
+                                           + 权益 39（含 2.4 持仓色带像素断言 2 条）+ 统计 50 + 指标 31（含 2.6 窗格拖拽 / 最大化 / 折叠 / 坐标轴 12 条）+ 样式 52 + 绘图 65（2.8 起纳入；含光标组、线组与 斐波那契/江恩组 13 种工具断言）
 E2E（puppeteer 驱动 headless Chrome，未入库）  布局 13 + 指标 36 + 样式 38 + 商品代码搜索 28 PASS / 0 FAIL（早先的整页 E2E 79 条已随脚本被覆盖，未重跑）
                                            近期功能 E2E：自选 15 + 告警 23 + 设置 20 + 交易 25 + 交易复刻 13 + 颜色选择器 13 + 副图窗格 8 + 右栏布局 13 PASS / 0 FAIL
 ```
