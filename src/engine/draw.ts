@@ -306,8 +306,18 @@ export const FIB_EXTENSIONS: number[] = [1, 1.618, 2.618, 4.236, 6.854];
 /** 江恩网格分割（1/8） */
 export const GANN_DIVS: number[] = [0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1];
 
-/** emoji 标注的显示字号（px），命中区域也以此为边长基准 */
-export const EMOJI_SIZE = 28;
+/**
+ * emoji 标注的默认字号（px）—— 对齐官方 `linetoolemoji.size = 40`。
+ * 选中框边长与命中热区都按实际字号算（拖角手柄可改）。
+ */
+export const EMOJI_SIZE = 40;
+
+/** 拖角缩小/放大的上下限（px 字号） */
+export const EMOJI_MIN = 12;
+export const EMOJI_MAX = 200;
+
+/** 选中框四个圆角手柄的半径（像素，屏幕坐标） */
+export const EMOJI_KNOB_R = 5;
 
 /** 循环线：绘制的周期数（每周期一对垂直线，副线在周期起点右侧 18% 处） */
 export const CYCLE_COUNT: number = 6;
@@ -451,6 +461,37 @@ export function volumeProfile(
 export const MARKER_SIZE: number = 13;
 
 export interface PxPt { x: number; y: number }
+
+/* —— emoji 选中框：以锚点为中心的方形，四角圆手柄可拖拽改字号 —— */
+
+/** 4 个角的 part 名（顺序：左上 / 右上 / 右下 / 左下） */
+export const EMOJI_CORNERS = ['emoji-nw', 'emoji-ne', 'emoji-se', 'emoji-sw'] as const;
+
+/** emoji 的方形包围盒：边长 = 字号（官方框贴合字形，不留内边距） */
+export function emojiBox(cx: number, cy: number, size: number): { l: number; t: number; r: number; b: number } {
+  const h = size / 2;
+  return { l: cx - h, t: cy - h, r: cx + h, b: cy + h };
+}
+
+/** 4 个角点（左上 / 右上 / 右下 / 左下），渲染与命中同源 */
+export function emojiCornerPts(cx: number, cy: number, size: number): PxPt[] {
+  const b = emojiBox(cx, cy, size);
+  return [
+    { x: b.l, y: b.t },
+    { x: b.r, y: b.t },
+    { x: b.r, y: b.b },
+    { x: b.l, y: b.b },
+  ];
+}
+
+/**
+ * 拖角手柄算出的新字号：边长跟手（取两轴位移的较大者），**中心不动**。
+ * 夹在 [EMOJI_MIN, EMOJI_MAX]，取整避免亚像素字号。
+ */
+export function emojiSizeFromCorner(cx: number, cy: number, px: number, py: number): number {
+  const half = Math.max(Math.abs(px - cx), Math.abs(py - cy));
+  return Math.round(Math.min(EMOJI_MAX, Math.max(EMOJI_MIN, half * 2)));
+}
 
 /** 二次贝塞尔曲线采样：p0 起点、p1 控制点、p2 终点 */
 export function quadBezierPts(p0: PxPt, p1: PxPt, p2: PxPt, seg = 32): PxPt[] {
@@ -860,11 +901,22 @@ export class DrawLayer {
       const p = this.pixelPts(d);
       if (!p.length) continue;
 
-      // 先测手柄（选中态才有），手柄优先级最高。荧光笔/笔刷是自由笔迹，只整体拖动，不提供逐锚点手柄
-      if (this.activeId === d.id && d.type !== 'highlight' && d.type !== 'brush') {
+      // 先测手柄（选中态才有），手柄优先级最高。荧光笔/笔刷是自由笔迹，只整体拖动，不提供逐锚点手柄；
+      // emoji 的中点是「位置」不是手柄，它只给四个角手柄（拖角改字号）
+      if (this.activeId === d.id && d.type !== 'highlight' && d.type !== 'brush' && d.type !== 'emoji') {
         for (let i = 0; i < p.length; i++) {
           if (Math.abs(px - p[i].x) <= tol && Math.abs(py - p[i].y) <= tol) {
             return { d, part: i };
+          }
+        }
+      }
+      // emoji 的四个角手柄（白圆点），比通用方块手柄大好点中
+      if (this.activeId === d.id && d.type === 'emoji') {
+        const sz = d.style.fontSize || EMOJI_SIZE;
+        const corners = emojiCornerPts(p[0].x, p[0].y, sz);
+        for (let i = 0; i < corners.length; i++) {
+          if (Math.hypot(px - corners[i].x, py - corners[i].y) <= EMOJI_KNOB_R + 3) {
+            return { d, part: EMOJI_CORNERS[i] };
           }
         }
       }
@@ -1184,8 +1236,8 @@ export class DrawLayer {
         const w = Math.max(24, d.style.text.length * 7);
         if (inRect(px, py, a.x - 2, a.y - 10, a.x + w, a.y + 6)) return { d, part: 'body' };
       } else if (d.type === 'emoji') {
-        // emoji 标注：以锚点为中心的方形热区
-        const h = EMOJI_SIZE / 2;
+        // emoji 标注：以锚点为中心、边长 = 字号 的方形热区（拖角改字号后热区跟着变）
+        const h = (d.style.fontSize || EMOJI_SIZE) / 2;
         if (inRect(px, py, a.x - h, a.y - h, a.x + h, a.y + h)) return { d, part: 'body' };
       } else {
         if (distToSeg(px, py, a.x, a.y, b.x, b.y) <= tol) return { d, part: 'body' };
@@ -1562,8 +1614,12 @@ export class DrawLayer {
         for (let i = 0; i < d.pts.length; i++) {
           d.pts[i] = { time: this.drag.orig[i].time + dt, price: this.drag.orig[i].price + dp };
         }
+      } else if (typeof this.drag.part === 'string') {
+        // emoji 拖角：中心不动，只按角到中心的距离改字号
+        const c = this.pixelPts(d)[0];
+        d.style.fontSize = emojiSizeFromCorner(c.x, c.y, px, py);
       } else {
-        d.pts[this.drag.part as number] = this.anchorAt(px, py);
+        d.pts[this.drag.part] = this.anchorAt(px, py);
       }
       this.host.invalidate();
       return;
@@ -1592,7 +1648,13 @@ export class DrawLayer {
     const c = this.host.canvas;
     if (!c) return;
     if (this.tool !== 'cursor') { c.style.cursor = 'crosshair'; return; }
-    if (hit) { c.style.cursor = hit.part === 'body' ? 'move' : 'pointer'; return; }
+    if (hit) {
+      // emoji 四角：给出缩放光标（与官方一致，拖角就是改大小）
+      if (hit.part === 'emoji-nw' || hit.part === 'emoji-se') { c.style.cursor = 'nwse-resize'; return; }
+      if (hit.part === 'emoji-ne' || hit.part === 'emoji-sw') { c.style.cursor = 'nesw-resize'; return; }
+      c.style.cursor = hit.part === 'body' ? 'move' : 'pointer';
+      return;
+    }
     c.style.cursor = 'crosshair';
   }
 
@@ -2396,6 +2458,24 @@ export class DrawLayer {
       ctx.textBaseline = 'middle';
       ctx.fillText(d.style.text || '😀', a.x, a.y);
       ctx.restore();
+      // 选中态：贴合字形的细蓝框 + 四个白色圆手柄（对齐 charting_library 的 emoji 选中样式），
+      // 四角可拖拽改字号；中点是位置而不是手柄，所以不画通用方块手柄
+      if (selected) {
+        ctx.save();
+        ctx.setLineDash([]);
+        ctx.strokeStyle = '#1f6feb';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(a.x - size / 2, a.y - size / 2, size, size);
+        ctx.fillStyle = '#ffffff';
+        ctx.lineWidth = 1.5;
+        for (const q of emojiCornerPts(a.x, a.y, size)) {
+          ctx.beginPath();
+          ctx.arc(q.x, q.y, EMOJI_KNOB_R, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
     } else if (d.type === 'measure') {
       const l = Math.min(a.x, b.x);
       const t = Math.min(a.y, b.y);
@@ -2422,8 +2502,8 @@ export class DrawLayer {
     }
     ctx.restore();
 
-    // 选中态画手柄
-    if (selected) {
+    // 选中态画手柄（emoji 用自己的四角圆手柄，见上面的 emoji 分支）
+    if (selected && d.type !== 'emoji') {
       ctx.save();
       ctx.fillStyle = '#0e1116';
       ctx.strokeStyle = '#1f6feb';
@@ -3237,6 +3317,46 @@ export function drawSelfTest(): DrawTestResult {
         Lem.undo();
         const back = Lem.find(d0.id)!.pts[0].time === before.time;
         return moved && back;
+      })());
+
+    // emoji 选中框：对齐官方 —— 贴合字形的细蓝框 + 四角白圆手柄，拖角改字号
+    Lem.select(Lem.drawings[0].id);
+    const emCs = emojiCornerPts(pem.x, pem.y, EMOJI_SIZE);
+    const emBox = emojiBox(pem.x, pem.y, EMOJI_SIZE);
+    const emHits = emCs.map((q) => Lem.hitTest(q.x, q.y));
+    t('emoji 选中框：四角各返回自己的手柄、中点是本体、框边长 = 字号',
+      emHits.every((h, i) => !!h && h.part === EMOJI_CORNERS[i]) &&
+      !!Lem.hitTest(pem.x, pem.y) && Lem.hitTest(pem.x, pem.y)!.part === 'body' &&
+      emBox.r - emBox.l === EMOJI_SIZE);
+    t('emoji 拖角改字号：字号变大、锚点不动、undo 复原',
+      (() => {
+        const d0 = Lem.drawings[0];
+        const before = { ...d0.pts[0] };
+        const c0 = emojiCornerPts(pem.x, pem.y, d0.style.fontSize || EMOJI_SIZE)[2];
+        Lem.onDown(c0.x, c0.y);
+        Lem.onMove(pem.x + 30, pem.y + 30);
+        Lem.onUp();
+        const ok = d0.style.fontSize === 60 &&
+          d0.pts[0].time === before.time && d0.pts[0].price === before.price;
+        Lem.undo();
+        return ok && Lem.find(d0.id)!.style.fontSize === EMOJI_SIZE;
+      })());
+    t('emoji 拖角夹取：拉回中心不缩成 0、甩出画布不超过上限',
+      (() => {
+        const d0 = Lem.drawings[0];
+        let c0 = emojiCornerPts(pem.x, pem.y, d0.style.fontSize || EMOJI_SIZE)[2];
+        Lem.onDown(c0.x, c0.y);
+        Lem.onMove(pem.x + 1, pem.y + 1);
+        Lem.onUp();
+        const low = d0.style.fontSize === EMOJI_MIN;
+        c0 = emojiCornerPts(pem.x, pem.y, d0.style.fontSize || EMOJI_SIZE)[2];
+        Lem.onDown(c0.x, c0.y);
+        Lem.onMove(pem.x + 4000, pem.y + 4000);
+        Lem.onUp();
+        const high = d0.style.fontSize === EMOJI_MAX;
+        Lem.undo();
+        Lem.undo();
+        return low && high;
       })());
 
     // 笔刷：自由笔迹（与荧光笔同机制，默认色细线）

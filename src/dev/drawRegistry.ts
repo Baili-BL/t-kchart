@@ -30,6 +30,10 @@ export interface DrawLayerSnapshot {
   locked: number;
   /** emoji / 文字图元落笔的字符（顺序同 types 过滤后），用于断言「选的是哪个就落的哪个」 */
   texts: string[];
+  /** emoji / 文字图元的字号（与 texts 一一对应），拖角手柄改大小后用来断言 */
+  sizes: number[];
+  /** 每个图形的锚点像素坐标（画布 CSS px，顺序同 types）——E2E 据此算选中框四角 */
+  pts: { x: number; y: number }[][];
 }
 
 /** 所有活着的绘图层的快照 */
@@ -41,6 +45,8 @@ export function drawLayerSnapshots(): DrawLayerSnapshot[] {
     pending: l.pendingCount(),
     locked: l.drawings.filter((d) => d.locked).length,
     texts: l.drawings.filter((d) => d.type === 'emoji' || d.type === 'text').map((d) => d.style.text || ''),
+    sizes: l.drawings.filter((d) => d.type === 'emoji' || d.type === 'text').map((d) => d.style.fontSize || 0),
+    pts: l.drawings.map((d) => l.pixelPts(d).map((q) => ({ x: Math.round(q.x * 100) / 100, y: Math.round(q.y * 100) / 100 }))),
   }));
 }
 

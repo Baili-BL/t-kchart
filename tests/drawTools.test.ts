@@ -11,6 +11,8 @@ import {
   DRAW_TOOLS, DrawLayer, makeFakeHost, rayToX, inTriangle, inParallelogram,
   MARKER_SIZE, quadBezierPts, ellipseArcPts, hyperbolaPts, arrowGlyphPts,
   cubicBezierPts, pitchforkRays, arrowSideGlyphPts,
+  emojiBox, emojiCornerPts, emojiSizeFromCorner, EMOJI_CORNERS,
+  EMOJI_MIN, EMOJI_MAX, EMOJI_KNOB_R,
 } from '../src/engine/draw';
 import type { DrawHost, Drawing } from '../src/engine/draw';
 
@@ -20,7 +22,7 @@ const HOST: DrawHost = makeFakeHost(CLOSES, 10);
 
 /** 计数 stub：renderOne 只依赖这十几个方法 */
 function makeCtx() {
-  const ops = { stroke: 0, fill: 0, text: 0, ellipse: 0, path: 0, arc: 0 };
+  const ops = { stroke: 0, fill: 0, text: 0, ellipse: 0, path: 0, arc: 0, rect: 0, strokeRect: 0 };
   /** 每次 fillText 时的 fillStyle —— 用来钉住「彩色 emoji 不透光」这类渲染口径 */
   const textFills: string[] = [];
   const ctx: any = {
@@ -30,8 +32,8 @@ function makeCtx() {
     moveTo() { /* no-op */ },
     lineTo() { /* no-op */ },
     closePath() { /* no-op */ },
-    rect() { /* no-op */ },
-    strokeRect() { /* no-op */ },
+    rect() { ops.rect++; },
+    strokeRect() { ops.strokeRect++; },
     ellipse() { ops.ellipse++; },
     arc() { ops.arc++; },
     stroke() { ops.stroke++; },
@@ -1551,9 +1553,10 @@ describe('emoji 标注（图标按钮 → 分类面板 → 放置）', () => {
     expect(L.hitTest(p.x - h, p.y - h)!.d.id).toBe(d.id);
     expect(L.hitTest(p.x + 40, p.y)).toBeNull();
   });
-  it('手柄 + 撤销：拖唯一锚点换位；undo 退回 / redo 复原', () => {
+  it('手柄 + 撤销：emoji 中点不是手柄（拖动即整体平移）；undo 退回 / redo 复原', () => {
     L.select(d.id);
-    expect(L.hitTest(p.x, p.y)!.part).toBe(0);
+    // 对齐官方：emoji 只有四角手柄，中点是「位置」——拖它等于整体移动
+    expect(L.hitTest(p.x, p.y)!.part).toBe('body');
     L.onDown(p.x, p.y);
     L.onMove(p.x + 30, p.y - 25);
     L.onUp();
@@ -1562,6 +1565,107 @@ describe('emoji 标注（图标按钮 → 分类面板 → 放置）', () => {
     expect(L.find(d.id)!.pts[0].price).toBe(105);
     L.redo();
     expect(L.find(d.id)!.pts[0].price).not.toBe(105);
+  });
+});
+
+/* ===========================================================================
+ * emoji 在图上的效果 —— 对齐 charting_library 的选中样式
+ *   官方 `linetoolemoji: { size: 40, emoji: "😀" }`；选中是一个贴合字形的细蓝框
+ *   + 四个白色圆角手柄，拖角改大小（中心不动）。
+ *   这里锁几何（框/角/夹取）与交互（拖角只改字号、不挪位置），渲染用 stub 数笔数。
+ * ========================================================================= */
+
+function newEmoji(): { L: DrawLayer; d: Drawing; c: { x: number; y: number } } {
+  const L = new DrawLayer(HOST);
+  const pt = { time: HOST.bars[20].time, price: 105 };
+  const d = L.add('emoji', [pt, pt], { text: '😀', fontSize: EMOJI_SIZE });
+  return { L, d, c: L.pixelPts(d)[0] };
+}
+
+describe('emoji 选中框：官方样式（细蓝框 + 四白圆角手柄 + 拖角改字号）', () => {
+  it('默认字号 = 官方 linetoolemoji.size = 40', () => {
+    expect(EMOJI_SIZE).toBe(40);
+    expect(newEmoji().d.style.fontSize).toBe(40);
+  });
+
+  it('框：边长 = 字号、以锚点为中心；四角按 nw/ne/se/sw 排', () => {
+    expect(emojiBox(100, 200, 40)).toEqual({ l: 80, t: 180, r: 120, b: 220 });
+    expect(emojiCornerPts(100, 200, 40).map((q) => [q.x, q.y]))
+      .toEqual([[80, 180], [120, 180], [120, 220], [80, 220]]);
+    expect(EMOJI_CORNERS).toEqual(['emoji-nw', 'emoji-ne', 'emoji-se', 'emoji-sw']);
+  });
+
+  it('拖角算法：边长跟手（取两轴较大位移）、中心不动、夹在 [12, 200]', () => {
+    expect(emojiSizeFromCorner(0, 0, 60, 20)).toBe(120);
+    expect(emojiSizeFromCorner(0, 0, 3, 4)).toBe(EMOJI_MIN);
+    expect(emojiSizeFromCorner(0, 0, 400, 400)).toBe(EMOJI_MAX);
+    expect(EMOJI_KNOB_R).toBe(5);
+  });
+
+  it('命中：选中后四角各返回自己的 part；未选中时角上只是图形本体', () => {
+    const { L, d, c } = newEmoji();
+    const cs = emojiCornerPts(c.x, c.y, EMOJI_SIZE);
+    L.select(null); // add() 会顺手选中新图形，先退回未选中态
+    expect(L.hitTest(cs[0].x, cs[0].y)!.part).toBe('body');
+    L.select(d.id);
+    for (let i = 0; i < 4; i++) {
+      const h = L.hitTest(cs[i].x, cs[i].y)!;
+      expect(h.d.id).toBe(d.id);
+      expect(h.part).toBe(EMOJI_CORNERS[i]);
+    }
+    // 手柄半径为 5，外扩 3px 容差仍算手柄；再远就是本体 / 空白
+    expect(L.hitTest(cs[1].x + 6, cs[1].y)!.part).toBe('emoji-ne');
+    expect(L.hitTest(c.x, c.y - 19)!.part).toBe('body');
+    expect(L.hitTest(c.x + 30, c.y)).toBeNull();
+  });
+
+  it('拖右下角：字号变大、锚点不动；undo 退回原字号', () => {
+    const { L, d, c } = newEmoji();
+    const t0 = d.pts[0].time;
+    const p0 = d.pts[0].price;
+    L.select(d.id);
+    const cs = emojiCornerPts(c.x, c.y, EMOJI_SIZE);
+    L.onDown(cs[2].x, cs[2].y);
+    L.onMove(c.x + 60, c.y + 60);
+    L.onUp();
+    expect(d.style.fontSize).toBe(120);
+    expect(d.pts[0].time).toBe(t0);
+    expect(d.pts[0].price).toBe(p0);
+    L.undo();
+    expect(L.find(d.id)!.style.fontSize).toBe(40);
+  });
+
+  it('拖到中心附近夹到下限、拖出去夹到上限', () => {
+    const { L, d, c } = newEmoji();
+    L.select(d.id);
+    let cs = emojiCornerPts(c.x, c.y, d.style.fontSize!);
+    L.onDown(cs[2].x, cs[2].y);
+    L.onMove(c.x + 1, c.y + 1);
+    L.onUp();
+    expect(d.style.fontSize).toBe(EMOJI_MIN);
+    cs = emojiCornerPts(c.x, c.y, d.style.fontSize!);
+    L.onDown(cs[2].x, cs[2].y);
+    L.onMove(c.x + 5000, c.y + 5000);
+    L.onUp();
+    expect(d.style.fontSize).toBe(EMOJI_MAX);
+  });
+
+  it('画法：选中后 1 个蓝框 + 4 个圆手柄，且不再画通用 7×7 方块手柄', () => {
+    const { L, d } = newEmoji();
+    L.select(d.id);
+    const { ctx, ops } = makeCtx();
+    L.render(ctx);
+    expect(ops.strokeRect).toBe(1);
+    expect(ops.arc).toBe(4);
+    expect(ops.rect).toBe(0);
+    expect(ops.text).toBeGreaterThanOrEqual(1);
+  });
+
+  it('热区跟着字号走：放大到 120 后，原来框外的点也能选中', () => {
+    const { L, d, c } = newEmoji();
+    expect(L.hitTest(c.x + 50, c.y)).toBeNull();
+    L.setStyle(d.id, { fontSize: 120 });
+    expect(L.hitTest(c.x + 50, c.y)!.d.id).toBe(d.id);
   });
 });
 
