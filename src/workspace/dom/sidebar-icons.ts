@@ -33,18 +33,25 @@ export const TRASH = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28
 
 export const CARET = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 16\" width=\"10\" height=\"16\"><path d=\"M.6 1.4l1.4-1.4 8 8-8 8-1.4-1.4 6.389-6.532-6.389-6.668z\"></path></svg>";
 
-/* —— 设计稿「十字线」子菜单（光标工具组）新增项 —— */
-// 圆点：实心小圆
-export const DOT = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\"><circle cx=\"14\" cy=\"14\" r=\"3.6\" fill=\"currentColor\"></circle></svg>";
-
-// 箭头：斜向箭头（指向右上）
+// 趋势线组的「箭头」（LineToolArrow 那种线箭头），仍沿用设计稿手绘；
+// 光标组的「箭头」是另一回事（鼠标指针），见下面的 ARROW_CURSOR
 export const ARROW_ICON = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M7.5 20.5 L19 9 M12 8.5 h7.5 V16\"></path></svg>";
 
-// 荧光笔：斜握的记号笔
-export const HIGHLIGHTER = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 22 l1.5-4.5 L18 7 a1.8 1.8 0 0 1 3 3 L10.5 20.5 Z M15.5 9.5 l3 3\"></path></svg>";
+/* —— 设计稿「十字线」子菜单（光标工具组）——   这几个图标不是设计稿描的，是从线上 cn.tradingview.com 的「光标」下拉里
+   直接抄下来的 SVG（行内 <svg> 原样，28×28；橡皮擦是 29×31 的视框）。
+   核对口径见 tests/fixtures/tv-cursor-menu.json 与 tests/cursorMenu.test.ts：
+   字符串必须逐字符等于官方，改一个数字就会红。 */
+// 圆点：r=3 的实心小圆（官方原值，不是 3.6）
+export const DOT = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\"><circle fill=\"currentColor\" cx=\"14\" cy=\"14\" r=\"3\"></circle></svg>";
 
-// 橡皮擦：斜放的方块橡皮 + 底部横线
-export const ERASER = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12.5 5.5 L22.5 15.5 L16 22 H10 L5.5 17.5 a2 2 0 0 1 0-2.8 Z M11 12 l5.5 5.5 M6 25 h16\"></path></svg>";
+// 箭头光标：官方那支「鼠标指针」，实心带描边孔（不是斜线箭头）
+export const ARROW_CURSOR = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\"><path fill=\"currentColor\" d=\"M11.682 16.09l3.504 6.068 1.732-1-3.497-6.057 3.595-2.1L8 7.74v10.512l3.682-2.163zm-.362 1.372L7 20V6l12 7-4.216 2.462 3.5 6.062-3.464 2-3.5-6.062z\"></path></svg>";
+
+// 荧光笔：官方是「圆圈里一支笔尖」（11 半径的外圈 + 内部箭头）
+export const HIGHLIGHTER = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"currentColor\"><path d=\"m11.26 21 3.65-4.78 6.09-.66L10 8zm3.09-5.71-2.33 3.05-.8-8.3 7.02 4.82z\"></path><path fill-rule=\"evenodd\" d=\"M25 14a11 11 0 1 1-22 0 11 11 0 0 1 22 0m-1 0a10 10 0 1 1-20 0 10 10 0 0 1 20 0\"></path></svg>";
+
+// 橡皮擦：斜放的橡皮（29×31 视框，官方就是比别的图标高 3px）
+export const ERASER = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 29 31\" width=\"29\" height=\"31\"><g fill=\"currentColor\" fill-rule=\"nonzero\"><path d=\"M15.3 22l8.187-8.187c.394-.394.395-1.028.004-1.418l-4.243-4.243c-.394-.394-1.019-.395-1.407-.006l-11.325 11.325c-.383.383-.383 1.018.007 1.407l1.121 1.121h7.656zm-9.484-.414c-.781-.781-.779-2.049-.007-2.821l11.325-11.325c.777-.777 2.035-.78 2.821.006l4.243 4.243c.781.781.78 2.048-.004 2.832l-8.48 8.48h-8.484l-1.414-1.414z\"></path><path d=\"M13.011 22.999h7.999v-1h-7.999zM13.501 11.294l6.717 6.717.707-.707-6.717-6.717z\"></path></g></svg>";
 
 /* —— 设计稿「趋势线」子菜单（线工具组）图标 —— */
 // 射线：带起点圆点的斜线

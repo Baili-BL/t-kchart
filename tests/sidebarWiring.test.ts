@@ -8,7 +8,7 @@
 import { describe, expect, it, afterAll } from 'vitest';
 import { DRAW_TOOLS, DrawLayer, makeFakeHost } from '../src/engine/draw';
 import { drawBus, drawIntent, toolKeyForLabel, isMagnetLabel } from '../src/workspace/drawBus';
-import { SECTIONS } from '../src/workspace/dom/sidebar';
+import { SECTIONS, MENU_SEP } from '../src/workspace/dom/sidebar';
 import { useStudyStore } from '../src/store/studyStore';
 
 /* ------------------------------------------------------------ 收集所有叶子行 */
@@ -24,8 +24,10 @@ function leafLabels(): string[] {
       const hasMenu = (anyT.items?.length ?? 0) > 0 || (anyT.groups?.length ?? 0) > 0;
       // 有子菜单的按钮只展开菜单、不派发；没有子菜单的按钮本身就是一个动作（图标 / 测量 / 放大 / 继续绘图）
       if (!hasMenu) out.push(anyT.label);
-      for (const r of anyT.items ?? []) out.push(r[0]);
-      for (const g of anyT.groups ?? []) for (const r of g.items) out.push(r[0]);
+      // MENU_SEP 是分隔线占位，不是一行，别算进「叶子行」
+      const push = (r: Row): void => { if (r[0] !== MENU_SEP) out.push(r[0]); };
+      for (const r of anyT.items ?? []) push(r);
+      for (const g of anyT.groups ?? []) for (const r of g.items) push(r);
     }
   }
   return out;

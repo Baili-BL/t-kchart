@@ -8,7 +8,7 @@
 import {
   CROSS, TRENDLINE, FIB, PATTERN, LONG_POS, BRUSH, TEXT, STICKER,
   MEASURE, ZOOM, MAGNET, STAY_DRAWING, LOCK, HIDE_ALL, TRASH, CARET,
-  DOT, ARROW_ICON, HIGHLIGHTER, ERASER,
+  DOT, ARROW_ICON, ARROW_CURSOR, HIGHLIGHTER, ERASER,
   RAY_ICON, INFOLINE_ICON, EXTLINE_ICON, ANGLE_ICON,
   HLINE_ICON, HRAY_ICON, VLINE_ICON, CROSSLINE_ICON,
   STAR, INFO_BADGE,
@@ -62,11 +62,12 @@ export const SIDEBAR_CSS = `
   --kcs-on: rgb(231,240,255);        /* 开关类按钮打开态 */
   --kcs-rule: rgb(235,235,235);      /* 分割线 */
   --kcs-pop-bg: #fff;                /* 弹层（子菜单 / emoji 面板） */
-  --kcs-pop-sel: rgb(240,240,243);   /* 弹层里选中的那一行 */
-  --kcs-pop-div: rgb(218,218,218);   /* 弹层内分隔线 */
+  --kcs-pop-sel: #2e2e2e;            /* 弹层里选中的那一行（官方：深底白字，不是浅灰） */
+  --kcs-sel-ink: #fff;               /* 选中行的文字色 */
+  --kcs-pop-div: rgb(235,235,235);   /* 弹层内分隔线（官方 #ebebeb） */
   --kcs-pop-shadow: 0 4px 10px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.04);
-  --kcs-sw-on: rgb(15,15,15);        /* 开关：开 */
-  --kcs-sw-off: rgb(200,200,200);
+  --kcs-sw-on: rgb(46,46,46);        /* 开关：开（官方 #2e2e2e） */
+  --kcs-sw-off: rgb(156,156,156);    /* 开关：关（官方 #9c9c9c） */
   --kcs-sw-knob: #fff;
 }
 /* 深色：底色 / 阴影直接取 app 的 tokens（tokens.css），保证和顶栏、面板同族 */
@@ -81,6 +82,7 @@ export const SIDEBAR_CSS = `
   --kcs-rule: var(--border);         /* #242c36 */
   --kcs-pop-bg: var(--bg-sunken);    /* #1b2128 */
   --kcs-pop-sel: var(--bg-active);
+  --kcs-sel-ink: var(--text);
   --kcs-pop-div: var(--border-strong);
   --kcs-pop-shadow: 0 8px 24px rgba(0,0,0,.55), 0 0 0 1px var(--border-strong);
   --kcs-sw-on: #e8ecf1;
@@ -127,10 +129,11 @@ export const SIDEBAR_CSS = `
 /* —— 子菜单：白卡阴影，右侧弹出。挂在 body 下用 fixed 定位，
       避免 sidebar 的 overflow-x:hidden 把整张菜单裁掉（裁剪后既不可见也不可点） —— */
 .kc-sb-menu {
-  position: fixed; min-width: 220px; padding: 6px 0; margin: 0;
+  /* 官方「光标」下拉实测：244 宽、四周 6px 内边距、14px 字；行是 232×40 的圆角块 */
+  position: fixed; min-width: 244px; padding: 6px; margin: 0;
   list-style: none; background: var(--kcs-pop-bg); color: var(--kcs-ink); border-radius: 6px;
   box-shadow: var(--kcs-pop-shadow);
-  font-size: 13px; z-index: 1200; display: none;
+  font-size: 14px; line-height: 18px; z-index: 1200; display: none;
 }
 .kc-sb-menu.open { display: block; }
 /* —— emoji 面板（设计稿「图标」按钮）：顶部分类 tab + 滚动网格 ——
@@ -191,35 +194,38 @@ export const SIDEBAR_CSS = `
 :root[data-theme='dark'] .kc-emoji-grid button:hover { background: var(--kcs-hover); }
 :root[data-theme='dark'] .kc-emoji-group { color: var(--kcs-muted); }
 .kc-sb-menu li {
-  display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; cursor: pointer;
-  transition: background-color .06s ease; white-space: nowrap;
+  display: flex; align-items: center; gap: 4px; height: 40px; padding: 0 4px; cursor: pointer;
+  border-radius: 6px; transition: background-color .06s ease; white-space: nowrap;
 }
 .kc-sb-menu li:hover { background: var(--kcs-hover); }
 .kc-sb-menu li > svg { flex: 0 0 auto; }
 /* 选中项：整行灰底（设计稿 rgb(240,240,243)），文字保持墨色 */
-.kc-sb-menu li.sel { background: var(--kcs-pop-sel); color: var(--kcs-ink); }
+.kc-sb-menu li.sel { background: var(--kcs-pop-sel); color: var(--kcs-sel-ink); }
+.kc-sb-menu li.sel .kc-menu-key { color: rgba(255,255,255,.62); }
+.kc-sb-menu li.sel .kc-star { color: inherit; }
 /* —— 子菜单内的分隔线 + 开关行（设计稿「长按时显示数值工具提示」） —— */
-.kc-sb-menu .kc-menu-div { height: 1px; margin: 5px 12px; padding: 0; background: var(--kcs-pop-div); cursor: default; }
+.kc-sb-menu .kc-menu-div { height: 1px; margin: 6px 0; padding: 0; background: var(--kcs-pop-div); cursor: default; }
 .kc-sb-menu .kc-menu-div:hover { background: var(--kcs-pop-div); }
 .kc-menu-toggle {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  height: 34px; padding: 0 12px; font-size: 13px; cursor: pointer; white-space: nowrap;
-  transition: background-color .06s ease;
+  height: 32px; padding: 0 8px; font-size: 14px; cursor: pointer; white-space: nowrap;
+  border-radius: 6px; transition: background-color .06s ease;
 }
 .kc-menu-toggle:hover { background: var(--kcs-hover); }
 .kc-menu-switch {
-  position: relative; flex: 0 0 auto; width: 34px; height: 20px; border-radius: 10px;
+  /* 官方开关实测：38×20 轨道（圆角 20），旋钮 14×14、内缩 3，开 #2e2e2e / 关 #9c9c9c */
+  position: relative; flex: 0 0 auto; width: 38px; height: 20px; border-radius: 20px;
   background: var(--kcs-sw-on); transition: background-color .15s ease;
 }
 .kc-menu-switch::after {
-  content: ''; position: absolute; left: 15px; top: 2px; width: 16px; height: 16px;
+  content: ''; position: absolute; left: 21px; top: 3px; width: 14px; height: 14px;
   border-radius: 50%; background: var(--kcs-sw-knob); transition: left .15s ease;
 }
 .kc-menu-toggle.off .kc-menu-switch { background: var(--kcs-sw-off); }
 .kc-menu-toggle.off .kc-menu-switch::after { left: 3px; }
 /* —— 分组标题 / 快捷键提示 / 信息徽标 / 收藏星（设计稿「趋势线」子菜单） —— */
 .kc-sb-menu .kc-menu-group {
-  display: block; height: auto; padding: 8px 12px 2px; margin: 0;
+  display: block; height: auto; padding: 8px 6px 2px; margin: 0;
   color: var(--kcs-muted); font-size: 11px; cursor: default;
 }
 .kc-sb-menu .kc-menu-group:hover { background: transparent; }
@@ -227,7 +233,7 @@ export const SIDEBAR_CSS = `
 .kc-sb-menu li .kc-menu-key { color: var(--kcs-muted); font-size: 12px; }
 .kc-sb-menu li .kc-info-badge { display: inline-flex; }
 .kc-sb-menu li .kc-star {
-  display: inline-flex; color: var(--kcs-ink); opacity: 0; cursor: pointer;
+  display: inline-flex; color: inherit; opacity: 0; cursor: pointer;
   transition: opacity .1s ease;
 }
 .kc-sb-menu li:hover .kc-star { opacity: 0.55; }
@@ -264,10 +270,17 @@ export const LONGPRESS_TIP_LABEL = '长按时显示数值工具提示';
 
 // 分段与原稿分隔线位置一致：十字线 | 趋势/斐波 | 形态/仓位/笔刷/文字 | 图标 |
 // 测量/放大 | 磁铁/继续/锁定/隐藏 | 移除。
+/** 菜单项里的「这里插一条分隔线」占位（官方把橡皮擦单独隔在一条线下面）。
+ *  不是一行可点的行 —— buildToolMenu 见到它就换成 .kc-menu-div，
+ *  tests/sidebarWiring 收叶子行时也会跳过它。 */
+export const MENU_SEP = '—';
+
 export const SECTIONS: Section[] = [
   { tools: [
     { icon: CROSS, caret: CARET, label: '十字线', items: [
-      ['十字线', CROSS], ['圆点', DOT], ['箭头', ARROW_ICON], ['荧光笔', HIGHLIGHTER], ['橡皮擦', ERASER],
+      // 「橡皮擦」在官方是在分隔线下面的（和上面四个不是一个组），'—' 就是那条线的占位
+      ['十字线', CROSS], ['圆点', DOT], ['箭头', ARROW_CURSOR], ['荧光笔', HIGHLIGHTER],
+      [MENU_SEP, ''], ['橡皮擦', ERASER],
     ], toggle: { label: LONGPRESS_TIP_LABEL, on: true } },
   ]},
   { tools: [
@@ -459,6 +472,7 @@ function buildToolMenu(t: ToolDef, pick: (label: string) => void): HTMLUListElem
     }
     for (const item of g.items) {
       const [label, icon, hint, badge] = item;
+      if (label === MENU_SEP) { menu.appendChild(el('li', 'kc-menu-div')); continue; }
       const li = el('li');
       li.innerHTML = icon + `<span>${label}</span>`
         + (badge === 'info' ? `<span class="kc-info-badge">${INFO_BADGE}</span>` : '')

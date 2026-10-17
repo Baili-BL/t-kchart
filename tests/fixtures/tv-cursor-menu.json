@@ -1,0 +1,69 @@
+{
+ "_source": "https://cn.tradingview.com/chart/?symbol=BTCUSDT（匿名图表）左侧「光标」下拉，2026-10-17 用 Playwright 从 DOM 直接抓的行内 <svg> 与 getComputedStyle 度量",
+ "_how": "左栏 [data-name=linetool-group-cursors] 的箭头按钮 → 下拉里每行 [data-name] 的 svg.outerHTML；尺寸取 getBoundingClientRect / computedStyle",
+ "menu": {
+  "width": 244,
+  "padding": "6px",
+  "rowHeight": 40,
+  "rowPadding": "2px 4px",
+  "fontSize": 14,
+  "lineHeight": 18,
+  "iconBox": 28,
+  "iconGap": 4,
+  "iconLeftInRow": 4
+ },
+ "selected": {
+  "background": "rgb(46,46,46)",
+  "color": "rgb(255,255,255)"
+ },
+ "hover": {
+  "background": "rgb(242,242,242)"
+ },
+ "divider": {
+  "lineColor": "rgb(235,235,235)",
+  "blockPadding": "6px 0",
+  "height": 1
+ },
+ "toggle": {
+  "rowHeight": 32,
+  "fontSize": 14,
+  "textLeftInRow": 8
+ },
+ "switch": {
+  "width": 38,
+  "height": 20,
+  "radius": 20,
+  "thumb": 14,
+  "thumbInset": 3,
+  "onColor": "rgb(46,46,46)",
+  "offColor": "rgb(156,156,156)",
+  "thumbColor": "rgb(255,255,255)"
+ },
+ "items": [
+  {
+   "key": "cursor",
+   "label": "十字线",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\"><g fill=\"currentColor\"><path d=\"M18 15h8v-1h-8z\"></path><path d=\"M14 18v8h1v-8zM14 3v8h1v-8zM3 15h8v-1h-8z\"></path></g></svg>"
+  },
+  {
+   "key": "dot",
+   "label": "圆点",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\"><circle fill=\"currentColor\" cx=\"14\" cy=\"14\" r=\"3\"></circle></svg>"
+  },
+  {
+   "key": "arrow",
+   "label": "箭头",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\"><path fill=\"currentColor\" d=\"M11.682 16.09l3.504 6.068 1.732-1-3.497-6.057 3.595-2.1L8 7.74v10.512l3.682-2.163zm-.362 1.372L7 20V6l12 7-4.216 2.462 3.5 6.062-3.464 2-3.5-6.062z\"></path></svg>"
+  },
+  {
+   "key": "demonstration",
+   "label": "荧光笔",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 28 28\" width=\"28\" height=\"28\" fill=\"currentColor\"><path d=\"m11.26 21 3.65-4.78 6.09-.66L10 8zm3.09-5.71-2.33 3.05-.8-8.3 7.02 4.82z\"></path><path fill-rule=\"evenodd\" d=\"M25 14a11 11 0 1 1-22 0 11 11 0 0 1 22 0m-1 0a10 10 0 1 1-20 0 10 10 0 0 1 20 0\"></path></svg>"
+  },
+  {
+   "key": "eraser",
+   "label": "橡皮擦",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 29 31\" width=\"29\" height=\"31\"><g fill=\"currentColor\" fill-rule=\"nonzero\"><path d=\"M15.3 22l8.187-8.187c.394-.394.395-1.028.004-1.418l-4.243-4.243c-.394-.394-1.019-.395-1.407-.006l-11.325 11.325c-.383.383-.383 1.018.007 1.407l1.121 1.121h7.656zm-9.484-.414c-.781-.781-.779-2.049-.007-2.821l11.325-11.325c.777-.777 2.035-.78 2.821.006l4.243 4.243c.781.781.78 2.048-.004 2.832l-8.48 8.48h-8.484l-1.414-1.414z\"></path><path d=\"M13.011 22.999h7.999v-1h-7.999zM13.501 11.294l6.717 6.717.707-.707-6.717-6.717z\"></path></g></svg>"
+  }
+ ]
+}
