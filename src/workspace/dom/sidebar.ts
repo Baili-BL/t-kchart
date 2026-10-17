@@ -11,6 +11,8 @@ import {
   DOT, ARROW_ICON, ARROW_CURSOR, HIGHLIGHTER, ERASER,
   RAY_ICON, INFOLINE_ICON, EXTLINE_ICON, ANGLE_ICON,
   HLINE_ICON, HRAY_ICON, VLINE_ICON, CROSSLINE_ICON,
+  PARALLEL_ICON, REGRESSION_ICON, FLAT_ICON, DISJOINT_ICON,
+  PITCHFORK_ICON, SCHIFF_ICON, MSCHIFF_ICON, INSIDE_FORK_ICON,
   STAR, INFO_BADGE,
   FIBEXT_ICON, FIBCHAN_ICON, FIBTZ_ICON, FIBFAN_ICON, FIBTTZ_ICON,
   FIBCIRC_ICON, FIBSPI_ICON, FIBARC_ICON, FIBWEDGE_ICON, TILTFAN_ICON,
@@ -58,6 +60,7 @@ export const SIDEBAR_CSS = `
   --kcs-base: rgb(235,235,235);      /* 轨道底色（比卡片深一档） */  --kcs-card: #fff;                  /* 分组卡片（浅色下是白） */
   --kcs-ink: rgb(15,15,15);          /* 图标 / 文字 */
   --kcs-muted: rgb(140,140,145);     /* 分组标题 / 快捷键 */
+  --kcs-menu-meta: rgb(112,112,112); /* 下拉里的分组标题 / 快捷键 / 星星（官方 #707070） */
   --kcs-hover: rgb(242,242,242);     /* 悬停药丸 */
   --kcs-sel: rgb(235,235,235);       /* 选中药丸 */
   --kcs-on: rgb(231,240,255);        /* 开关类按钮打开态 */
@@ -77,6 +80,7 @@ export const SIDEBAR_CSS = `
   --kcs-card: var(--bg);             /* #0f1216 */
   --kcs-ink: var(--text);            /* #e8ecf1 */
   --kcs-muted: #8a919e;
+  --kcs-menu-meta: #8a919e;
   --kcs-hover: var(--bg-hover);      /* #212832 */
   --kcs-sel: var(--bg-active);       /* #29313c */
   --kcs-on: var(--accent-soft);      /* #1b2a4d */
@@ -136,10 +140,13 @@ export const SIDEBAR_CSS = `
 /* —— 子菜单：白卡阴影，右侧弹出。挂在 body 下用 fixed 定位，
       避免 sidebar 的 overflow-x:hidden 把整张菜单裁掉（裁剪后既不可见也不可点） —— */
 .kc-sb-menu {
-  /* 官方「光标」下拉实测：244 宽、四周 6px 内边距、14px 字；行是 232×40 的圆角块 */
-  position: fixed; min-width: 244px; padding: 6px; margin: 0;
+  /* 官方「趋势工具」下拉实测：224 宽（光标那份 244，宽度写在各 ToolDef.menuWidth 上）、
+     四周 6px 内边距、14px 字、圆角 6、阴影 0 2px 4px rgba(0,0,0,.2)；行是 40 高、2px 4px 内边距的圆角块 */
+  position: fixed; padding: 6px; margin: 0; box-sizing: border-box;
   list-style: none; background: var(--kcs-pop-bg); color: var(--kcs-ink); border-radius: 6px;
   box-shadow: var(--kcs-pop-shadow);
+  /* 官方字体栈（下拉量到的是 -apple-system / system-ui / Trebuchet MS …），别跟着 app 的 Inter 走 */
+  font-family: -apple-system, system-ui, "Trebuchet MS", Roboto, Ubuntu, sans-serif;
   font-size: 14px; line-height: 18px; z-index: 1200; display: none;
 }
 .kc-sb-menu.open { display: block; }
@@ -201,12 +208,12 @@ export const SIDEBAR_CSS = `
 :root[data-theme='dark'] .kc-emoji-grid button:hover { background: var(--kcs-hover); }
 :root[data-theme='dark'] .kc-emoji-group { color: var(--kcs-muted); }
 .kc-sb-menu li {
-  display: flex; align-items: center; gap: 4px; height: 40px; padding: 0 4px; cursor: pointer;
-  border-radius: 6px; transition: background-color .06s ease; white-space: nowrap;
+  display: flex; align-items: center; gap: 4px; height: 40px; padding: 2px 4px; cursor: pointer;
+  border-radius: 6px; transition: background-color .06s ease; white-space: nowrap; box-sizing: border-box;
 }
 .kc-sb-menu li:hover { background: var(--kcs-hover); }
 .kc-sb-menu li > svg { flex: 0 0 auto; }
-/* 选中项：整行灰底（设计稿 rgb(240,240,243)），文字保持墨色 */
+/* 选中项：官方是深底白字（不是浅灰底深字），行圆角 6 */
 .kc-sb-menu li.sel { background: var(--kcs-pop-sel); color: var(--kcs-sel-ink); }
 .kc-sb-menu li.sel .kc-menu-key { color: rgba(255,255,255,.62); }
 .kc-sb-menu li.sel .kc-star { color: inherit; }
@@ -232,19 +239,30 @@ export const SIDEBAR_CSS = `
 .kc-menu-toggle.off .kc-menu-switch::after { left: 3px; }
 /* —— 分组标题 / 快捷键提示 / 信息徽标 / 收藏星（设计稿「趋势线」子菜单） —— */
 .kc-sb-menu .kc-menu-group {
-  display: block; height: auto; padding: 8px 6px 2px; margin: 0;
-  color: var(--kcs-muted); font-size: 11px; cursor: default;
+  display: flex; align-items: center; height: 24px; padding: 0 8px; margin: 0;
+  color: var(--kcs-menu-meta); font-size: 11px; letter-spacing: .4px; cursor: default;
 }
+/* 组与组之间空 13px（官方：上一项底边 470 → 下一组标题 483） */
+.kc-sb-menu .kc-menu-group:not(:first-child) { margin-top: 13px; }
 .kc-sb-menu .kc-menu-group:hover { background: transparent; }
 .kc-sb-menu li .kc-li-spacer { flex: 1 1 auto; }
-.kc-sb-menu li .kc-menu-key { color: var(--kcs-muted); font-size: 12px; }
-.kc-sb-menu li .kc-info-badge { display: inline-flex; }
+/* 快捷键与收藏星之间官方留 8px（我们 flex gap 4 + 这里补 4） */
+.kc-sb-menu li .kc-menu-key { color: var(--kcs-menu-meta); font-size: 12px; margin-right: 4px; }
+/* 信息徽标 / 收藏星：官方都是 showOnHover —— 平时不占视觉，悬停整行才出现 */
+.kc-sb-menu li .kc-info-badge {
+  display: inline-flex; align-items: center; color: var(--kcs-menu-meta);
+  opacity: 0; transition: opacity .1s ease;
+}
+.kc-sb-menu li:hover .kc-info-badge { opacity: 1; }
 .kc-sb-menu li .kc-star {
-  display: inline-flex; color: inherit; opacity: 0; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; margin-right: 2px; border-radius: 4px;
+  color: var(--kcs-menu-meta); opacity: 0; cursor: pointer;
   transition: opacity .1s ease;
 }
-.kc-sb-menu li:hover .kc-star { opacity: 0.55; }
-.kc-sb-menu li .kc-star:hover { opacity: 1; }
+.kc-sb-menu li .kc-star svg { width: 18px; height: 18px; }
+.kc-sb-menu li:hover .kc-star { opacity: 1; }
+.kc-sb-menu li .kc-star:hover { background: rgba(0,0,0,.06); }
 .kc-sb-menu li .kc-star.on { opacity: 1; color: #f0a70a; }
 .kc-sb-menu li .kc-star.on svg path { fill: #f0a70a; stroke: #f0a70a; }
 `;
@@ -260,8 +278,10 @@ function injectStyle(): void {
 /* ------------------------------------------------------------- 子菜单数据 */
 // 主图标 / 箭头图标 / 悬停标题 / 子菜单项（标签 + 图标）。
 // 「十字线」子菜单 = 光标工具组，按设计稿：十字线/圆点/箭头/荧光笔/橡皮擦 + 长按提示开关。
-// 「趋势线」子菜单 = 线工具组，按设计稿分组：「线」组（趋势线⌥T/射线/信息线/延长线/趋势角度）
-// + 水平组（水平线⌥H/水平射线⌥J/垂直线⌥V/横线⌥C）；箭头/平行通道作为补充组保留入口。
+// 「趋势线」子菜单 = 线上 TradingView 的「趋势工具」下拉，三组：
+//   线（趋势线⌥T / 射线 / 信息线 / 延长线 / 趋势角度 / 水平线⌥H / 水平射线⌥J / 垂直线⌥V / 横线⌥C）
+//   通道（平行通道 / 回归趋势 / 平顶·平底 / 不相交通道）
+//   分叉线（分叉线 / 希夫干草叉 / 改良希夫干草叉 / 内部分叉线）
 type MenuItem = [label: string, icon: string, hint?: string] | [label: string, icon: string, hint?: string, badge?: 'info'];
 interface ToolDef {
   icon: string; caret?: string; label: string;
@@ -270,6 +290,8 @@ interface ToolDef {
   groups?: Array<{ label?: string; items: MenuItem[] }>;
   /** 子菜单末尾（分隔线之下）的开关行；点击走 onToggle */
   toggle?: { label: string; on?: boolean };
+  /** 菜单宽度（px）。官方「趋势工具」224、「光标」244 —— 宽度是按各自内容定死的 */
+  menuWidth?: number;
 }
 type Section = { pad?: string; tools: ToolDef[] };
 
@@ -333,30 +355,36 @@ export function sidebarLabelForTool(key: string): string | null {
 
 export const SECTIONS: Section[] = [
   { tools: [
-    { icon: CROSS, caret: CARET, label: '十字线', items: [
+    { icon: CROSS, caret: CARET, label: '十字线', menuWidth: 244, items: [
       // 「橡皮擦」在官方是在分隔线下面的（和上面四个不是一个组），'—' 就是那条线的占位
       ['十字线', CROSS], ['圆点', DOT], ['箭头', ARROW_CURSOR], ['荧光笔', HIGHLIGHTER],
       [MENU_SEP, ''], ['橡皮擦', ERASER],
     ], toggle: { label: LONGPRESS_TIP_LABEL, on: true } },
   ]},
   { tools: [
-    { icon: TRENDLINE, caret: CARET, label: '趋势线', groups: [
+    { icon: TRENDLINE, caret: CARET, label: '趋势线', menuWidth: 224, groups: [
       { label: '线', items: [
-        ['趋势线', TRENDLINE, '⌥T'],
+        ['趋势线', TRENDLINE, '⌥ T'],
         ['射线', RAY_ICON],
         ['信息线', INFOLINE_ICON, undefined, 'info'],
         ['延长线', EXTLINE_ICON],
         ['趋势角度', ANGLE_ICON],
+        ['水平线', HLINE_ICON, '⌥ H'],
+        ['水平射线', HRAY_ICON, '⌥ J'],
+        ['垂直线', VLINE_ICON, '⌥ V'],
+        ['横线', CROSSLINE_ICON, '⌥ C'],
       ] },
-      { items: [
-        ['水平线', HLINE_ICON, '⌥H'],
-        ['水平射线', HRAY_ICON, '⌥J'],
-        ['垂直线', VLINE_ICON, '⌥V'],
-        ['横线', CROSSLINE_ICON, '⌥C'],
+      { label: '通道', items: [
+        ['平行通道', PARALLEL_ICON],
+        ['回归趋势', REGRESSION_ICON],
+        ['平顶/平底', FLAT_ICON],
+        ['不相交通道', DISJOINT_ICON],
       ] },
-      { items: [
-        ['箭头', ARROW_ICON],
-        ['平行通道', TRENDLINE],
+      { label: '分叉线', items: [
+        ['分叉线', PITCHFORK_ICON],
+        ['希夫干草叉', SCHIFF_ICON],
+        ['改良希夫干草叉', MSCHIFF_ICON],
+        ['内部分叉线', INSIDE_FORK_ICON],
       ] },
     ] },
     { icon: FIB, caret: CARET, label: '斐波那契回撤', groups: [
@@ -518,6 +546,8 @@ function saveFavs(s: Set<string>): void {
  */
 function buildToolMenu(t: ToolDef, pick: (label: string, icon: string) => void): HTMLUListElement {
   const menu = el('ul', 'kc-sb-menu');
+  // 官方的菜单宽度是按各自内容定死的：趋势工具 224、光标 244（tests/fixtures 里两份都量过）
+  menu.style.width = (t.menuWidth ?? 224) + 'px';
   const favs = loadFavs();
   const groups = t.groups ?? [{ items: t.items ?? [] }];
   for (const g of groups) {
@@ -719,8 +749,9 @@ export function createSidebar(mount: HTMLElement, cb: SidebarCallbacks = {}): HT
     cell.classList.add('open');
     // 菜单打开时把「组内当前工具」那一行标成选中：官方下拉里当前工具是深色块，
     // 而菜单只构建一次，不重新同步的话重开就丢了选中态
-    const b = cell.querySelector('.kc-sb-btn') as HTMLButtonElement | null;
-    const active = b ? activeOf.get(b) : undefined;
+    // 选中态只跟「全局当前工具」走：组里记住的 activeOf 是「这颗按钮上次派发的工具」，
+    // 光标模式下它仍然是趋势线，照着标会把没在用的那一行也染黑（官方只在真选中时才深底）
+    const active = root.dataset.activeTool;
     menu.querySelectorAll<HTMLElement>('li[data-label]').forEach(li => {
       li.classList.toggle('sel', li.dataset.label === active);
     });
@@ -835,6 +866,7 @@ export function createSidebar(mount: HTMLElement, cb: SidebarCallbacks = {}): HT
   root.addEventListener('scroll', () => closeMenus());
 
   syncers.set(root, (label: string) => {
+    root.dataset.activeTool = label;
     // 分组里的子项按图标反查；没有子菜单的单按钮（测量 / 图标）就按组名匹配
     const g = groups.find(x => itemIcon(x.t, label) || x.t.label === label);
     if (!g) return;
@@ -842,6 +874,8 @@ export function createSidebar(mount: HTMLElement, cb: SidebarCallbacks = {}): HT
   });
 
   mount.appendChild(root);
+  // 打开时就是光标（十字线）模式：下拉里也只该标这一行
+  root.dataset.activeTool = '十字线';
   // 默认选中第一个工具（十字线），对应原稿 #ebebeb 选中药丸
   const first = root.querySelector('.kc-sb-btn') as HTMLButtonElement;
   first.classList.add('kc-sel');

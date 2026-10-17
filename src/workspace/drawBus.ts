@@ -120,6 +120,21 @@ export function toolKeyForLabel(label: string): string | null {
       return 'arrow';
     case '平行通道':
       return 'channel';
+    // —— 趋势工具下拉的「通道」「分叉线」两组 ——
+    case '回归趋势':
+      return 'regression';
+    case '平顶/平底':
+      return 'flat';
+    case '不相交通道':
+      return 'disjoint';
+    case '分叉线':
+      return 'pitchfork';
+    case '希夫干草叉':
+      return 'schiff';
+    case '改良希夫干草叉':
+      return 'schiff2';
+    case '内部分叉线':
+      return 'innerfork';
     case '三角形形态':
     case '三角形':
       return 'triangle';

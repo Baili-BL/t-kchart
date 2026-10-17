@@ -322,8 +322,8 @@ describe('2.8 几何纯函数与回归', () => {
     expect(L.drawings.length).toBe(1);
     expect(L.drawings[0].pts.length).toBe(2);
   });
-  it('工具表：9 → 89 种，新工具的锚点数与快捷键就位', () => {
-    expect(DRAW_TOOLS.length).toBe(89);
+  it('工具表：9 → 92 种，新工具的锚点数与快捷键就位', () => {
+    expect(DRAW_TOOLS.length).toBe(92);
     const want: Record<string, number> = {
       hray: 1, extline: 2, arrow: 2, ellipse: 2, triangle: 3, channel: 3,
       dot: 1, highlight: 0, eraser: 0, infoline: 2, angle: 2, crossline: 1,

@@ -16,7 +16,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { SIDEBAR_CSS } from '../src/workspace/dom/sidebar';
+import { SIDEBAR_CSS, SECTIONS } from '../src/workspace/dom/sidebar';
 import {
   CROSS, DOT, ARROW_CURSOR, HIGHLIGHTER, ERASER,
 } from '../src/workspace/dom/sidebar-icons';
@@ -112,7 +112,10 @@ describe('下拉的行 / 菜单度量：等于官方实测值', () => {
   const knob = block(SIDEBAR_CSS, '.kc-menu-switch::after');
 
   it(`菜单 244 宽 / ${FX.menu.padding} 内边距 / ${FX.menu.fontSize}px 字`, () => {
-    expect(menu).toContain(`min-width: ${FX.menu.width}px`);
+    // 宽度不再写死在 CSS 里（趋势工具 224、光标 244），挂在各自的 ToolDef.menuWidth 上
+    const cursor = SECTIONS.flatMap((s) => s.tools).find((t) => t.label === '十字线');
+    expect(cursor?.menuWidth).toBe(FX.menu.width);
+    expect(menu).toContain('box-sizing: border-box');
     expect(menu).toContain(`padding: ${FX.menu.padding}`);
     expect(menu).toContain(`font-size: ${FX.menu.fontSize}px`);
     expect(menu).toContain(`line-height: ${FX.menu.lineHeight}px`);
@@ -120,7 +123,7 @@ describe('下拉的行 / 菜单度量：等于官方实测值', () => {
 
   it(`行高 ${FX.menu.rowHeight} / 左右 ${FX.menu.iconLeftInRow}px / 图标与文字间距 ${FX.menu.iconGap} / 圆角 6`, () => {
     expect(row).toContain(`height: ${FX.menu.rowHeight}px`);
-    expect(row).toContain(`padding: 0 ${FX.menu.iconLeftInRow}px`);
+    expect(row).toContain(`padding: 2px ${FX.menu.iconLeftInRow}px`);
     expect(row).toContain(`gap: ${FX.menu.iconGap}px`);
     expect(row).toContain('border-radius: 6px');
   });

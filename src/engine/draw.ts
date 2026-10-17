@@ -142,6 +142,15 @@ export const DRAW_TOOLS: DrawToolDef[] = [
     icon: 'M9 3 L16 14 L2 14 Z' },
   { key: 'channel', label: '平行通道', points: 3, key2: 'c',
     icon: 'M3 4 L15 4 M3 12 L15 12 M3 4 L3 12' },
+  // —— 线上 TradingView「趋势工具」下拉的「通道」「分叉线」两组（2026-10-18 对齐） ——
+  // 回归趋势：两个锚点圈出一段 K 线，对区间内的收盘价做最小二乘，画中线 + 两侧 ±1σ 平行带
+  { key: 'regression', label: '回归趋势', points: 2, icon: '' },
+  // 平顶/平底：两个锚点之间取更高（顶）或更低（底）的那一侧，画一条水平线
+  { key: 'flat', label: '平顶/平底', points: 2, icon: '' },
+  // 不相交通道：两条反向发散的斜线（p1 侧向内收），官方图标就是这个意思
+  { key: 'disjoint', label: '不相交通道', points: 2, icon: '' },
+  // 分叉线族（分叉线 / 希夫干草叉 / 改良希夫干草叉 / 内部分叉线）直接复用上面的
+  // pitchfork / schiff / schiff2 / innerfork —— 同一套几何，不另起一份
   { key: 'fib', label: '斐波那契回撤', points: 2, key2: 'f', key3: '⌥F',
     icon: 'M2 4 L16 4 M2 7.5 L16 7.5 M2 11 L16 11 M2 14.5 L16 14.5' },
   { key: 'text', label: '文字', points: 1, key2: 'x',
@@ -1079,6 +1088,7 @@ export const TV_TOOL_KEY: Record<string, string> = {
   ellipse: 'ellipse',
   triangle: 'triangle',
   channel: 'parallelchannel',
+  regression: 'regressiontrend',
   fib: 'fibretracement',
   text: 'text',
   infoline: 'infoline',
@@ -1176,6 +1186,9 @@ export function tvToolStyle(key: string): Partial<DrawStyle> | null {
 }
 
 /** 按工具给默认样式（官方默认属性表）；显式 patch 优先 */
+/** 趋势工具里走「线段组」渲染的一批（回归趋势 / 平顶平底 / 不相交通道 / 四种分叉线） */
+export const EXTRA_LINE_TYPES = new Set(['regression', 'flat', 'disjoint']);
+
 export function styleForTool(type: string, patch?: Partial<DrawStyle>): DrawStyle {
   const s = drawStyle();
   const off = tvToolStyle(type);
@@ -1214,6 +1227,25 @@ export function rayToX(x0: number, y0: number, x1: number, y1: number, edgeX: nu
   if (x1 === x0) return { x: x0, y: y0 };
   const k = (edgeX - x0) / (x1 - x0);
   return { x: edgeX, y: y0 + k * (y1 - y0) };
+}
+
+/**
+ * 一元最小二乘：把 (i, v) 拟合成 v = m·i + q，并给出残差标准差 σ（与 v 同单位）。
+ * 回归趋势用它取中线与两侧 ±1σ 平行带。
+ */
+export function linreg(points: Array<{ i: number; v: number }>): { m: number; q: number; sigma: number } {
+  const n = points.length;
+  if (!n) return { m: 0, q: 0, sigma: 0 };
+  let sx = 0; let sy = 0;
+  for (const p of points) { sx += p.i; sy += p.v; }
+  const mx = sx / n; const my = sy / n;
+  let num = 0; let den = 0;
+  for (const p of points) { num += (p.i - mx) * (p.v - my); den += (p.i - mx) ** 2; }
+  const m = den === 0 ? 0 : num / den;
+  const q = my - m * mx;
+  let ss = 0;
+  for (const p of points) ss += (p.v - (m * p.i + q)) ** 2;
+  return { m, q, sigma: Math.sqrt(ss / n) };
 }
 
 export function inRect(px: number, py: number, x0: number, y0: number, x1: number, y1: number): boolean {
@@ -1551,6 +1583,11 @@ export class DrawLayer {
           distToSeg(px, py, a.x, a.y, b.x, b.y) <= tol ||
           distToSeg(px, py, a.x + wx, a.y + wy, b.x + wx, b.y + wy) <= tol;
         if (onEdge || inParallelogram(px, py, a.x, a.y, b.x, b.y, wx, wy)) return { d, part: 'body' };
+      } else if (EXTRA_LINE_TYPES.has(d.type)) {
+        // 线段组：任意一条线附近都算命中
+        for (const s of this.extraSegments(d, a, b, c)) {
+          if (distToSeg(px, py, s[0], s[1], s[2], s[3]) <= tol) return { d, part: 'body' };
+        }
       } else if (d.type === 'rect' || d.type === 'measure') {
         // 边框 或 内部
         const onEdge =
@@ -2394,6 +2431,58 @@ export class DrawLayer {
     ctx.restore();
   }
 
+  /**
+   * 趋势工具里「线段组」类图形的屏幕线段：
+   *   回归趋势（中线 + ±1σ）、平顶·平底（一条水平线）、不相交通道（两条发散线）。
+   * 四种分叉线走已有的 pitchforkRays()，不在这里。默认样式交给 drawStyle()，这里只出几何。
+   */
+  private extraSegments(
+    d: Drawing, a: { x: number; y: number }, b: { x: number; y: number }, c: { x: number; y: number },
+  ): Array<[number, number, number, number]> {
+    const ch = this.host;
+    const out: Array<[number, number, number, number]> = [];
+    if (d.type === 'regression') {
+      // iOf 给的是浮点下标，直接拿来索引 bars 会拿到 undefined
+      const i0 = Math.round(ch.iOf(a.x));
+      const i1 = Math.round(ch.iOf(b.x));
+      const lo = Math.max(0, Math.min(i0, i1));
+      const hi = Math.min(ch.bars.length - 1, Math.max(i0, i1));
+      if (hi - lo < 1) { out.push([a.x, a.y, b.x, b.y]); return out; }
+      const pts: Array<{ i: number; v: number }> = [];
+      for (let i = lo; i <= hi; i++) pts.push({ i, v: ch.bars[i].close });
+      const { m, q, sigma } = linreg(pts);
+      // 中线 + 上下各 1σ 的平行带（σ=0 时三条重合，只画一条）
+      const offs = sigma > 0 ? [-sigma, 0, sigma] : [0];
+      for (const k of offs) {
+        out.push([
+          ch.xCenter(lo), ch.yOf(q + m * lo + k),
+          ch.xCenter(hi), ch.yOf(q + m * hi + k),
+        ]);
+      }
+    } else if (d.type === 'flat') {
+      // 第二个锚点更高 → 平顶（取区间最高 high）；更低 → 平底（区间最低 low）
+      const top = b.y <= a.y;
+      const i0 = Math.round(ch.iOf(a.x));
+      const i1 = Math.round(ch.iOf(b.x));
+      const lo = Math.max(0, Math.min(i0, i1));
+      const hi = Math.min(ch.bars.length - 1, Math.max(i0, i1));
+      let px = top ? -Infinity : Infinity;
+      for (let i = lo; i <= hi; i++) {
+        if (top) px = Math.max(px, ch.bars[i].high); else px = Math.min(px, ch.bars[i].low);
+      }
+      if (!isFinite(px)) px = d.pts[0].price;
+      const y = ch.yOf(px);
+      out.push([Math.min(a.x, b.x), y, Math.max(a.x, b.x), y]);
+    } else if (d.type === 'disjoint') {
+      // 两条关于第一个锚点镜像的斜线，向右发散（官方叫「不相交通道」）
+      const right = ch.plot.r + 40;
+      const e1 = rayToX(a.x, a.y, b.x, b.y, right);
+      const e2 = rayToX(a.x, a.y, b.x, 2 * a.y - b.y, right);
+      out.push([a.x, a.y, e1.x, e1.y], [a.x, a.y, e2.x, e2.y]);
+    }
+    return out;
+  }
+
   private renderOne(ctx: CanvasRenderingContext2D, d: Drawing, selected: boolean, hovered = false): void {
     const ch = this.host;
     const p = this.pixelPts(d);
@@ -2573,6 +2662,14 @@ export class DrawLayer {
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
+    } else if (EXTRA_LINE_TYPES.has(d.type)) {
+      // 回归趋势 / 平顶·平底 / 不相交通道 / 四种分叉线：统一走「线段组」
+      for (const s of this.extraSegments(d, a, b, c)) {
+        ctx.beginPath();
+        ctx.moveTo(s[0], s[1]);
+        ctx.lineTo(s[2], s[3]);
+        ctx.stroke();
+      }
     } else if (d.type === 'fib') {
       const x0 = Math.min(a.x, b.x);
       const x1 = Math.max(a.x, b.x);
@@ -3835,8 +3932,8 @@ export function drawSelfTest(): DrawTestResult {
     const dd = Ld.add('dot', [{ time: host.bars[20].time, price: 105 }]);
     const pd = Ld.pixelPts(dd)[0];
     t('圆点：圆心命中 / 40px 外不命中', !!Ld.hitTest(pd.x, pd.y) && Ld.hitTest(pd.x + 40, pd.y) === null);
-    t('光标组：工具表 72 种且新三项就位',
-      DRAW_TOOLS.length === 89 &&
+    t('光标组：工具表 75 种且新三项就位',
+      DRAW_TOOLS.length === 92 &&
       toolDef('dot').points === 1 && toolDef('highlight').points === 0 && toolDef('eraser').points === 0);
     t('线组：信息线/趋势角度/横线 就位',
       toolDef('infoline').points === 2 && toolDef('angle').points === 2 && toolDef('crossline').points === 1 &&
@@ -4166,7 +4263,7 @@ export function drawSelfTest(): DrawTestResult {
 
     // --- 设计稿「笔刷」子菜单：笔刷/箭头/形状三组 ---
     t('笔刷/箭头/形状组：11 种新工具就位（锚点数 + ⌥R）',
-      DRAW_TOOLS.length === 89 &&
+      DRAW_TOOLS.length === 92 &&
       toolDef('brush').points === 0 && toolDef('rect').key3 === '⌥R' &&
       ['arrowmark', 'uparrow', 'downarrow'].every((k) => toolDef(k).points === 1) &&
       toolDef('rotrect').points === 3 && toolDef('curve').points === 3 &&
@@ -4425,7 +4522,7 @@ export function drawSelfTest(): DrawTestResult {
 
     // --- 对齐 charting_library（本地参考库）：音叉 / 文本标注 / 形状补齐 17 种 ---
     t('音叉族 + 文本标注 + 形状补齐：17 种工具就位（锚点数）',
-      DRAW_TOOLS.length === 89 &&
+      DRAW_TOOLS.length === 92 &&
       ['pitchfork', 'schiff', 'schiff2', 'innerfork', 'pitchfan'].every((k) => toolDef(k).points === 3) &&
       ['note', 'callout', 'comment', 'balloon', 'pricenote', 'pricelabel', 'signpost'].every((k) => toolDef(k).points === 1) &&
       toolDef('circlelines').points === 2 && toolDef('beziercubic').points === 4 &&
