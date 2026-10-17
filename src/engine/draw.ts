@@ -18,7 +18,7 @@
  * ===========================================================================
  */
 
-import { Bar, log } from './chart';
+import { Bar, fmtCrossTime, log } from './chart';
 
 /* ===========================================================================
  * 1. 类型
@@ -49,6 +49,23 @@ export interface Drawing {
 }
 
 /**
+ * 轴条带几何：测量工具的起止标签要画在绘图区**之外**的轴上，
+ * 由 KChart 提供（假宿主可以不实现，此时不画轴标签）。
+ */
+export interface DrawAxisBox {
+  /** 价格轴左边界（= plot.r）与其宽度 */
+  priceL: number;
+  priceW: number;
+  /** 时间轴中线 y */
+  timeY: number;
+  /** 绘图区左右边界 / 上下边界（夹取标签用） */
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
+/**
  * 绘图层需要的「宿主」能力。
  * KChart 天然满足；测试里可以用一个几十行的假对象。
  */
@@ -63,6 +80,10 @@ export interface DrawHost {
   indexAtTime(t: number): number;
   canvas?: HTMLCanvasElement;
   invalidate(): void;
+  /** 价格小数位（KChart.dec()）；缺省按 2 位 */
+  priceDecimals?(): number;
+  /** 轴条带几何；缺省不画轴标签 */
+  axisBox?(): DrawAxisBox;
 }
 
 export interface DrawToolDef {
@@ -638,6 +659,228 @@ export function drawStyle(color?: string): DrawStyle {
     fontSize: 12,
     // 每根 bar 的 OHLC 候选，磁吸用
     text: '',
+  };
+}
+
+/* ===========================================================================
+ * 2.5 「测量」—— 逐条对齐 charting_library 的 MeasurePaneView
+ *
+ * 参考实现（本机 charting_library/bundles/library.*.js，模块 44381 附近）：
+ *
+ *   const _i = color-tv-blue-500 (#2962FF), mi = color-ripe-red-400 (#F7525F)
+ *   gi = { bgColorPositive: generateColor(_i, 80), bgColorNegative: generateColor(mi, 80),
+ *          colorPositive: color-tv-blue-600 (#1E53E5), colorNegative: mi,
+ *          labelBgColorPositive: _i, labelBgColorNegative: mi }
+ *
+ * 所以官方测量**不是**「涨绿跌红」，而是涨蓝跌红：矩形用 20% 透明度的蓝/红，
+ * 中线与箭头用同色系实色，卡片底色是 90% 不透明的标签色、白色 12px 字；
+ * 时间轴 / 价格轴的起止标签则是蓝底白字（axisLineToolLabelBackgroundColorCommon）。
+ * ========================================================================= */
+
+/** 上涨（终点价 ≥ 起点价）：蓝。fill 是 generateColor(blue500, 80) → alpha 0.2 */
+export const MEASURE_UP = { fill: 'rgba(41,98,255,0.20)', line: '#1e53e5', label: '#2962ff' };
+/** 下跌：红（ripe-red-400）。官方中线与标签底色同色 */
+export const MEASURE_DOWN = { fill: 'rgba(247,82,95,0.20)', line: '#f7525f', label: '#f7525f' };
+
+/** 卡片底色透明度：官方 TextRenderer 的 backgroundTransparency = 10 → alpha 0.9 */
+export const MEASURE_LABEL_ALPHA = 0.9;
+/** 卡片字号（官方 fontsize 12） */
+export const MEASURE_FONT = 12;
+/** 行与行之间的间距（官方 TextRenderer 的 padding = 8；与字高一起构成行高 20） */
+export const MEASURE_LINE_GAP = 8;
+/** 底色相对文字的外扩（官方 backgroundHorzInflate / backgroundVertInflate = 5） */
+export const MEASURE_INFLATE_X = 5;
+export const MEASURE_INFLATE_Y = 5;
+/** 文字到底色内边距（官方 boxPadding 缺省 = ceil(fontSize/3) = 4） */
+export const MEASURE_BOX_PAD = 4;
+/** 底色圆角（官方 backgroundRoundRect 4） */
+export const MEASURE_RADIUS = 4;
+/** 卡片离矩形端点的距离（官方 offsetY 10） */
+export const MEASURE_LABEL_OFFSET = 10;
+/** 轴线出箭头的门槛（官方：水平 |dx| ≥ 50、垂直 |dy| ≥ 50 才画箭头） */
+export const MEASURE_ARROW_MIN = 50;
+/** 轴标签高度（与十字光标胶囊一致，18） */
+export const MEASURE_AXIS_LABEL_H = 18;
+
+/** Unicode 减号 —— 官方 PriceFormatter / PercentageFormatter 的负号就是这个 */
+export const MINUS_SIGN = '−';
+
+/** 去掉小数末尾多余的 0（官方 PriceFormatter._removeEndingZeros） */
+function trimZeros(s: string): string {
+  return s.indexOf('.') < 0 ? s : s.replace(/\.?0+$/, '');
+}
+
+/** 价格：带符号（+ / −），按 dec 位小数并去掉尾零。0 不带符号。 */
+export function fmtMeasurePrice(v: number, dec = 2): string {
+  const d = Math.max(0, Math.min(8, Math.round(dec)));
+  const body = trimZeros(Math.abs(v).toFixed(d));
+  if (v > 0) return '+' + body;
+  if (v < 0) return MINUS_SIGN + body;
+  return body;
+}
+
+/** 百分比：官方 PercentageFormatter（两位小数、带符号、% 后缀） */
+export function fmtMeasurePercent(v: number): string {
+  const body = trimZeros(Math.abs(v).toFixed(2));
+  if (v > 0) return '+' + body + '%';
+  if (v < 0) return MINUS_SIGN + body + '%';
+  return body + '%';
+}
+
+/**
+ * 时间跨度：官方 TimeSpanFormatter 的逐单位拼接 —— 天 / 小时 / 分钟 / 秒，
+ * 为 0 的单位直接跳过（"5天 19小时 30分钟"），负值前置 ASCII 减号。
+ */
+export function fmtMeasureSpan(seconds: number): string {
+  if (!isFinite(seconds)) return '';
+  const neg = seconds < 0;
+  let rest = Math.abs(seconds);
+  const days = Math.floor(rest / 86400); rest -= days * 86400;
+  const hours = Math.floor(rest / 3600); rest -= hours * 3600;
+  const mins = Math.floor(rest / 60); rest -= mins * 60;
+  const secs = Math.floor(rest);
+  let out = '';
+  if (days) out += days + '天 ';
+  if (hours) out += hours + '小时 ';
+  if (mins) out += mins + '分钟 ';
+  if (secs) out += secs + '秒 ';
+  out = out.trim();
+  return neg && out ? '-' + out : out;
+}
+
+/**
+ * 区间成交量：官方 VolumeFormatter 的口径 —— <995 取整，<999995 以 K，
+ * 其余 M / B / T；K 以上先按进位单位取整再缩位（3,630,000 → "3.63M"）。
+ */
+export function fmtMeasureVolume(v: number): string {
+  if (!isFinite(v)) return '---';
+  let sign = '';
+  let n = v;
+  if (n < 0) { sign = MINUS_SIGN; n = -n; }
+  const num = (x: number): string => trimZeros(String(+x.toFixed(6)));
+  if (n < 995) return sign + num(Math.round(n));
+  if (n < 999995) return sign + num(n / 1e3) + 'K';
+  if (n < 999999995) return sign + num((1e3 * Math.round(n / 1e3)) / 1e6) + 'M';
+  if (n < 999999999995) return sign + num((1e6 * Math.round(n / 1e6)) / 1e9) + 'B';
+  return sign + num((1e9 * Math.round(n / 1e9)) / 1e12) + 'T';
+}
+
+/** 一次测量的全部标量（渲染、轴标签、单测共用同一套口径） */
+export interface MeasureInfo {
+  /** 终点价 ≥ 起点价 */
+  up: boolean;
+  /** 价差（终点 − 起点） */
+  delta: number;
+  /** 百分比（相对起点价的绝对值） */
+  percent: number;
+  /** 终点索引 − 起点索引（可负） */
+  bars: number;
+  /** 起止两根 bar 的时间差（秒）；索引对不上时为 null */
+  seconds: number | null;
+  /** 区间成交量（含两端）；没有数据时为 null */
+  volume: number | null;
+  /** 起 / 终点 bar 索引（可能为 null） */
+  fromIndex: number | null;
+  toIndex: number | null;
+  /** 卡片三行文字 */
+  lines: string[];
+}
+
+/**
+ * 测量标注的数值与文案。host 只用到 bars / indexAtTime，
+ * 所以 Node 里的假宿主也能跑（自检与单测走这里）。
+ */
+export function measureInfo(
+  host: Pick<DrawHost, 'bars' | 'indexAtTime'>,
+  pts: { time: number; price: number }[],
+  dec = 2,
+): MeasureInfo {
+  const start = pts[0];
+  const end = pts[1] || pts[0];
+  const delta = end.price - start.price;
+  const percent = Math.abs(start.price) > 1e-8 ? (delta / Math.abs(start.price)) * 100 : 0;
+  const bars = host.bars || [];
+  const i0 = bars.length ? host.indexAtTime(start.time) : null;
+  const i1 = bars.length ? host.indexAtTime(end.time) : null;
+  const fromIndex = i0 == null ? null : Math.max(0, Math.min(bars.length - 1, i0));
+  const toIndex = i1 == null ? null : Math.max(0, Math.min(bars.length - 1, i1));
+  const up = delta >= 0;
+
+  let seconds: number | null = null;
+  if (bars.length && fromIndex != null && toIndex != null) {
+    seconds = (bars[toIndex].time - bars[fromIndex].time) / 1000;
+  }
+
+  let volume: number | null = null;
+  if (bars.length && fromIndex != null && toIndex != null) {
+    const lo = Math.min(fromIndex, toIndex);
+    const hi = Math.max(fromIndex, toIndex);
+    let sum = 0;
+    let any = false;
+    for (let i = lo; i <= hi; i++) {
+      const v = bars[i].volume;
+      if (isFinite(v)) { sum += v; any = true; }
+    }
+    if (any) volume = sum;
+  }
+
+  const barCount = fromIndex != null && toIndex != null ? toIndex - fromIndex : 0;
+
+  // ① 价差 (百分比) + 跳动数（官方：price + " (" + pct + ") " + pipFormatter(delta)）
+  let line1 = fmtMeasurePrice(delta, dec) + ' (' + fmtMeasurePercent(percent) + ')';
+  if (dec > 0) {
+    const ticks = Math.round(delta * Math.pow(10, dec));
+    line1 += ' ' + (ticks > 0 ? '+' : ticks < 0 ? MINUS_SIGN : '') + Math.abs(ticks);
+  }
+  // ② {n}根K线, 时间跨度
+  let line2 = barCount + '根K线';
+  const span = seconds == null ? '' : fmtMeasureSpan(seconds);
+  if (span) line2 += ', ' + span;
+  // ③ 成交量
+  const lines = [line1, line2];
+  if (volume != null) lines.push('成交量 ' + fmtMeasureVolume(volume));
+
+  return { up, delta, percent, bars: barCount, seconds, volume, fromIndex, toIndex, lines };
+}
+
+/** 卡片尺寸：官方 TextRenderer 的 boxHeight / boxWidth 公式（行数、字号可推） */
+export function measureLabelBox(maxTextW: number, lineCount: number, font = MEASURE_FONT): { w: number; h: number } {
+  const lines = Math.max(1, lineCount);
+  return {
+    w: Math.ceil(maxTextW) + 2 * MEASURE_INFLATE_X + 2 * MEASURE_BOX_PAD,
+    h: lines * font + (lines - 1) * MEASURE_LINE_GAP + 2 * MEASURE_INFLATE_Y + 2 * MEASURE_BOX_PAD,
+  };
+}
+
+/**
+ * 卡片的锚点：官方 calculateLabelPosition —— 水平取两端中点，
+ * 竖直贴着**终点**那一侧外侧：起点在终点上方时卡片在上，否则在下。
+ */
+export function measureLabelAnchor(
+  p1: { x: number; y: number },
+  p2: { x: number; y: number },
+  boxH: number,
+  paneT: number,
+  paneB: number,
+  offset = MEASURE_LABEL_OFFSET,
+): { x: number; y: number } {
+  const x = (p1.x + p2.x) / 2;
+  let y = p2.y;
+  if (p1.y > p2.y) y = Math.max(paneT + boxH / 2, y - boxH / 2 - offset);
+  else y = Math.min(paneB - boxH / 2, y + boxH / 2 + offset);
+  return { x, y };
+}
+
+/** 测量的两条中线（水平取两端 midY、垂直取 midX），以及各自要不要出箭头 */
+export function measureGuides(
+  p1: { x: number; y: number },
+  p2: { x: number; y: number },
+): { h: { a: PxPt; b: PxPt; arrow: boolean }; v: { a: PxPt; b: PxPt; arrow: boolean } } {
+  const my = Math.round((p1.y + p2.y) / 2);
+  const mx = Math.round((p1.x + p2.x) / 2);
+  return {
+    h: { a: { x: p1.x, y: my }, b: { x: p2.x, y: my }, arrow: Math.abs(p2.x - p1.x) >= MEASURE_ARROW_MIN },
+    v: { a: { x: mx, y: p1.y }, b: { x: mx, y: p2.y }, arrow: Math.abs(p2.y - p1.y) >= MEASURE_ARROW_MIN },
   };
 }
 
@@ -1520,15 +1763,7 @@ export class DrawLayer {
     if (this.pending) {
       this.pending.pts[this.pendingPlaced] = this.anchorAt(px, py);
       this.pendingPlaced++;
-      if (this.pendingPlaced >= this.pending.pts.length) {
-        this.pushHistory();
-        this.drawings.push(this.pending);
-        this.activeId = this.pending.id;
-        this.pending = null;
-        this.pendingPlaced = 0;
-        // 「重复绘制」开着时留在当前工具，方便连画
-        if (!this.repeatDraw) this.setTool('cursor');
-      }
+      if (this.pendingPlaced >= this.pending.pts.length) this.commitPending();
       this.host.invalidate();
       return true;
     }
@@ -1634,14 +1869,26 @@ export class DrawLayer {
         const a = this.pending.pts[0];
         this.pending.pts.push({ time: a.time, price: a.price });
       }
-      this.pushHistory();
-      this.drawings.push(this.pending);
-      this.activeId = this.pending.id;
-      this.pending = null;
-      this.pendingPlaced = 0;
-      if (!this.repeatDraw) this.setTool('cursor');
+      this.commitPending();
+    } else if (this.pending && this.pending.type === 'measure' && this.pendingPlaced === 1) {
+      // 官方测量是「按住拖一下就量完」。这里保留点两下的老路：
+      // 松手时终点已经拉开 ≥4px 就算拖拽，直接成型；没拉动就继续等第二次点击。
+      const q = this.pixelPts(this.pending);
+      if (q.length === 2 && Math.hypot(q[1].x - q[0].x, q[1].y - q[0].y) >= 4) this.commitPending();
     }
     this.drag = null;
+  }
+
+  /** 把半成品转正（入撤销栈、选中、按需切回光标） */
+  private commitPending(): void {
+    if (!this.pending) return;
+    this.pushHistory();
+    this.drawings.push(this.pending);
+    this.activeId = this.pending.id;
+    this.pending = null;
+    this.pendingPlaced = 0;
+    // 「重复绘制」开着时留在当前工具，方便连画
+    if (!this.repeatDraw) this.setTool('cursor');
   }
 
   private applyCursor(hit?: { d: Drawing; part: number | string } | null): void {
@@ -2477,22 +2724,7 @@ export class DrawLayer {
         ctx.restore();
       }
     } else if (d.type === 'measure') {
-      const l = Math.min(a.x, b.x);
-      const t = Math.min(a.y, b.y);
-      ctx.setLineDash([4, 3]);
-      ctx.fillStyle = 'rgba(120,123,134,0.16)';
-      ctx.beginPath();
-      ctx.rect(l, t, Math.abs(b.x - a.x), Math.abs(b.y - a.y));
-      ctx.fill();
-      ctx.stroke();
-      ctx.setLineDash([]);
-      const dp = d.pts[1].price - d.pts[0].price;
-      const pct = d.pts[0].price ? (dp / d.pts[0].price) * 100 : 0;
-      const i0 = ch.indexAtTime(d.pts[0].time);
-      const i1 = ch.indexAtTime(d.pts[1].time);
-      const txt = (dp >= 0 ? '+' : '') + dp.toFixed(2) + '  (' +
-        (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%)  ' + Math.abs(i1 - i0) + ' 根';
-      this.label(ctx, txt, (a.x + b.x) / 2 + 6, Math.min(a.y, b.y) - 6, '#e6edf3');
+      this.renderMeasure(ctx, d, selected);
     } else {
       // trend（默认）
       ctx.beginPath();
@@ -2516,6 +2748,172 @@ export class DrawLayer {
       }
       ctx.restore();
     }
+  }
+
+  /* ---------------------------------------------------------- 测量 */
+
+  /** 宿主给的价格小数位（KChart 的 dec()）；假宿主没有就按 2 位 */
+  priceDecimals(): number {
+    const h = this.host as DrawHost;
+    return typeof h.priceDecimals === 'function' ? h.priceDecimals() : 2;
+  }
+
+  /** 轴条带几何（KChart.axisBox）；轴标签必须画在绘图区之外，所以由宿主给 */
+  private axisBox(): DrawAxisBox | null {
+    const h = this.host as DrawHost;
+    return typeof h.axisBox === 'function' ? h.axisBox() : null;
+  }
+
+  /** 圆角矩形路径（不依赖 ctx.roundRect，旧浏览器 / 测试桩都能走） */
+  private pathRoundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
+    const rr = Math.max(0, Math.min(r, w / 2, h / 2));
+    ctx.beginPath();
+    ctx.moveTo(x + rr, y);
+    ctx.lineTo(x + w - rr, y);
+    ctx.arcTo(x + w, y, x + w, y + rr, rr);
+    ctx.lineTo(x + w, y + h - rr);
+    ctx.arcTo(x + w, y + h, x + w - rr, y + h, rr);
+    ctx.lineTo(x + rr, y + h);
+    ctx.arcTo(x, y + h, x, y + h - rr, rr);
+    ctx.lineTo(x, y + rr);
+    ctx.arcTo(x, y, x + rr, y, rr);
+    ctx.closePath();
+  }
+
+  /** 线段末端箭头：两笔 45° 的「V」（官方 drawArrow 的视觉等价物，臂长 6px） */
+  private arrowHead(ctx: CanvasRenderingContext2D, from: PxPt, to: PxPt): void {
+    const len = Math.min(6, Math.max(3, Math.hypot(to.x - from.x, to.y - from.y) * 0.35));
+    const ang = Math.atan2(to.y - from.y, to.x - from.x);
+    for (const s of [-1, 1]) {
+      const a = ang + Math.PI + (s * Math.PI) / 4;
+      ctx.beginPath();
+      ctx.moveTo(to.x, to.y);
+      ctx.lineTo(to.x + Math.cos(a) * len, to.y + Math.sin(a) * len);
+      ctx.stroke();
+    }
+  }
+
+  /**
+   * 「测量」的图形：对齐官方 MeasurePaneView 的三层 ——
+   *   ① 20% 透明度的蓝/红矩形（官方 linewidth 0，没有边框）
+   *   ② 过中点的水平/垂直中线，终点侧带箭头（跨度 ≥ 50px 才画）
+   *   ③ 终点外侧的三行卡片：价差(百分比) 跳动数 / 根K线, 时间跨度 / 成交量
+   */
+  private renderMeasure(ctx: CanvasRenderingContext2D, d: Drawing, selected: boolean): void {
+    const p = this.pixelPts(d);
+    if (p.length < 2) return;
+    const a = p[0];
+    const b = p[1];
+    const ch = this.host;
+    const info = measureInfo(ch, d.pts, this.priceDecimals());
+    const pal = info.up ? MEASURE_UP : MEASURE_DOWN;
+
+    const left = Math.min(a.x, b.x);
+    const top = Math.min(a.y, b.y);
+    const w = Math.abs(b.x - a.x);
+    const h = Math.abs(b.y - a.y);
+    const accent = selected ? '#1f6feb' : pal.line;
+
+    ctx.save();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = pal.fill;
+    ctx.fillRect(left, top, w, h);
+    if (selected) {
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(Math.round(left) + 0.5, Math.round(top) + 0.5, Math.round(w), Math.round(h));
+    }
+
+    const guides = measureGuides(a, b);
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 1;
+    for (const g of [guides.h, guides.v]) {
+      ctx.beginPath();
+      ctx.moveTo(g.a.x, g.a.y);
+      ctx.lineTo(g.b.x, g.b.y);
+      ctx.stroke();
+      if (g.arrow) this.arrowHead(ctx, g.a, g.b);
+    }
+
+    /* 卡片：官方 TextRenderer（padding 8 / inflate 5 / 圆角 4 / 透明度 0.9） */
+    const family = '-apple-system, "Segoe UI", "Microsoft YaHei", sans-serif';
+    ctx.font = MEASURE_FONT + 'px ' + family;
+    let maxW = 0;
+    for (const ln of info.lines) maxW = Math.max(maxW, ctx.measureText(ln).width);
+    const box = measureLabelBox(maxW, info.lines.length);
+    const anchor = measureLabelAnchor(a, b, box.h, ch.plot.t, ch.plot.b);
+    // 卡片不能横向出绘图区（官方靠裁剪，这里夹一下更稳）
+    const halfW = Math.min(box.w / 2, ch.plot.w / 2);
+    const cx = Math.min(Math.max(anchor.x, ch.plot.l + halfW), ch.plot.r - halfW);
+    const bx = Math.round(cx - box.w / 2);
+    const by = Math.round(anchor.y - box.h / 2);
+
+    ctx.globalAlpha = MEASURE_LABEL_ALPHA;
+    ctx.fillStyle = pal.label;
+    this.pathRoundRect(ctx, bx, by, box.w, box.h, MEASURE_RADIUS);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const textTop = by + MEASURE_INFLATE_Y + MEASURE_BOX_PAD;
+    const lineH = MEASURE_FONT + MEASURE_LINE_GAP;
+    info.lines.forEach((ln, i) => {
+      ctx.fillText(ln, bx + box.w / 2, textTop + MEASURE_FONT / 2 + i * lineH);
+    });
+    ctx.restore();
+  }
+
+  /**
+   * 轴上的起止标签（官方的 start/end price & time axis views）：蓝底白字。
+   * 由 KChart 的 onAxisDraw 钩子在坐标轴画完之后调用 —— 在 onDraw 里画会被轴色块盖掉。
+   */
+  renderAxisLabels(ctx: CanvasRenderingContext2D): void {
+    if (this.hidden) return;
+    const ax = this.axisBox();
+    if (!ax) return;
+    const ch = this.host;
+    const dec = this.priceDecimals();
+    ctx.save();
+    ctx.font = '12px -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif';
+    ctx.textBaseline = 'middle';
+    for (const d of this.drawings) {
+      if (!d.visible || d.type !== 'measure') continue;
+      const p = this.pixelPts(d);
+      if (p.length < 2) continue;
+      const info = measureInfo(ch, d.pts, dec);
+      const spanDays = info.seconds != null ? Math.abs(info.seconds) / 86400 : 30;
+
+      // 价格轴：起点价 / 终点价
+      for (const [pt, price] of [[p[0], d.pts[0].price], [p[1], d.pts[1].price]] as [PxPt, number][]) {
+        const y = Math.round(Math.min(Math.max(pt.y, ch.plot.t + 9), ch.plot.b - 9));
+        const label = price.toFixed(dec);
+        ctx.fillStyle = MEASURE_UP.label;
+        ctx.fillRect(ax.priceL + 2, y - MEASURE_AXIS_LABEL_H / 2, ax.priceW - 4, MEASURE_AXIS_LABEL_H);
+        ctx.fillStyle = '#ffffff';
+        ctx.textAlign = 'left';
+        ctx.fillText(label, ax.priceL + 8, y);
+      }
+
+      // 时间轴：起点 / 终点时刻
+      if (info.fromIndex != null && info.toIndex != null) {
+        for (const idx of [info.fromIndex, info.toIndex]) {
+          const bar = ch.bars[idx];
+          if (!bar) continue;
+          const label = fmtCrossTime(bar.time, spanDays);
+          const bw = Math.round(ctx.measureText(label).width) + 14;
+          const x = Math.min(Math.max(this.timeToX(bar.time), ax.left + bw / 2), ax.right - bw / 2);
+          ctx.fillStyle = MEASURE_UP.label;
+          ctx.fillRect(Math.round(x - bw / 2), Math.round(ax.timeY - MEASURE_AXIS_LABEL_H / 2), bw, MEASURE_AXIS_LABEL_H);
+          ctx.fillStyle = '#ffffff';
+          ctx.textAlign = 'center';
+          ctx.fillText(label, Math.round(x), ax.timeY);
+        }
+      }
+    }
+    ctx.restore();
   }
 
   /** 1 点文本类标注的卡片矩形（相对锚点的偏移 + 尺寸），渲染与命中共用 */
@@ -3622,6 +4020,42 @@ export function drawSelfTest(): DrawTestResult {
       Llk.setAllLocked(true) === 0 && (() => { Llk.undo(); return Llk.drawings.every((d) => !d.locked); })());
     t('全锁后撤销已回滚，再调 setAllLocked(false) 是空操作（返回 0）',
       Llk.setAllLocked(false) === 0 && Llk.drawings.every((d) => !d.locked));
+
+    // --- 测量：对齐 charting_library 的 MeasurePaneView ---
+    const Lm = new DrawLayer(host);
+    const dm = Lm.add('measure', [
+      { time: host.bars[10].time, price: 100 },
+      { time: host.bars[36].time, price: 99.74 },
+    ]);
+    const mi = measureInfo(host, dm.pts, 2);
+    t('测量：跌 → 红（ripe-red-400），涨 → 蓝（tv-blue-500），不是涨绿跌红',
+      !mi.up && MEASURE_DOWN.label === '#f7525f' && MEASURE_UP.label === '#2962ff' &&
+      measureInfo(host, [{ time: host.bars[10].time, price: 100 }, { time: host.bars[36].time, price: 101 }], 2).up);
+    t('测量：26 根K线 / 26 天 / 含两端 27 根成交量 2.7K',
+      mi.bars === 26 && mi.seconds === 26 * 86400 && mi.volume === 27 * 100 &&
+      mi.lines[1] === '26根K线, 26天' && mi.lines[2] === '成交量 2.7K');
+    t('测量：卡片首行 = 价差(百分比) 跳动数（官方 −0.26 (−0.26%) −26）',
+      mi.lines[0] === '−0.26 (−0.26%) −26');
+    const mg = measureGuides({ x: 0, y: 0 }, { x: 60, y: 60 });
+    const mg2 = measureGuides({ x: 0, y: 0 }, { x: 49, y: 49 });
+    const mg3 = measureGuides({ x: 0, y: 0 }, { x: 60, y: 40 });
+    t('测量：中线取两端中点、跨度 ≥ 50px 才出箭头（49 不画 / 只够一边也只画那一边）',
+      mg.h.a.y === 30 && mg.v.a.x === 30 && mg.h.arrow && mg.v.arrow &&
+      !mg2.h.arrow && !mg2.v.arrow && mg3.h.arrow && !mg3.v.arrow);
+    const mbox = measureLabelBox(120, 3);
+    const mAbove = measureLabelAnchor({ x: 0, y: 200 }, { x: 100, y: 100 }, mbox.h, 0, 400);
+    const mBelow = measureLabelAnchor({ x: 0, y: 100 }, { x: 100, y: 200 }, mbox.h, 0, 400);
+    t('测量：卡片三行 70 高；贴在终点外侧（上/下各 45px）',
+      mbox.h === 70 && mAbove.y === 100 - 45 && mBelow.y === 200 + 45);
+
+    const Lmd = new DrawLayer(host);
+    Lmd.setTool('measure');
+    Lmd.onDown(300, 100);
+    Lmd.onMove(420, 220);
+    Lmd.onUp();
+    t('测量：按住拖一下就量完（官方手势），松手即成型并回到光标',
+      Lmd.drawings.length === 1 && Lmd.drawings[0].type === 'measure' &&
+      Lmd.pendingCount() === 0 && Lmd.tool === 'cursor');
   }
 
   log('绘图层自检：' + pass + ' PASS / ' + fail + ' FAIL');

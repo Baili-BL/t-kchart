@@ -92,6 +92,8 @@ export function ChartGridView(): JSX.Element {
             if (layer.active()) barLayer = layer;
             if (barLayer === layer) propsBar.sync();
           },
+          // 轴上的测量起止标签：在坐标轴画完之后补一层（在 onDraw 里画会被轴色块盖掉）
+          onAxisDraw: (ctx: CanvasRenderingContext2D) => layer.renderAxisLabels(ctx),
         });
         layer.setTool(drawBus.tool);
         layer.setMagnet(drawBus.magnet);

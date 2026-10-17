@@ -53,12 +53,12 @@ Pine 编辑器、权益曲线、统计组件目前**没有对应的 UI 入口**�
 ```
 npm run typecheck                          0 错误（strict）
 npm test (vitest)                          引擎 615 PASS（绘图 39 + Pine 74 + Pine 撮合 69 + 权益 26 + 统计 34 + 回放 27 + 布局目录 346）
-                                           共 582 个 vitest 用例（含 Agent / 工作区 / 数据 / 回放 / 布局 / 指标库 15 / 图表样式 8 / 商品代码 10 / 颜色选择器 5 / paneLayout 10 / 绘图工具扩充 330（含 emoji 选中框 8）+ 绘图属性工具条 22 + 长按信息卡 9 + 侧栏接线 26 + emoji 数据对齐 17，其中 1 条是与参考库逐字节同步）
+                                           共 590 个 vitest 用例（含 Agent / 工作区 / 数据 / 回放 / 布局 / 指标库 15 / 图表样式 8 / 商品代码 10 / 颜色选择器 5 / paneLayout 10 / 绘图工具扩充 338（含 emoji 选中框 8 + 测量对齐 8）+ 绘图属性工具条 22 + 长按信息卡 9 + 侧栏接线 26 + emoji 数据对齐 17，其中 1 条是与参考库逐字节同步）
 浏览器侧（dev 控制台 __app.runBrowserSelfTests()）
                                            图表 76（改造前 48，新增 setRange 回归 1 条 + 图表样式 8 条 + revealSpan 4 条 + 回放 15 条）+ 网格 20（含 55 种布局抽样的像素位置、时间联动）
-                                           + 权益 39（含 2.4 持仓色带像素断言 2 条）+ 统计 50 + 指标 31（含 2.6 窗格拖拽 / 最大化 / 折叠 / 坐标轴 12 条）+ 样式 52 + 绘图 119（2.8 起纳入；含光标组、线组、斐波那契/江恩组 13 种、音叉族 5 种、图表形态/艾略特波浪/循环组 14 种、预测/成交量/测量组 12 种、笔刷/箭头/形状组 16 种、文本标注组 7 种、emoji 标注（含选中框四角手柄与拖角改字号）、浮动属性工具条（setStyle/setLocked/repeatDraw/clone/selectionToolbarAnchor）与 setAllLocked 全锁断言）
+                                           + 权益 39（含 2.4 持仓色带像素断言 2 条）+ 统计 50 + 指标 31（含 2.6 窗格拖拽 / 最大化 / 折叠 / 坐标轴 12 条）+ 样式 52 + 绘图 125（2.8 起纳入；含光标组、线组、斐波那契/江恩组 13 种、音叉族 5 种、图表形态/艾略特波浪/循环组 14 种、预测/成交量/测量组 12 种（测量含官方配色 / 中线箭头 / 三行卡片 / 轴标签 6 条）、笔刷/箭头/形状组 16 种、文本标注组 7 种、emoji 标注（含选中框四角手柄与拖角改字号）、浮动属性工具条（setStyle/setLocked/repeatDraw/clone/selectionToolbarAnchor）与 setAllLocked 全锁断言）
 E2E（puppeteer 驱动 headless Chrome，未入库）  布局 13 + 指标 36 + 样式 38 + 商品代码搜索 28 PASS / 0 FAIL（早先的整页 E2E 79 条已随脚本被覆盖，未重跑）
-                                           近期功能 E2E：自选 15 + 告警 23 + 设置 20 + 交易 25 + 交易复刻 13 + 颜色选择器 13 + 副图窗格 8 + 右栏布局 13 + 绘图子菜单 23/26/26 + emoji 面板 14 + emoji 数据对齐 41 + emoji 选中框 20 + 绘图属性工具条 30 + 长按信息卡 6 + 对齐 charting_library 143 + 侧栏动作 17 PASS / 0 FAIL
+                                           近期功能 E2E：自选 15 + 告警 23 + 设置 20 + 交易 25 + 交易复刻 13 + 颜色选择器 13 + 副图窗格 8 + 右栏布局 13 + 绘图子菜单 23/26/26 + emoji 面板 14 + emoji 数据对齐 41 + emoji 选中框 20 + 测量对齐 13 + 绘图属性工具条 30 + 长按信息卡 6 + 对齐 charting_library 143 + 侧栏动作 17 PASS / 0 FAIL
 ```
 
 **任何改动之后这套数字必须只增不减。** 加功能要加断言，改逻辑不能让已有断言变红。
@@ -445,6 +445,52 @@ E2E（puppeteer 驱动 headless Chrome，未入库）  布局 13 + 指标 36 + �
 > `textContent ===` 精确匹配。② 自检闸门在 DPR=2 下会报 chart 1 + styles 1 失败 ——
 > 用干净 HEAD 复跑同样 1+1，是既有的像素判据对 DPR 敏感，与本轮无关；所以闸门固定在 DPR=1
 > 的独立页面跑，截图页面才用 DPR=2。
+
+
+### 2.8.10 「测量」对齐 charting_library（MeasurePaneView）✅
+
+> **官方依据**（本机 `charting_library/bundles/library.*.js`，模块 44381 那一带的 `fi` 类，
+> 也就是十字光标的 measure pane view）：
+>
+> ```js
+> const _i = color-tv-blue-500 (#2962FF), mi = color-ripe-red-400 (#F7525F)
+> gi = { bgColorPositive: generateColor(_i, 80), bgColorNegative: generateColor(mi, 80),
+>        colorPositive: color-tv-blue-600 (#1E53E5), colorNegative: mi,
+>        labelBgColorPositive: _i, labelBgColorNegative: mi }
+> ```
+>
+> 所以官方测量**不是涨绿跌红**，而是**涨蓝跌红**：矩形 20% 透明度、中线与箭头走同色系实色、
+> 卡片是 90% 不透明的方向色 + 白色 12px 字；起止的时间 / 价格标签是蓝底白字
+> （`axisLineToolLabelBackgroundColorCommon`）。文案三行来自 `{count} bars`（zh `zh.8113` 模块 33355 →
+> `{count}根K线`）、`TimeSpanFormatter`（天/时/分/秒逐单位拼）、`VolumeFormatter`（K/M/B/T）。
+>
+> **跟着改的**（`src/engine/draw.ts`）：
+> - 画法整个换掉：**虚线灰框 + 一行灰字** → **20% 透明底色 + 过中点的水平/垂直中线（终点侧 45° 箭头，
+>   跨度 ≥ 50px 才画）+ 三行圆角卡片（价差(百分比) 跳动数 / {n}根K线, 时间跨度 / 成交量）**；
+> - 卡片尺寸照官方 TextRenderer 的公式：`h = 行数×12 + (行数−1)×8 + 2×5 + 2×4 = 70`，
+>   `w = 文字宽 + 18`，圆角 4，底色 alpha 0.9；位置用官方的 `calculateLabelPosition`（贴终点外侧 + 夹边）；
+> - 新增 **`onAxisDraw` 钩子**（`ChartHooks` + `KChart.axisBox()/priceDecimals()`）：轴标签必须画在
+>   坐标轴**之后**，在 `onDraw` 里画会被轴色块盖掉 —— 这是这轮唯一一处引擎接口改动；
+> - 交互补上官方的「按住拖一下就量完」：松手时终点已拉开 ≥ 4px 即成型，静止点击仍按老规矩等第二个点；
+> - 文案口径按官方格式化器复刻：价差/百分比用 **Unicode 减号 `−`**、去尾零；跨度 `5天 19小时 30分钟`；
+>   成交量 `3.63M`；「跳动数」= 价差 ÷ 最小变动（`dec=2` 时 −0.26 → `−26`）。
+>
+> **几何同源**：`measureInfo` / `measureLabelBox` / `measureLabelAnchor` / `measureGuides` 四个纯函数
+> 被**渲染、轴标签、单测、自检**共用 —— 卡片画在哪、单测算在哪，只有一份口径。
+>
+> **诚实边界**：
+> ① 价格小数位为 0 的品种（如截图里的 362/375）**不拼「跳动数」**——官方 PipFormatter 此时会输出与价差
+> 完全相同的数字（`−8 (−2.24%) −8`），是重复信息；这是唯一一处**故意不照抄**。
+> ② 官方卡片的锚点公式是「贴终点外侧」，所以下跌（终点在下）时卡片在框**下面**；你给的参考图里卡片在框上面，
+> 对应的是「终点在上」的走势 —— 公式本身按参考库实现，没有按截图反推。
+> ③ 官方测量是临时十字光标测量（下一次点击就消失），我们仍是可选中 / 可拖动 / 可撤销的**持久图形**，
+> 这是产品口径差异，不改。
+>
+> **断言**：`tests/drawTools.test.ts` 351 → **359**（格式化器 4 类 / measureInfo 三行与区间成交量含两端 /
+> 卡片尺寸与锚点夹取 / 中线与箭头门槛 49 vs 50 / 底色与白字与"没有虚线" / 轴标签 2+2 /
+> 拖拽手势 vs 两次点击）；浏览器自检 draw 119 → **125**；真鼠标 E2E「测量对齐」**13 PASS / 0 FAIL**
+> （拖动预览有卡片 → 内部红底 → 两条中线是实色 → 卡片 90% 红 + 白字 → 时间/价格各 2 个蓝标签 →
+> 涨的那次是蓝不是绿）；截图 `docs/shot-measure-align.png`（跌）/ `docs/shot-measure-up.png`（涨）。
 
 
 | 2.9 | 布局存档（localStorage / 服务端） | ⬜ | 小 | 存/读往返一致，含视口、通道开关、绘图、联动开关 |

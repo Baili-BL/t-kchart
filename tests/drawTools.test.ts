@@ -13,7 +13,10 @@ import {
   cubicBezierPts, pitchforkRays, arrowSideGlyphPts,
   emojiBox, emojiCornerPts, emojiSizeFromCorner, EMOJI_CORNERS,
   EMOJI_MIN, EMOJI_MAX, EMOJI_KNOB_R,
+  fmtMeasurePrice, fmtMeasurePercent, fmtMeasureSpan, fmtMeasureVolume,
+  measureInfo, measureLabelBox, measureLabelAnchor, measureGuides,
 } from '../src/engine/draw';
+import { fmtCrossTime } from '../src/engine/chart';
 import type { DrawHost, Drawing } from '../src/engine/draw';
 
 const CLOSES: number[] = [];
@@ -2057,5 +2060,199 @@ describe('对齐 charting_library：17 种新工具 × 四判据（数据驱动�
     expect(r[0].x).toBeCloseTo(20, 9);  // 向右：头顶点在右侧
     expect(l[0].x).toBeCloseTo(0, 9);   // 向左
     expect(r[0].y).toBeCloseTo(10, 9);
+  });
+});
+
+/* ===========================================================================
+ * 「测量」对齐 charting_library（MeasurePaneView）
+ *
+ * 官方口径（见 src/engine/draw.ts §2.5 的注释）：
+ *   · 涨蓝跌红：fill = generateColor(#2962FF/#F7525F, 80) → alpha 0.2
+ *   · 中线过矩形中点，终点侧画箭头（跨度 ≥ 50px）
+ *   · 卡片三行：价差(百分比) 跳动数 / {n}根K线, 时间跨度 / 成交量，底色 90%
+ *   · 轴上的起止标签是蓝底白字
+ * ========================================================================= */
+
+function makeSpyCtx() {
+  const rec = {
+    fillRect: [] as number[][],
+    texts: [] as { text: string; color: string; align: string }[],
+    dashes: [] as number[][],
+    alphaAtFill: [] as number[],
+    stroke: 0,
+    fill: 0,
+  };
+  const ctx: any = {
+    save() { /* no-op */ },
+    restore() { /* no-op */ },
+    beginPath() { /* no-op */ },
+    moveTo() { /* no-op */ },
+    lineTo() { /* no-op */ },
+    closePath() { /* no-op */ },
+    arcTo() { /* no-op */ },
+    arc() { /* no-op */ },
+    rect() { /* no-op */ },
+    strokeRect() { /* no-op */ },
+    ellipse() { /* no-op */ },
+    quadraticCurveTo() { /* no-op */ },
+    setLineDash(d: number[]) { rec.dashes.push(d ? [...d] : []); },
+    stroke() { rec.stroke++; },
+    fill() { rec.fill++; rec.alphaAtFill.push(ctx.globalAlpha); },
+    fillRect(x: number, y: number, w: number, h: number) { rec.fillRect.push([x, y, w, h]); },
+    fillText(text: string, _x: number, _y: number) {
+      rec.texts.push({ text: String(text), color: String(ctx.fillStyle), align: String(ctx.textAlign) });
+    },
+    measureText: (s: string) => ({ width: String(s).length * 7 }),
+    globalAlpha: 1,
+    fillStyle: '#000',
+    strokeStyle: '#000',
+    lineWidth: 1,
+    font: '12px sans-serif',
+    textAlign: 'left',
+    textBaseline: 'alphabetic',
+    lineCap: 'butt',
+    lineJoin: 'miter',
+  };
+  return { ctx, rec };
+}
+
+describe('测量对齐 charting_library：配色 / 文案 / 几何 / 轴标签', () => {
+  const t0 = HOST.bars[10].time;
+  const t1 = HOST.bars[36].time;
+  const downPts = [{ time: t0, price: 100 }, { time: t1, price: 99.74 }];
+  const upPts = [{ time: t0, price: 100 }, { time: t1, price: 100.26 }];
+
+  it('格式化器：价差带 Unicode 减号并去尾零；百分比两位；跨度按天/时/分/秒拼；成交量 K/M/B/T', () => {
+    expect(fmtMeasurePrice(-0.26, 2)).toBe('−0.26');
+    expect(fmtMeasurePrice(1.2, 2)).toBe('+1.2');     // 尾零去掉（官方 _removeEndingZeros）
+    expect(fmtMeasurePrice(0, 2)).toBe('0');          // 0 不带符号
+    expect(fmtMeasurePercent(-0.3123)).toBe('−0.31%');
+    expect(fmtMeasurePercent(2.5)).toBe('+2.5%');
+
+    expect(fmtMeasureSpan(5 * 86400 + 19 * 3600 + 30 * 60)).toBe('5天 19小时 30分钟');
+    expect(fmtMeasureSpan(26 * 86400)).toBe('26天');
+    expect(fmtMeasureSpan(90)).toBe('1分钟 30秒');
+    expect(fmtMeasureSpan(0)).toBe('');
+
+    expect(fmtMeasureVolume(3_630_000)).toBe('3.63M');
+    expect(fmtMeasureVolume(68_400)).toBe('68.4K');
+    expect(fmtMeasureVolume(120)).toBe('120');
+    expect(fmtMeasureVolume(1_235_000_000)).toBe('1.235B');
+  });
+
+  it('measureInfo：方向 / 根数 / 跨度 / 区间成交量（含两端）/ 三行文案', () => {
+    const i = measureInfo(HOST, downPts, 2);
+    expect(i.up).toBe(false);
+    expect(i.delta).toBeCloseTo(-0.26, 9);
+    expect(i.bars).toBe(26);                 // 36 − 10
+    expect(i.seconds).toBe(26 * 86400);
+    expect(i.volume).toBe(27 * 100);         // 含两端 = 27 根
+    expect(i.lines).toEqual([
+      '−0.26 (−0.26%) −26',                  // 价差(百分比) 跳动数（dec=2 → 26 个 tick）
+      '26根K线, 26天',
+      '成交量 2.7K',
+    ]);
+    expect(measureInfo(HOST, upPts, 2).up).toBe(true);
+    expect(measureInfo(HOST, upPts, 2).lines[0]).toBe('+0.26 (+0.26%) +26');
+    // 起点价 0 时不算百分比（官方 Math.abs(r) > 1e-8 才拼百分比）
+    const zero = measureInfo(HOST, [{ time: t0, price: 0 }, { time: t1, price: 1 }], 2);
+    expect(zero.percent).toBe(0);
+  });
+
+  it('卡片尺寸：三行 70 高，横向 = 文字宽 + 18（官方 inflate 5 + boxPadding 4）', () => {
+    expect(measureLabelBox(100, 3)).toEqual({ w: 118, h: 70 });
+    expect(measureLabelBox(100, 1).h).toBe(12 + 2 * 5 + 2 * 4);
+  });
+
+  it('卡片锚点：起点在上 → 卡片在终点下方；起点在下 → 在上方；两端都夹在绘图区内', () => {
+    const below = measureLabelAnchor({ x: 100, y: 50 }, { x: 200, y: 150 }, 70, 0, 400);
+    expect(below.x).toBe(150);
+    expect(below.y).toBe(150 + 35 + 10);
+    const above = measureLabelAnchor({ x: 100, y: 150 }, { x: 200, y: 120 }, 70, 0, 400);
+    expect(above.y).toBe(120 - 35 - 10);
+    // 贴边时夹住（官方 calculateLabelPosition 的 Math.max(h/2) / Math.min(paneH - h/2)）
+    expect(measureLabelAnchor({ x: 100, y: 150 }, { x: 200, y: 5 }, 70, 0, 400).y).toBe(35);
+    expect(measureLabelAnchor({ x: 100, y: 5 }, { x: 200, y: 390 }, 70, 0, 400).y).toBe(400 - 35);
+  });
+
+  it('中线与箭头：midX / midY 取整；跨度 49 不画箭头、50 画箭头', () => {
+    const g = measureGuides({ x: 0, y: 0 }, { x: 49, y: 49 });
+    expect(g.h.a).toEqual({ x: 0, y: 25 });      // round(24.5) = 25
+    expect(g.v.a).toEqual({ x: 25, y: 0 });
+    expect(g.h.arrow).toBe(false);
+    expect(g.v.arrow).toBe(false);
+    const g2 = measureGuides({ x: 0, y: 0 }, { x: 50, y: 50 });
+    expect(g2.h.arrow).toBe(true);
+    expect(g2.v.arrow).toBe(true);
+  });
+
+  it('渲染：底色 20% 蓝/红、卡片文字纯白、没有虚线边框、卡片三行', () => {
+    const { L, d } = draw('measure', downPts);
+    const { ctx, rec } = makeSpyCtx();
+    L.render(ctx);
+    // 矩形是 fillRect（不是虚线描边）—— 官方 linewidth 0
+    const bg = rec.fillRect[0];
+    expect(bg).toEqual([L.pixelPts(d)[0].x, L.pixelPts(d)[0].y, Math.abs(L.pixelPts(d)[1].x - L.pixelPts(d)[0].x), Math.abs(L.pixelPts(d)[1].y - L.pixelPts(d)[0].y)]);
+    expect(rec.fillRect.length).toBe(1);        // 未选中时只有一个底色块
+    expect(rec.dashes.every((x) => x.length === 0)).toBe(true);
+    const white = rec.texts.filter((x) => x.color === '#ffffff');
+    expect(white.map((x) => x.text)).toEqual(measureInfo(HOST, d.pts, 2).lines);
+    expect(white.every((x) => x.align === 'center')).toBe(true);
+    // 卡片底色 fill 用的是 0.9 透明度（官方 backgroundTransparency 10）
+    expect(rec.alphaAtFill).toContain(0.9);
+    // 两条中线 + 两处箭头 → 至少 4 次 stroke（未选中时 accent = 官方实色）
+    expect(rec.stroke).toBeGreaterThanOrEqual(2);
+  });
+
+  it('交互：按住拖一下就量完（官方手势）；没拖动就继续等第二次点击', () => {
+    // ① 拖拽手势：down → move 60px → up 直接成型
+    const L1 = new DrawLayer(HOST);
+    L1.setTool('measure');
+    L1.onDown(100, 100);
+    L1.onMove(160, 220);
+    L1.onUp();
+    expect(L1.drawings.length).toBe(1);
+    expect(L1.drawings[0].type).toBe('measure');
+    expect(L1.tool).toBe('cursor');           // 成型后回到光标（与其它两点工具一致）
+    L1.undo();
+    expect(L1.drawings.length).toBe(0);
+
+    // ② 点击（位移 < 4px）：只落下第一个锚点，等第二次点击
+    const L2 = new DrawLayer(HOST);
+    L2.setTool('measure');
+    L2.onDown(100, 100);
+    L2.onMove(102, 102);
+    L2.onUp();
+    expect(L2.drawings.length).toBe(0);
+    expect(L2.pendingCount()).toBe(1);
+    L2.onDown(300, 300);
+    expect(L2.drawings.length).toBe(1);
+    expect(L2.pendingCount()).toBe(0);
+  });
+
+  it('轴标签：宿主给了 axisBox 才画 —— 2 个蓝色价格标签 + 2 个蓝色时间标签', () => {
+    const { L, d } = draw('measure', downPts);
+    const { ctx, rec } = makeSpyCtx();
+    // 假宿主默认没有 axisBox → 什么都不画
+    L.renderAxisLabels(ctx);
+    expect(rec.fillRect.length).toBe(0);
+    expect(rec.texts.length).toBe(0);
+
+    const withAxis = new DrawLayer(Object.assign({}, HOST, {
+      priceDecimals: () => 2,
+      axisBox: () => ({ priceL: 700, priceW: 66, timeY: 407, left: 0, right: 700, top: 0, bottom: 400 }),
+    }));
+    const d2 = withAxis.add('measure', downPts);
+    const spy2 = makeSpyCtx();
+    withAxis.renderAxisLabels(spy2.ctx);
+    expect(spy2.rec.fillRect.length).toBe(4);              // 2 价格 + 2 时间
+    expect(spy2.rec.texts.map((x) => x.text)).toEqual([
+      '100.00', '99.74',
+      fmtCrossTime(HOST.bars[10].time, 26), fmtCrossTime(HOST.bars[36].time, 26),
+    ]);
+    expect(spy2.rec.texts.every((x) => x.color === '#ffffff')).toBe(true);
+    expect(spy2.rec.texts.filter((x) => x.align === 'left').length).toBe(2);  // 价格轴
+    expect(spy2.rec.texts.filter((x) => x.align === 'center').length).toBe(2); // 时间轴
+    expect(d2.id).toBeGreaterThan(0);
   });
 });

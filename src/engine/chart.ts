@@ -248,6 +248,11 @@ export interface ChartHooks {
   onUp?(px: number, py: number, e: PointerEvent): void;
   /** 在绘图区裁剪内、十字光标之前调用 */
   onDraw?(ctx: CanvasRenderingContext2D): void;
+  /**
+   * 全部内容（含坐标轴、图例）画完之后调用 —— 给需要落在轴条带上的东西用，
+   * 例如测量工具的起止时间 / 价格标签（在 onDraw 里画会被轴色块盖掉）。
+   */
+  onAxisDraw?(ctx: CanvasRenderingContext2D): void;
 }
 
 /** 主题：只换背景/网格/文字/十字光标，不碰涨跌色（涨跌是 A 股习惯，不该跟着主题走）。 */
@@ -1635,6 +1640,29 @@ export class KChart {
     this.drawLongPressTip();
     this.drawLegend(i0, i1);
     this.drawPaneLegends(i1);
+    if (this.hooks && this.hooks.onAxisDraw) this.hooks.onAxisDraw(ctx);   // 轴上的外部标签（测量起止）
+  }
+
+  /** 价格小数位（绘图层画测量标签用） */
+  priceDecimals(): number {
+    return this.dec();
+  }
+
+  /**
+   * 轴条带几何 —— 绘图层画「测量」起止标签用。
+   * 价格轴在 plot.r 右侧、时间轴在 plot.b 下方（axisY 是它的中线）。
+   */
+  axisBox(): { priceL: number; priceW: number; timeY: number; left: number; right: number; top: number; bottom: number } {
+    const p = this.plot;
+    return {
+      priceL: p.r,
+      priceW: Math.max(0, this.W - p.r),
+      timeY: this.axisY(),
+      left: p.l,
+      right: p.r,
+      top: p.t,
+      bottom: p.b,
+    };
   }
 
   /** 主图几何（给 drawStudyOutput 用） */
