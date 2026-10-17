@@ -92,6 +92,12 @@ export interface DrawHost {
   priceDecimals?(): number;
   /** 轴条带几何；缺省不画轴标签 */
   axisBox?(): DrawAxisBox;
+  /**
+   * 工具被图层**自己**切走时的回调（画完一个图形、按 Esc 都会回到光标）。
+   * 左侧工具栏的主按钮图标要跟着拨回十字线 —— 官方的分组按钮永远显示当前工具。
+   * 只报「自动」切换；外部调 `setTool()` 换工具不用走这里。
+   */
+  onToolAutoChange?(tool: string): void;
 }
 
 export interface DrawToolDef {
@@ -1942,6 +1948,16 @@ export class DrawLayer {
     this.host.invalidate();
   }
 
+  /**
+   * 画完一个图形 / 按 Esc 之后自动回到光标。
+   * 除了改自己的 tool，还要告诉外部一声：左侧工具栏的主按钮图标得跟着拨回十字线，
+   * 否则画完一条线，侧栏还停在「箭头」上（官方是跟着变的）。
+   */
+  private backToCursor(): void {
+    this.setTool('cursor');
+    this.host.onToolAutoChange?.('cursor');
+  }
+
   setMagnet(on: boolean): void {
     this.magnet = !!on;
   }
@@ -2089,7 +2105,7 @@ export class DrawLayer {
           style = { text: this.emojiChar, fontSize: EMOJI_SIZE };
         }
         this.add(this.tool, [a, a], style);
-        if (!this.repeatDraw) this.setTool('cursor');
+        if (!this.repeatDraw) this.backToCursor();
       } else {
         this.pending = {
           id: this.nextId++,
@@ -2220,7 +2236,7 @@ export class DrawLayer {
     this.pending = null;
     this.pendingPlaced = 0;
     // 「重复绘制」开着时留在当前工具，方便连画
-    if (!this.repeatDraw) this.setTool('cursor');
+    if (!this.repeatDraw) this.backToCursor();
   }
 
   /**
@@ -2257,7 +2273,7 @@ export class DrawLayer {
     this.keyHandler = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement) && (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-      if (e.key === 'Escape') { this.pending = null; this.pendingPlaced = 0; this.setTool('cursor'); this.select(null); return; }
+      if (e.key === 'Escape') { this.pending = null; this.pendingPlaced = 0; this.backToCursor(); this.select(null); return; }
       if (e.key === 'Delete' || e.key === 'Backspace') {
         if (this.removeActive()) e.preventDefault();
         return;

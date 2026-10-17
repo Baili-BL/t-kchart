@@ -253,6 +253,11 @@ export interface ChartHooks {
   cursorFor?(px: number, py: number): string;
   /** 指针离开画布（清掉外部图层的悬停高亮） */
   onLeave?(): void;
+  /**
+   * 绘图层自己把工具切走了（画完一个图形 / 按 Esc 回到光标）。
+   * 左侧工具栏的主按钮图标要跟着拨回去 —— 官方的分组按钮显示的就是当前工具。
+   */
+  onToolChange?(tool: string): void;
   /** 在绘图区裁剪内、十字光标之前调用 */
   onDraw?(ctx: CanvasRenderingContext2D): void;
   /**
@@ -687,6 +692,11 @@ export class KChart {
   /** 挂载外部图层。传 null 卸载。 */
   setHooks(h: ChartHooks | null): void {
     this.hooks = h;
+  }
+
+  /** DrawHost 的实现：绘图层画完 / Esc 自动回光标时，转告外部钩子 */
+  onToolAutoChange(tool: string): void {
+    this.hooks?.onToolChange?.(tool);
   }
 
   constructor(target: HTMLCanvasElement | string, bars: Bar[], options: ChartOptions = {}) {

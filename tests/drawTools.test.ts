@@ -2596,3 +2596,61 @@ describe('笔刷/荧光笔对齐 charting_library：默认值 / 平滑 / 线宽 
     expect(L.drawings[0].type).toBe('brush');
   });
 });
+
+describe('画完自动回光标：要通知外部（左栏主按钮的图标得跟着拨回十字线）', () => {
+  /** 临时在共享假宿主上挂一个探针，跑完恢复 */
+  const withProbe = (fn: (L: DrawLayer, calls: string[]) => void): void => {
+    const calls: string[] = [];
+    const prev = HOST.onToolAutoChange;
+    HOST.onToolAutoChange = (t: string) => calls.push(t);
+    try {
+      fn(new DrawLayer(HOST), calls);
+    } finally {
+      HOST.onToolAutoChange = prev;
+    }
+  };
+
+  it('两点工具成型 → 通知一次 cursor，tool 也回到 cursor', () => {
+    withProbe((L, calls) => {
+      L.setTool('trend');
+      L.onDown(HOST.xCenter(10), HOST.yOf(105));
+      L.onDown(HOST.xCenter(20), HOST.yOf(108));
+      expect(L.drawings.length).toBe(1);
+      expect(L.tool).toBe('cursor');
+      expect(calls).toEqual(['cursor']);
+    });
+  });
+
+  it('「继续绘图」开着时留在当前工具，不通知（侧栏图标也不该动）', () => {
+    withProbe((L, calls) => {
+      L.setTool('trend');
+      L.setRepeat(true);
+      L.onDown(HOST.xCenter(10), HOST.yOf(105));
+      L.onDown(HOST.xCenter(20), HOST.yOf(108));
+      expect(L.drawings.length).toBe(1);
+      expect(L.tool).toBe('trend');
+      expect(calls).toEqual([]);
+    });
+  });
+
+  it('Esc 回到光标也通知', () => {
+    withProbe((L, calls) => {
+      L.setTool('arrow');
+      // keyHandler 要 attachKeys 之后才有；这里给一个空的 EventTarget 只为拿到处理器
+      L.attachKeys({ addEventListener() { /* no-op */ }, removeEventListener() { /* no-op */ } } as unknown as EventTarget);
+      (L as unknown as { keyHandler: (e: unknown) => void }).keyHandler({
+        key: 'Escape', target: { tagName: 'DIV' }, preventDefault() { /* no-op */ },
+      });
+      expect(L.tool).toBe('cursor');
+      expect(calls).toEqual(['cursor']);
+    });
+  });
+
+  it('外部自己 setTool 换工具不触发（避免和侧栏同步来回打转）', () => {
+    withProbe((L, calls) => {
+      L.setTool('eraser');
+      L.setTool('cursor');
+      expect(calls).toEqual([]);
+    });
+  });
+});

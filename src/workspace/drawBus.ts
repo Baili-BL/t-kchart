@@ -37,6 +37,8 @@ class DrawBus {
   }
 
   setTool(tool: string): void {
+    // 同值不广播：图层画完自动回光标时会回调这里，不短路就和「同步侧栏」来回打转
+    if (this.tool === tool) return;
     this.tool = tool;
     this.emit({ type: 'tool', tool });
   }

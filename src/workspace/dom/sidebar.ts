@@ -33,6 +33,7 @@ import {
 } from './emoji-data';
 import { EMOJI_PANEL } from './emoji-panel-metrics';
 import { emojiPngUrl } from '../../engine/emojiAssets';
+import { toolKeyForLabel } from '../drawBus';
 
 /* ------------------------------------------------------------------ 工具 */
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -107,7 +108,10 @@ export const SIDEBAR_CSS = `
   border: 0; background: transparent; padding: 0; cursor: pointer;
   transition: background-color .06s ease, opacity .06s ease, color .06s ease;
 }
-.kc-sb-btn > svg { position: absolute; left: 12px; top: 5px; }
+/* 图标在 34×34 的 pill 里居中。用 50% + translate 而不是写死 left/top：
+   28×28 的图标落点与原来 left:12/top:5 完全一致，而橡皮擦是 29×31（官方尺寸），
+   写死会向右下偏 1px，居中就不会。主按钮图标会随组内选中的工具换（见 mainButtonView）。 */
+.kc-sb-btn > svg { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
 .kc-sb-btn .pill {
   position: absolute; z-index: -1; left: 9px; right: 9px; top: 2px; bottom: 2px;
   width: 34px; height: 34px; border-radius: 6px; background: transparent;
@@ -274,6 +278,55 @@ export const LONGPRESS_TIP_LABEL = '长按时显示数值工具提示';
  *  不是一行可点的行 —— buildToolMenu 见到它就换成 .kc-menu-div，
  *  tests/sidebarWiring 收叶子行时也会跳过它。 */
 export const MENU_SEP = '—';
+
+/** 在这个工具定义里找某个子项的图标（items 或 groups 里都找）。找不到返回 null。 */
+export function itemIcon(t: ToolDef, label: string): string | null {
+  if (label === MENU_SEP || !label) return null;
+  const all: MenuItem[] = [...(t.items ?? []), ...(t.groups ?? []).flatMap(g => g.items)];
+  const hit = all.find(it => it[0] === label);
+  // 分隔线占位的 icon 是空串，别把它当成一个可用的图标
+  return hit && hit[1] ? hit[1] : null;
+}
+
+/**
+ * 主按钮此刻该显示什么、点下去该派发谁。
+ *
+ * 官方的分组按钮不是「永远是组名那个图标」：在「光标」下拉里选了箭头，
+ * 左边那颗按钮就变成鼠标指针，再点它画的是箭头（不是十字线）。
+ * 所以组内要记住「当前工具」，主按钮的图标与点击派发的 label 都跟着它走。
+ *
+ * 没在组里找到（纯动作按钮、或第一次还没选过）就退回组名 + 组图标。
+ */
+export function mainButtonView(
+  t: ToolDef,
+  activeLabel?: string,
+): { label: string; icon: string; switched: boolean } {
+  const icon = activeLabel ? itemIcon(t, activeLabel) : null;
+  if (icon && activeLabel !== undefined) {
+    return { label: activeLabel, icon, switched: activeLabel !== t.label };
+  }
+  return { label: t.label, icon: t.icon, switched: false };
+}
+
+/**
+ * 工具 key → 侧栏里那一行的中文名（反查 SECTIONS）。
+ * 画完一个图形 / 按 Esc 会回到光标，左栏主按钮要跟着变回十字线 —— 从 key 找回 label 才能同步。
+ * 认不出（emoji 之类）返回 null，调用方就不动侧栏。
+ */
+export function sidebarLabelForTool(key: string): string | null {
+  for (const sec of SECTIONS) {
+    for (const t of sec.tools) {
+      const labels = [
+        t.label,
+        ...(t.items ?? []).map(i => i[0]),
+        ...(t.groups ?? []).flatMap(g => g.items.map(i => i[0])),
+      ];
+      const hit = labels.find(l => l !== MENU_SEP && toolKeyForLabel(l) === key);
+      if (hit) return hit;
+    }
+  }
+  return null;
+}
 
 export const SECTIONS: Section[] = [
   { tools: [
@@ -460,7 +513,7 @@ function saveFavs(s: Set<string>): void {
  * 工具子菜单：分组（灰色小标题）+ 行（图标 标签 [徽标] [快捷键] [收藏星]）+ 末尾开关行。
  * pick 在用户点某一行时回调。
  */
-function buildToolMenu(t: ToolDef, pick: (label: string) => void): HTMLUListElement {
+function buildToolMenu(t: ToolDef, pick: (label: string, icon: string) => void): HTMLUListElement {
   const menu = el('ul', 'kc-sb-menu');
   const favs = loadFavs();
   const groups = t.groups ?? [{ items: t.items ?? [] }];
@@ -474,6 +527,7 @@ function buildToolMenu(t: ToolDef, pick: (label: string) => void): HTMLUListElem
       const [label, icon, hint, badge] = item;
       if (label === MENU_SEP) { menu.appendChild(el('li', 'kc-menu-div')); continue; }
       const li = el('li');
+      li.dataset.label = label;
       li.innerHTML = icon + `<span>${label}</span>`
         + (badge === 'info' ? `<span class="kc-info-badge">${INFO_BADGE}</span>` : '')
         + '<span class="kc-li-spacer"></span>'
@@ -491,7 +545,7 @@ function buildToolMenu(t: ToolDef, pick: (label: string) => void): HTMLUListElem
         e.stopPropagation();
         menu.querySelectorAll('li').forEach(x => x.classList.remove('sel'));
         li.classList.add('sel');
-        pick(label);
+        pick(label, icon);
       });
       menu.appendChild(li);
     }
@@ -621,6 +675,18 @@ function buildEmojiPanel(onEmoji: (char: string) => void): HTMLDivElement {
   return panel;
 }
 
+/**
+ * 侧栏实例 → 「把主按钮拨到某个工具」的入口。
+ * 画完一个图形 / 按 Esc 会自动回到光标，左侧那颗按钮的图标得跟着拨回十字线
+ * （官方就是这样），所以 DrawToolbar 拿 drawBus 的工具名来这里同步。
+ */
+const syncers = new WeakMap<HTMLElement, (label: string) => void>();
+
+/** 外部同步：把 root 这个侧栏的主按钮切到 `label` 那一行（不在任何组里就忽略）。 */
+export function setSidebarActive(root: HTMLElement, label: string): void {
+  syncers.get(root)?.(label);
+}
+
 // 开关行的回调由 createSidebar 注入（buildToolMenu 在模块层定义，避免每层传参）
 let cb_onToggle: (label: string, on: boolean) => void = () => { /* 由 createSidebar 赋值 */ };
 
@@ -635,6 +701,10 @@ export function createSidebar(mount: HTMLElement, cb: SidebarCallbacks = {}): HT
   root.setAttribute('aria-orientation', 'vertical');
   root.setAttribute('aria-label', '左侧绘图工具栏');
 
+  /** 每个分组按钮「组内当前工具」：主按钮的图标与点击派发都跟着它（同官方行为） */
+  const activeOf = new WeakMap<HTMLButtonElement, string>();
+  /** 分组按钮 ↔ 工具定义：外部按 label 反查该拨哪颗按钮（setSidebarActive） */
+  const groups: Array<{ btn: HTMLButtonElement; t: ToolDef }> = [];
   const menus: HTMLElement[] = [];
   const closeMenus = (except?: HTMLElement): void => {
     menus.forEach(m => { if (m !== except) m.classList.remove('open'); });
@@ -644,6 +714,13 @@ export function createSidebar(mount: HTMLElement, cb: SidebarCallbacks = {}): HT
   const openMenuAt = (menu: HTMLElement, cell: HTMLElement): void => {
     menu.classList.add('open');
     cell.classList.add('open');
+    // 菜单打开时把「组内当前工具」那一行标成选中：官方下拉里当前工具是深色块，
+    // 而菜单只构建一次，不重新同步的话重开就丢了选中态
+    const b = cell.querySelector('.kc-sb-btn') as HTMLButtonElement | null;
+    const active = b ? activeOf.get(b) : undefined;
+    menu.querySelectorAll<HTMLElement>('li[data-label]').forEach(li => {
+      li.classList.toggle('sel', li.dataset.label === active);
+    });
     const r = cell.getBoundingClientRect();
     const mw = menu.offsetWidth;
     const mh = menu.offsetHeight;
@@ -655,10 +732,18 @@ export function createSidebar(mount: HTMLElement, cb: SidebarCallbacks = {}): HT
   };
 
   let selected: HTMLButtonElement | null = null;
-  const pick = (btn: HTMLButtonElement, label: string): void => {
+  const pick = (btn: HTMLButtonElement, label: string, icon?: string): void => {
     selected?.classList.remove('kc-sel');
     btn.classList.add('kc-sel');
     selected = btn;
+    if (icon) {
+      // 主按钮换成这个工具的图标：在「光标」里选了箭头，左边那颗就变鼠标指针，
+      // 再点它画的是箭头而不是十字线（官方就是这样）
+      btn.innerHTML = `<span class="pill"></span>${icon}`;
+      btn.dataset.tool = label;
+      btn.title = label;
+      activeOf.set(btn, label);
+    }
     cb.onTool?.(label);
   };
 
@@ -679,8 +764,11 @@ export function createSidebar(mount: HTMLElement, cb: SidebarCallbacks = {}): HT
       btn.type = 'button';
       btn.tabIndex = -1;
       btn.setAttribute('aria-label', t.label);
-      btn.title = t.label;
-      btn.innerHTML = `<span class="pill"></span>${t.icon}`;
+      const init = mainButtonView(t);
+      btn.title = init.label;
+      btn.dataset.tool = init.label;
+      btn.innerHTML = `<span class="pill"></span>${init.icon}`;
+      activeOf.set(btn, init.label);
       if (t.caret) {
         const caret = el('button', 'kc-sb-caret') as HTMLButtonElement;
         // 主按钮：工具类 → 选中；开关类 → 直接切换
@@ -689,16 +777,17 @@ export function createSidebar(mount: HTMLElement, cb: SidebarCallbacks = {}): HT
             const on = btn.classList.toggle('kc-on');
             cb.onToggle?.(t.label, on);
           } else {
-            pick(btn, t.label);
+            // 派发「组内当前工具」而不是组名：选了箭头之后点主按钮应当继续画箭头
+            pick(btn, activeOf.get(btn) ?? t.label);
           }
         });
         caret.type = 'button';
         caret.tabIndex = -1;
         caret.setAttribute('aria-label', t.label + '（子菜单）');
         caret.innerHTML = t.caret;
-        const menu = buildToolMenu(t, (label) => {
+        const menu = buildToolMenu(t, (label, icon) => {
           closeMenus();
-          pick(btn, label);
+          pick(btn, label, icon);
         });
         caret.addEventListener('click', e => {
           e.stopPropagation();
@@ -721,13 +810,14 @@ export function createSidebar(mount: HTMLElement, cb: SidebarCallbacks = {}): HT
             e.stopPropagation();
             const was = emojiPanel.classList.contains('open');
             closeMenus();
-            if (!was) { pick(btn, t.label); openMenuAt(emojiPanel, cell); }
+            if (!was) { pick(btn, activeOf.get(btn) ?? t.label); openMenuAt(emojiPanel, cell); }
           } else {
-            pick(btn, t.label);
+            pick(btn, activeOf.get(btn) ?? t.label);
           }
         });
       }
       cell.appendChild(btn);
+      groups.push({ btn, t });
       sec.appendChild(cell);
     }
     root.appendChild(sec);
@@ -738,6 +828,13 @@ export function createSidebar(mount: HTMLElement, cb: SidebarCallbacks = {}): HT
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenus(); });
   // sidebar 滚动时菜单不再贴合原位，直接关掉
   root.addEventListener('scroll', () => closeMenus());
+
+  syncers.set(root, (label: string) => {
+    // 分组里的子项按图标反查；没有子菜单的单按钮（测量 / 图标）就按组名匹配
+    const g = groups.find(x => itemIcon(x.t, label) || x.t.label === label);
+    if (!g) return;
+    pick(g.btn, label, itemIcon(g.t, label) ?? undefined);
+  });
 
   mount.appendChild(root);
   // 默认选中第一个工具（十字线），对应原稿 #ebebeb 选中药丸

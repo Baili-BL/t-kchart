@@ -92,6 +92,10 @@ export function ChartGridView(): JSX.Element {
           // 橡皮擦要用自己的光标（官方是 32×32 的 .cur，热点 5,5）；其它工具交回图表
           cursorFor: (px: number, py: number) => layer.cursorAt(px, py),
           onLeave: () => layer.onLeave(),
+          // 画完一个图形 / Esc：图层自己回到光标，把工具名广播出去，左侧主按钮图标跟着拨回
+          onToolChange: (tool: string) => {
+            if (drawBus.tool !== tool) drawBus.setTool(tool);
+          },
           onDraw: (ctx: CanvasRenderingContext2D) => {
             layer.render(ctx);
             if (layer.active()) barLayer = layer;

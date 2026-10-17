@@ -1,8 +1,9 @@
 import { useEffect, useRef } from 'react';
-import { createSidebar, LONGPRESS_TIP_LABEL } from './dom/sidebar';
+import { createSidebar, LONGPRESS_TIP_LABEL, setSidebarActive, sidebarLabelForTool } from './dom/sidebar';
 import { useToast } from '../ui/toast';
 import { drawBus, drawIntent } from './drawBus';
 import { useStudyStore } from '../store/studyStore';
+
 
 /**
  * 左侧绘图工具栏。
@@ -79,7 +80,15 @@ export function DrawToolbar(): JSX.Element {
         else if (label === LONGPRESS_TIP_LABEL) drawBus.setLongPressTip(on);
       },
     });
+    // 工具被别处切走时（画完一个图形 / Esc 回光标 / 浮动条重复绘制），
+    // 左侧主按钮的图标要跟着换 —— 官方那颗按钮显示的就是当前工具
+    const off = drawBus.subscribe((ev) => {
+      if (ev.type !== 'tool') return;
+      const label = sidebarLabelForTool(ev.tool);
+      if (label) setSidebarActive(root, label);
+    });
     return () => {
+      off();
       root.remove();
     };
   }, [toast]);
