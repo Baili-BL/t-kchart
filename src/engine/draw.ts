@@ -20,6 +20,7 @@
 
 import { Bar, fmtCrossTime, log } from './chart';
 import TV_TOOL_DEFAULTS from './tv-tool-defaults.json';
+import { loadEmojiImage } from './emojiAssets';
 
 /* ===========================================================================
  * 1. 类型
@@ -2902,18 +2903,26 @@ export class DrawLayer {
       ctx.setLineDash([]);
       this.label(ctx, d.style.text || '文字', a.x, a.y, col, d.style.fontSize);
     } else if (d.type === 'emoji') {
-      // emoji 标注：锚点为中心，原生彩色 emoji 字体渲染（无边框无背景）。
-      // fillStyle 必须是不透明白 —— 默认样式里的填充是 rgba(…,0.14)，
-      // 而彩色字形会把 fillStyle 的 alpha 一起吃掉，落笔就是一个「幽灵表情」。
+      // emoji 标注：锚点为中心、边长 = size 的方形（官方 EmojiPaneView 把 twemoji
+      // 的 **svg** 渲染进 size×size 的 viewBox，不是画系统字体字形 —— 所以换机器、
+      // 换系统字体都不会变样）。图还没下完时先画原生字形占位，加载完再重绘一次。
       const size = d.style.fontSize || EMOJI_SIZE;
+      const ch = d.style.text || '😀';
       ctx.setLineDash([]);
       ctx.save();
       ctx.globalAlpha = 1;
-      ctx.fillStyle = '#000';
-      ctx.font = size + 'px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(d.style.text || '😀', a.x, a.y);
+      const glyph = loadEmojiImage(ch, () => this.host.invalidate());
+      if (glyph) {
+        ctx.drawImage(glyph, a.x - size / 2, a.y - size / 2, size, size);
+      } else {
+        // 占位/兜底：fillStyle 必须是不透明白 —— 默认样式里的填充是 rgba(…,0.14)，
+        // 彩色字形会把 fillStyle 的 alpha 一起吃掉，落笔就是一个「幽灵表情」。
+        ctx.fillStyle = '#000';
+        ctx.font = size + 'px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(ch, a.x, a.y);
+      }
       ctx.restore();
       // 选中态：贴合字形的细蓝框 + 四个白色圆手柄（对齐 charting_library 的 emoji 选中样式），
       // 四角可拖拽改字号；中点是位置而不是手柄，所以不画通用方块手柄

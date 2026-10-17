@@ -31,6 +31,8 @@ import {
 import {
   EMOJI_CATEGORIES, EMOJI_CLOCK_ICON, loadEmojiRecents, saveEmojiRecent,
 } from './emoji-data';
+import { EMOJI_PANEL } from './emoji-panel-metrics';
+import { emojiPngUrl } from '../../engine/emojiAssets';
 
 /* ------------------------------------------------------------------ 工具 */
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -90,33 +92,55 @@ const CSS = `
   font-size: 13px; z-index: 1200; display: none;
 }
 .kc-sb-menu.open { display: block; }
-/* —— emoji 面板（设计稿「图标」按钮）：顶部分类 tab + 滚动网格 —— */
+/* —— emoji 面板（设计稿「图标」按钮）：顶部分类 tab + 滚动网格 ——
+   尺寸取自官方面板 DOM 快照（见 emoji-panel-metrics.ts）：宽 349、一行 9 格、
+   格子高 38、图标 24×24 的 twemoji 图片；分组标题 30 高 / 11px / 字距 .4 / 左缩进 18。 */
 .kc-emoji-panel {
-  position: fixed; width: 434px; padding: 8px 10px 10px; background: #fff;
+  position: fixed; width: ${EMOJI_PANEL.width}px; padding: 0 0 6px; background: ${EMOJI_PANEL.background};
   border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.04);
-  z-index: 1200; font-size: 13px; display: none; user-select: none;
+  z-index: 1200; font: 400 13px/normal ${EMOJI_PANEL.fontFamily}; color: ${EMOJI_PANEL.color};
+  display: none; user-select: none;
 }
 .kc-emoji-panel.open { display: block; }
 .kc-emoji-tabs {
-  display: flex; align-items: center; gap: 2px; padding-bottom: 6px; margin-bottom: 4px;
-  border-bottom: 1px solid rgb(235,235,235);
+  display: flex; align-items: center; gap: 0; padding: 6px ${EMOJI_PANEL.paddingInline}px 0;
+  margin-bottom: 4px; border-bottom: 1px solid rgb(235,235,235);
 }
 .kc-emoji-tabs button {
-  width: 40px; height: 32px; border: 0; background: transparent; border-radius: 6px;
+  flex: 1 1 0; min-width: 0; height: 32px; border: 0; background: transparent; border-radius: 6px;
   cursor: pointer; color: rgb(15,15,15); display: flex; align-items: center; justify-content: center;
   transition: background-color .06s ease;
 }
 .kc-emoji-tabs button:hover { background: rgb(242,242,242); }
-.kc-emoji-body { max-height: 330px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.kc-emoji-body {
+  width: ${EMOJI_PANEL.width}px; max-height: 330px; overflow-y: auto; overflow-x: hidden;
+  overscroll-behavior: contain; scrollbar-width: thin;
+}
 .kc-emoji-section.empty { display: none; }
-.kc-emoji-group { margin: 8px 0 2px; color: rgb(130,130,130); font-size: 13px; }
-.kc-emoji-grid { display: grid; grid-template-columns: repeat(9, 44px); }
+.kc-emoji-group {
+  display: flex; align-items: center; height: ${EMOJI_PANEL.header.height}px; box-sizing: border-box;
+  padding: ${EMOJI_PANEL.header.paddingBlockStart}px ${EMOJI_PANEL.paddingInline}px 0 ${EMOJI_PANEL.header.paddingInlineStart}px;
+  color: ${EMOJI_PANEL.header.color}; font-size: ${EMOJI_PANEL.header.fontSize}px;
+  letter-spacing: ${EMOJI_PANEL.header.letterSpacing}px; text-transform: ${EMOJI_PANEL.header.textTransform};
+}
+.kc-emoji-grid {
+  display: grid; grid-template-columns: repeat(${EMOJI_PANEL.columns}, minmax(0, 1fr));
+  padding: 0 ${EMOJI_PANEL.paddingInline}px;
+}
 .kc-emoji-grid button {
-  width: 44px; height: 42px; border: 0; background: transparent; border-radius: 6px; cursor: pointer;
-  font-size: 26px; line-height: 42px; padding: 0; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
-  transition: background-color .06s ease;
+  height: ${EMOJI_PANEL.rowHeight}px; border: 0; background: transparent; border-radius: 4px;
+  cursor: pointer; padding: 0; display: flex; align-items: center; justify-content: center;
+  min-width: 0; overflow: hidden; transition: background-color .06s ease;
 }
 .kc-emoji-grid button:hover { background: rgb(242,242,242); }
+.kc-emoji-grid img {
+  width: ${EMOJI_PANEL.icon}px; height: ${EMOJI_PANEL.icon}px; display: block; pointer-events: none;
+}
+/* 图片挂了（断网 / CDN 不通）才用系统字形兜底，字号贴着 24px 图标 */
+.kc-emoji-grid button.fallback {
+  font-size: 22px; line-height: ${EMOJI_PANEL.rowHeight}px;
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+}
 .kc-sb-menu li {
   display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; cursor: pointer;
   transition: background-color .06s ease; white-space: nowrap;
@@ -439,7 +463,25 @@ function buildEmojiPanel(onEmoji: (char: string) => void): HTMLDivElement {
     for (const ch of items) {
       const b = document.createElement('button');
       b.type = 'button';
-      b.textContent = ch;
+      b.setAttribute('aria-label', ch);
+      // 官方那格是 <img src="…/72x72/<code>.png" width=24 height=24 decoding=async
+      // draggable=false alt="">，不是字体字形 —— 换平台/换系统字体也不会变样。
+      // 1720 张图不能一次全下，加 loading=lazy（官方是虚拟列表，效果等价）。
+      const img = document.createElement('img');
+      img.src = emojiPngUrl(ch);
+      img.width = EMOJI_PANEL.icon;
+      img.height = EMOJI_PANEL.icon;
+      img.decoding = 'async';
+      img.loading = 'lazy';
+      img.draggable = false;
+      img.alt = '';
+      // 断网 / CDN 被墙时退回系统字形，至少还能选
+      img.addEventListener('error', () => {
+        img.remove();
+        b.classList.add('fallback');
+        b.textContent = ch;
+      });
+      b.appendChild(img);
       b.addEventListener('click', (e) => {
         e.stopPropagation();
         saveEmojiRecent(ch);
@@ -501,7 +543,12 @@ function buildEmojiPanel(onEmoji: (char: string) => void): HTMLDivElement {
       // 分组顺序 = [最近使用?] + 8 个分类；最近使用为空时它不在 sectionTitles 里
       const hasRecents = sectionTitles().length > EMOJI_CATEGORIES.length;
       const target = sectionTitles()[EMOJI_CATEGORIES.indexOf(cat) + (hasRecents ? 1 : 0)];
-      if (target) body.scrollTop = target.offsetTop - 4;
+      if (target) {
+        // 用两个 rect 的差算偏移，不用 offsetTop —— 面板是 position:fixed，
+        // offsetParent 链会把 tab 条的高度也算进去，跳过去会顶掉 4px 标题
+        const delta = target.getBoundingClientRect().top - body.getBoundingClientRect().top;
+        body.scrollTop = Math.max(0, body.scrollTop + delta - 4);
+      }
     });
     tabs.appendChild(b);
   }
