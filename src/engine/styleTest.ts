@@ -73,7 +73,11 @@ export function styleSelfTest(chart: KChart): StyleTestResult {
   chart.drawNow();
   const [i0, i1] = chart.visible();
   const lo = Math.max(0, i0);
-  const hi = Math.min(chart.bars.length - 1, i1);
+  // 右端那根可能只露出半截：`visible()` 的 i1 是 ceil()，barW=14 时常常进一位，
+  // 那根柱子的中心已经落在价格轴外面（xCenter(i1) > plot.r），对它做像素断言只会假红。
+  // 「可见」得按真正落在绘图区里的完整柱子算。
+  let hi = Math.min(chart.bars.length - 1, i1);
+  while (hi > lo && chart.xCenter(hi) > chart.plot.r - 6) hi--;
   const candleScale = { min: chart.scale.min, max: chart.scale.max };
 
   // ---- A. 13 种样式都能切 / 能画 / 价格轴有限
@@ -228,8 +232,25 @@ export function styleSelfTest(chart: KChart): StyleTestResult {
     chart.drawNow();
     const purple = parseColor(markerColor(0));
     const blue = parseColor(markerColor(1));
-    t('带标记线：最高收盘价的圆点是紫色、实心（圆心与圆边都是紫）',
-      nearest(chart.xCenter(kHi), yHi, 1, purple) < 40 && nearest(chart.xCenter(kHi) + 3, yHi, 0, purple) < 60);
+    /** 以 (x, y) 为中心 ±r 的方块里，接近目标色（dist ≤ tol）的像素个数 */
+    const countNear = (x: number, y: number, r: number, want: RGB, tol: number): number => {
+      let cnt = 0;
+      for (let dx = -r; dx <= r; dx++) {
+        for (let dy = -r; dy <= r; dy++) {
+          const p = px(x + dx, y + dy);
+          if (p && dist(p, want) <= tol) cnt++;
+        }
+      }
+      return cnt;
+    };
+    const dC = nearest(chart.xCenter(kHi), yHi, 1, purple);
+    // 「实心」按**面积**判，不按某一个像素判：折线本身也会穿过圆心（收盘价就在线上），
+    // 单看 (x+3, y) 那一点可能正好被线色覆盖 —— 这条断言在这个数据窗口里曾经一直是假红。
+    // 直径 8px 的实心圆在 5×5 的取样格里有 20+ 个紫点，被线穿一下也还剩十几个。
+    const solid = countNear(chart.xCenter(kHi), yHi, 2, purple, 40);
+    t('带标记线：最高收盘价的圆点是紫色、实心（圆心与圆边都是紫）', dC < 40 && solid >= 8,
+      'kHi=' + kHi + ' x=' + chart.xCenter(kHi).toFixed(1) + ' plotR=' + chart.plot.r +
+      ' dC=' + dC + ' solid=' + solid + '/25');
     t('带标记线：最低收盘价的圆点是蓝色', nearest(chart.xCenter(kLo), yLo, 1, blue) < 40);
     t('（对照）折线在最高收盘价处不是紫色，是普通线色', !plain || dist(plain, purple) > 60, String(plain));
     t('带标记线：圆点半径 4px（上方 3px 在圆内是紫色，8px 处已在圆外）',

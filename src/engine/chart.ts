@@ -624,6 +624,19 @@ export const RANGES: RangeDef[] = [
 /** 范围至少露出这么多根 —— 否则「1D」在日线图上只剩一根，图会难看 */
 export const MIN_RANGE_BARS = 5;
 
+/**
+ * 默认视口里露出的 bar 数。
+ *
+ * 官方图表打开时（以及换标的 / 换周期后）视口里差不多是 200 根 —— 既有上下文
+ * （能看出前一段的形态），又不至于密到看不清实体。本项目之前写死 180，
+ * 用户反馈「每次最好展示最近 200 根」。
+ *
+ * 这是**默认缩放**，不是「显示范围」：底部那排按钮管的是跨度（1天/1个月…），
+ * 管的是时间长度；这里管的是根数，两者正交（README §9）。
+ * 三处入口统一用它：构造函数、setBars（换数据）、以及自检。
+ */
+export const DEFAULT_VISIBLE_BARS = 200;
+
 /** 某个范围在给定数据上的起始时间；算不出来返回 NaN */
 export function rangeStart(bars: Bar[], key: string): number {
   const n = bars.length;
@@ -742,6 +755,13 @@ export class KChart {
   // ↓ 这几个是内部状态，但自检(selfTest)与调试需要读，故不加 private。
   ctx: CanvasRenderingContext2D;
   view: { from: number; barW: number } = { from: 0, barW: 8 };
+  /**
+   * 视口还停在「默认缩放」上（最近 DEFAULT_VISIBLE_BARS 根）。
+   * 用户一平移/缩放/选范围就变 false，之后 `resize()` 只夹边、不再重算 barW。
+   * 保留这个状态是为了让「图刚建出来时画布尺寸还没定」的自愈：宽度定下来后
+   * 再按 200 根重算一次，否则会按临时宽度算出一个错误的 barW 并一直沿用。
+   */
+  private autoView = true;
   scale: Scale = { min: 0, max: 1 };
   plot: Rect = { l: 0, t: 0, r: 0, b: 0, w: 0, h: 0 };
   W = 0;
@@ -824,7 +844,7 @@ export class KChart {
     this.buildIndicators();
     this.bind();
     this.resize();
-    this.showLast(180);
+    this.applyDefaultView();
     if (this.bars.length) {
       log('KChart 初始化：' + this.bars.length + ' 根 bar，' +
           new Date(this.bars[0].time).toISOString().slice(0, 10) + ' → ' +
@@ -1276,6 +1296,7 @@ export class KChart {
   revealSpan(t0: number, t1: number): boolean {
     const n = this.bars.length;
     if (!n || !(t1 > t0)) return false;
+    this.autoView = false; // 外部指定了时间跨度 = 不再是默认缩放
     this.setViewTimes(t0, t1);
     const b = this.indexAtTime(t1);
     const vis = Math.floor(this.plot.w / this.view.barW);
@@ -1325,7 +1346,8 @@ export class KChart {
     }
     this.syncIndex = null;
     this.buildIndicators();
-    this.showLast(180);
+    // 换标的 / 换周期 = 一次新的「默认视图」：回到最近 200 根，而不是沿用上一份数据的缩放
+    this.applyDefaultView();
     this.invalidate();
   }
 
@@ -1432,19 +1454,45 @@ export class KChart {
     this.view.from = clamp(this.view.from, minFrom, maxFrom);
   }
 
-  /** 显示最近 k 根 */
-  showLast(k: number): void {
+  /**
+   * 把视口挪到「最近 k 根铺满」的位置。
+   * 只改视口、**不改** `autoView` —— 谁想表达「这是我明确要的缩放」，
+   * 就走下面的 `showLast`；内部默认视图走 `applyDefaultView`。
+   */
+  private applyShowLast(k: number): void {
     const n = this.bars.length;
     if (!n) return;
-    this.view.barW = clamp(this.plot.w / Math.max(1, k), 1, 60);
-    this.view.from = n - this.plot.w / this.view.barW;
+    const want = Math.max(1, Math.min(Math.round(k), n));
+    const bw = clamp(this.plot.w / want, 1, 60);
+    this.view.barW = bw;
+    // barW 没被 1px / 60px 夹住时，直接令 from = n - want：
+    // plot.w / barW 是浮点，差个 1e-13 就可能让 visible() 数出 199 或 201 根。
+    // 视口左边缘正好落在第 n-want 根的左沿，向后铺满 plot.w 就是整整 want 根。
+    this.view.from = bw === this.plot.w / want ? n - want : n - this.plot.w / bw;
     this.clampView();
     this.notifyView();
     this.invalidate();
   }
 
+  /**
+   * 默认缩放：最近 `DEFAULT_VISIBLE_BARS` 根。
+   * 与 `showLast` 的区别只有一个：**保留 `autoView`**，于是排版还没稳定
+   * （画布宽度先小后大）时 `resize()` 会重算一次，最终仍然是 200 根。
+   */
+  private applyDefaultView(): void {
+    this.applyShowLast(DEFAULT_VISIBLE_BARS);
+    this.autoView = true;
+  }
+
+  /** 显示最近 k 根。调用它 = 用户/外部明确指定缩放，之后 resize 不再改 barW。 */
+  showLast(k: number): void {
+    this.autoView = false;
+    this.applyShowLast(k);
+  }
+
   /** 全部塞进视口 */
   fitContent(): void {
+    this.autoView = false;
     const n = this.bars.length;
     if (!n) return;
     this.view.barW = clamp(this.plot.w / n, 1, 60);
@@ -1463,6 +1511,7 @@ export class KChart {
     const anchor = this.iOf(px);
     const next = clamp(this.view.barW * k, 1, 60);
     if (next === this.view.barW) return;
+    this.autoView = false; // 手动缩放过了，resize 不再把视口拉回 200 根
     this.view.barW = next;
     this.view.from = anchor - (px - this.plot.l) / next;
     this.clampView();
@@ -1549,6 +1598,7 @@ export class KChart {
       if (this.dragging) {
         const dx = e.clientX - this.dragX;
         this.dragX = e.clientX;
+        this.autoView = false; // 拖动过时间轴 = 不再是默认缩放
         this.view.from -= dx / this.view.barW;
         this.clampView();
         this.notifyView();
@@ -1606,7 +1656,10 @@ export class KChart {
     this.canvas.width = Math.round(w * this.dpr);
     this.canvas.height = Math.round(h * this.dpr);
     this.plot = this.computePlot();
-    this.clampView();
+    // 还停在默认视图上：宽度变了就按 200 根重算 barW。
+    // （否则建图那一刻画布宽度还没定下来，会留下一个错误的 barW 一直沿用）
+    if (this.autoView && this.bars.length) this.applyShowLast(DEFAULT_VISIBLE_BARS);
+    else this.clampView();
     this.invalidate();
   }
 
@@ -3225,14 +3278,27 @@ export function selfTest(chart: KChart): TestResult {
     '[' + chart.scale.min.toFixed(2) + ',' + chart.scale.max.toFixed(2) + '] vs [' +
       candleScale.min.toFixed(2) + ',' + candleScale.max.toFixed(2) + ']');
   t('折线：收盘价附近画了线色像素', anyPx(regionAt(probe, -3, -3, 7, 7), isBlue));
-  const belowLine = regionAt(probe, 0, 8, 1, 1);
+  // 取线下方 6..14px、横向 ±3px 的一小块（不是单点）：单点可能正落在网格线 / 均线上，
+  // 两种样式在那里都是那条线的颜色，断言就会假红（这轮之前就一直红着）
+  const belowLine = regionAt(probe, -3, 6, 6, 8);
 
   chart.setStyle('area');
   chart.drawNow();
-  const belowArea = regionAt(probe, 0, 8, 1, 1);
-  t('面积：线下方有渐变填充（与折线同位置的像素不同）',
-    belowLine === null || belowArea === null || Math.abs(belowArea[2] - belowLine[2]) + Math.abs(belowArea[0] - belowLine[0]) > 4,
-    'line=' + (belowLine ? Array.from(belowLine).join(',') : '') + ' area=' + (belowArea ? Array.from(belowArea).join(',') : ''));
+  const belowArea = regionAt(probe, -3, 6, 6, 8);
+  /** 同一块区域里有多少像素变了（逐像素三通道绝对差 > 4） */
+  const regionDiff = (a: Uint8ClampedArray | null, b: Uint8ClampedArray | null): number => {
+    if (!a || !b || a.length !== b.length) return -1;
+    let cnt = 0;
+    for (let i = 0; i < a.length; i += 4) {
+      if (Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]) > 4) cnt++;
+    }
+    return cnt;
+  };
+  const areaDiff = regionDiff(belowLine, belowArea);
+  // 渐变填充是整片变蓝，不是一根线：变了的像素至少 8 个（6×8 css 方块 @dpr2 = 192 个设备像素）
+  t('面积：线下方整片渐变填充（同区域里 ≥8 个像素与折线样式不同）',
+    areaDiff < 0 || areaDiff >= 8,
+    'diff=' + areaDiff + ' / ' + (belowArea ? belowArea.length / 4 : 0));
 
   chart.setStyle('bars');
   chart.drawNow();
@@ -3278,11 +3344,19 @@ export function selfTest(chart: KChart): TestResult {
     fitBars[1] >= bars.length - 1 && (!canFit || fitBars[0] <= 1),
     '[' + fitBars[0] + ',' + fitBars[1] + '] n=' + bars.length + ' canFit=' + canFit);
 
-  chart.showLast(180);
+  chart.showLast(DEFAULT_VISIBLE_BARS);
   const [a0, a1] = chart.visible();
-  t('showLast(180) 后可见区间非空且贴住最新数据',
+  t('showLast(200) 后可见区间非空且贴住最新数据',
     a1 > a0 && a1 >= bars.length - 1 - 2 && a0 < bars.length,
     '[' + a0 + ',' + a1 + '] n=' + bars.length);
+
+  // --- 默认缩放：最近 200 根（用户要求「每次最好展示最近 200 根 bar」）---
+  chart.showLast(DEFAULT_VISIBLE_BARS);
+  const [d0, d1] = chart.visible();
+  const wideEnough = chart.plot.w / DEFAULT_VISIBLE_BARS >= 1;
+  t('默认缩放：恰好露出 DEFAULT_VISIBLE_BARS 根，且右端贴住最新一根',
+    d1 >= bars.length - 1 && (!wideEnough || d1 - d0 === DEFAULT_VISIBLE_BARS),
+    '[' + d0 + ',' + d1 + '] want=' + DEFAULT_VISIBLE_BARS + ' plotW=' + chart.plot.w);
 
   // --- 实时更新语义 ---
   const n0 = chart.bars.length;
@@ -3365,8 +3439,8 @@ export function selfTest(chart: KChart): TestResult {
     t('centerIndex 落在数据范围内', chart.centerIndex() >= 0 && chart.centerIndex() <= chart.bars.length - 1);
   }
 
-  // 收尾：恢复成初始视图
-  chart.showLast(180);
+  // 收尾：恢复成初始视图（即默认缩放的 200 根）
+  chart.showLast(DEFAULT_VISIBLE_BARS);
   chart.drawNow();
   log('自检完成：' + pass + ' PASS / ' + fail + ' FAIL');
   return { pass, fail, names };
